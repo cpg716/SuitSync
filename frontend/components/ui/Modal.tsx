@@ -1,0 +1,1 @@
+export default function Modal({isOpen,children}){return isOpen?children:null;}

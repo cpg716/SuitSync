@@ -1,0 +1,142 @@
+// prisma/schema.prisma
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Customer {
+  id         Int      @id @default(autoincrement())
+  name       String
+  email      String   @unique
+  phone      String?
+  parties    Party[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model User {
+  id         Int      @id @default(autoincrement())
+  email      String   @unique
+  passwordHash String
+  name       String
+  role       String   // e.g. 'tailor', 'admin'
+  appointments Appointment[] @relation("TailorAppointments")
+  alterations  Alteration[]  @relation("TailorAlterations")
+  auditLogs   AuditLog[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  assignedAlterations Alteration[] @relation("AssignedTailorAlterations")
+  saleAssignments     SaleAssignment[] @relation("UserSaleAssignments")
+  skills        Skill[]
+}
+
+model Party {
+  id               Int           @id @default(autoincrement())
+  name             String
+  eventDate        DateTime
+  customerId       Int
+  customer         Customer      @relation(fields: [customerId], references: [id])
+  externalId       String?       // Lightspeed sale ID
+  syncedAt         DateTime?
+  alterations      Alteration[]
+  appointments     Appointment[]
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  notes            String?
+  syncedToLs       Boolean     @default(false)
+  lsPartyId        String?
+  members          PartyMember[]
+}
+
+model Alteration {
+  id               Int      @id @default(autoincrement())
+  partyId          Int
+  party            Party    @relation(fields: [partyId], references: [id])
+  notes            String?
+  timeSpent        Int?
+  scheduledDateTime DateTime?
+  tailorId         Int?
+  tailor           User?    @relation("TailorAlterations", fields: [tailorId], references: [id])
+  status           String   @default("pending")
+  externalId       String?
+  syncedAt         DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  memberId         Int?
+  member           PartyMember? @relation("MemberAlterations", fields: [memberId], references: [id])
+  lsLineItemId     String?
+  assignedTailorId Int?
+  assignedTailor   User?    @relation("AssignedTailorAlterations", fields: [assignedTailorId], references: [id])
+  itemType      String?  // e.g. 'Coat', 'Vest', 'Trousers'
+  estimatedTime Int?     // Estimated time in minutes
+  actualTime    Int?     // Actual time spent in minutes
+}
+
+model Appointment {
+  id               Int      @id @default(autoincrement())
+  partyId          Int
+  party            Party    @relation(fields: [partyId], references: [id])
+  dateTime         DateTime
+  duration         Int?
+  tailorId         Int?
+  tailor           User?    @relation("TailorAppointments", fields: [tailorId], references: [id])
+  status           String   @default("scheduled")
+  externalId       String?
+  syncedAt         DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  memberId         Int?
+  member           PartyMember? @relation("MemberAppointments", fields: [memberId], references: [id])
+  endDatetime      DateTime?
+  type             String?
+  notes            String?
+  lsEventId        String?
+}
+
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  userId     Int?
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String
+  entity     String
+  entityId   Int
+  details    String?
+  createdAt  DateTime @default(now())
+}
+
+model PartyMember {
+  id            Int      @id @default(autoincrement())
+  partyId       Int
+  party         Party    @relation(fields: [partyId], references: [id])
+  lsCustomerId  String?  // Lightspeed customer ID
+  role          String
+  measurements  String?
+  notes         String?
+  status        String   @default("Selected")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  alterations   Alteration[] @relation("MemberAlterations")
+  appointments  Appointment[] @relation("MemberAppointments")
+}
+
+model SaleAssignment {
+  id             Int      @id @default(autoincrement())
+  saleId         String   // Lightspeed sale ID
+  associateId    Int
+  associate      User     @relation("UserSaleAssignments", fields: [associateId], references: [id])
+  commissionRate Float
+  amount         Float
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Skill {
+  id    Int    @id @default(autoincrement())
+  name  String @unique
+  users User[]
+}

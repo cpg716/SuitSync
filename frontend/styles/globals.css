@@ -1,0 +1,15 @@
+/* frontend/styles/globals.css */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* apply your background and default text color */
+body {
+  @apply bg-background text-neutral-900;
+}
+
+html, body, #__next {
+  height: 100%;
+  min-height: 100vh;
+}

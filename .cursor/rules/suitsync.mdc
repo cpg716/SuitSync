@@ -1,0 +1,64 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+Prompt for Cursor AI:
+
+You are an expert full-stack engineer. Build “SuitSync,” a production-ready app that integrates bidirectionally with Lightspeed X-Series. Make all architecture and technology decisions, then scaffold, implement, and wire up every piece—backend, database, frontend, notifications, printing, authentication, CI/CD—so that the only remaining step is swapping in real Lightspeed credentials.
+
+1. Project Setup & Tech Stack
+• Create a single Git repo with backend/, frontend/, and infra/ folders.
+• Backend: Node.js + Express, REST API, Lightspeed X-Series OAuth2 client.
+• Database: PostgreSQL (use Prisma or TypeORM for schema & migrations).
+• Frontend: React (Next.js), Tailwind CSS, mobile-first, touch optimized.
+• Notifications: Twilio SMS + SendGrid email modules.
+• Printing: ZPL/ESC-P generator for thermal tags + HTML/CSS print previews.
+• Auth:
+– Lightspeed OAuth2 for all API calls (server-to-server).
+– Staff login with JWT for SPA sessions.
+• DevOps: GitHub Actions for linting, tests (Jest + React Testing Library), build, and deploy previews.
+
+2. Data Model & Core Services
+Define and implement these models & services under backend/src/models and backend/src/services:
+
+Party { id, name, event_date, notes }  
+PartyMember { id, party_id, customer_id, role, measurements }  
+Appointment { id, party_id, member_id, datetime, type, notes }  
+AlterationJob { id, party_id, sale_line_item_id, tailor_id, status[pending/complete], notes, time_spent }  
+SaleAssignment { id, sale_id, associate_id, commission_rate }  
+
+• SyncService: fetch and upsert Lightspeed Customers, Sales, Products on schedule or webhook.
+• FieldService: create and manage Lightspeed custom fields & business rules automatically.
+• WebhookHandler: listen for Lightspeed sale events and appointment reminders.
+
+3. API Layer
+Under backend/src/controllers implement these endpoints that fully encapsulate Lightspeed integration:
+
+POST   /api/parties           → create Party + Lightspeed Customer tag  
+GET    /api/parties           → list parties (with member counts)  
+GET    /api/parties/:id       → full party detail (members, appts, jobs)  
+POST   /api/appointments      → schedule fitting, persist via custom field  
+GET    /api/appointments      → list upcoming appts  
+POST   /api/jobs              → open alteration job, link sale line item  
+GET    /api/jobs              → tailor queue, filter by status/assignee  
+POST   /api/print/tag         → generate ZPL or HTML tag from party/job  
+POST   /api/auth/login        → staff JWT login  
+GET    /api/auth/callback     → Lightspeed OAuth2 callback  
+
+Ensure robust error handling, retries, and token refresh.
+
+4. Frontend Wireframes & UI Style
+Under frontend/ scaffold a Next.js app with Tailwind + shadcn/ui primitives.
+	1.	Design tokens: mirror Lightspeed X-Series palette & typography.
+	2.	Key screens:
+	•	Home Dashboard: cards (Total Parties, Upcoming Appts, Pending Alterations), line & pie charts.
+	•	Party List & Detail: table + timeline view of members, appts, jobs, pickup.
+	•	Appointment Calendar: fullcalendar integration inside “Appointments” tab.
+	•	Alterations Calendar & Queue: day grid + list view per tailor with time-tracking controls.
+	•	Create Party / Member / Appointment / Job forms with validation.
+	•	Tag Printing: preview modal + “Send to Printer” button.
+	•	Commission Leaderboard: bar chart sorted by associate commissions.
+	3.	UX: responsive drawer sidebar, toast notifications, skeletons for loading states, framer-motion transitions.
+
+Deliverable: A fully working monorepo that you can clone and run (npm run demo), with CI/CD, linting, tests, seed data, and all features implemented. The only remaining integration is swapping in real Lightspeed OAuth credentials.
