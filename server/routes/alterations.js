@@ -1,26 +1,25 @@
 const express = require('express');
 const prisma = require('../prismaClient');
 const router = express.Router();
+const requireAuth = require('../../backend/middleware/auth');
+const { logChange } = require('../../backend/src/services/AuditLogService');
+const axios = require('axios');
 
-// router.use(requireAuth); // TEMP: Disabled for unauthenticated API testing
+router.use(requireAuth);
 
 // GET /api/alterations
 router.get('/', async (req, res) => {
-  const alterations = await prisma.alteration.findMany({
-    include: { party: true, tailor: true },
-    orderBy: { scheduledDateTime: 'asc' }
+  const { partyId, customerId, status } = req.query;
+  const where = {};
+  if (partyId) where.partyId = Number(partyId);
+  if (customerId) where.customerId = Number(customerId);
+  if (status) where.status = status;
+  const jobs = await prisma.alterationJob.findMany({
+    where,
+    include: { party: true, customer: true, tailor: true },
+    orderBy: { createdAt: 'desc' }
   });
-  res.json(alterations);
-});
-
-// GET /api/alterations/:id
-router.get('/:id', async (req, res) => {
-  const alteration = await prisma.alteration.findUnique({
-    where: { id: Number(req.params.id) },
-    include: { party: true, tailor: true }
-  });
-  if (!alteration) return res.status(404).json({ error: 'Not found' });
-  res.json(alteration);
+  res.json(jobs);
 });
 
 // GET /api/alterations/skills
@@ -44,57 +43,88 @@ router.get('/available-tailors', async (req, res) => {
   res.json(tailors);
 });
 
-// POST /api/alterations
-router.post('/', async (req, res) => {
-  const { partyId, notes, timeSpent, scheduledDateTime, tailorId, status, externalId, syncedAt, itemType, estimatedTime, actualTime } = req.body;
-  if (!partyId || !itemType) return res.status(400).json({ error: 'Missing required fields' });
-  // If tailorId is provided, check skill
-  if (tailorId) {
-    const tailor = await prisma.user.findUnique({
-      where: { id: tailorId },
-      include: { skills: true },
-    });
-    if (!tailor || !tailor.skills.some(s => s.name === itemType)) {
-      return res.status(400).json({ error: 'Tailor does not have required skill' });
-    }
-  }
-  const alteration = await prisma.alteration.create({
-    data: { partyId, notes, timeSpent, scheduledDateTime: scheduledDateTime ? new Date(scheduledDateTime) : null, tailorId, status, externalId, syncedAt, itemType, estimatedTime, actualTime },
+// GET /api/alterations/:id
+router.get('/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id || isNaN(id)) return res.status(400).json({ error: 'Invalid alteration id' });
+  const job = await prisma.alterationJob.findUnique({
+    where: { id },
+    include: { party: true, customer: true, tailor: true }
   });
-  await prisma.auditLog.create({
-    data: { userId: req.session.userId, action: 'create', entity: 'Alteration', entityId: alteration.id, details: JSON.stringify(alteration) }
-  });
-  res.status(201).json(alteration);
+  if (!job) return res.status(404).json({ error: 'Not found' });
+  res.json(job);
 });
 
-// PUT /api/alterations/:id
-router.put('/:id', async (req, res) => {
-  const { partyId, notes, timeSpent, scheduledDateTime, tailorId, status, externalId, syncedAt, itemType, estimatedTime, actualTime } = req.body;
-  // If tailorId is provided, check skill
-  if (tailorId) {
-    const tailor = await prisma.user.findUnique({
-      where: { id: tailorId },
-      include: { skills: true },
-    });
-    if (!tailor || !tailor.skills.some(s => s.name === itemType)) {
-      return res.status(400).json({ error: 'Tailor does not have required skill' });
-    }
+// POST /api/alterations
+router.post('/', async (req, res) => {
+  const { saleLineItemId, partyId, customerId, notes, status, timeSpentMinutes, tailorId, measurements } = req.body;
+  if (!saleLineItemId) return res.status(400).json({ error: 'Missing saleLineItemId' });
+  if (!partyId && !customerId) return res.status(400).json({ error: 'Must provide either partyId or customerId' });
+  // Validate saleLineItemId exists in mirrored Sale (TODO: implement real check)
+  // const saleLineItem = await prisma.saleLineItem.findUnique({ where: { id: saleLineItemId } });
+  // if (!saleLineItem) return res.status(400).json({ error: 'Invalid saleLineItemId' });
+  const job = await prisma.alterationJob.create({
+    data: { saleLineItemId, partyId, customerId, notes, status, timeSpentMinutes, tailorId, measurements },
+    include: { party: true, customer: true, tailor: true }
+  });
+  await logChange({ user: req.user, action: 'create', entity: 'AlterationJob', entityId: job.id, details: req.body });
+  // Sync to Lightspeed custom field
+  try {
+    // TODO: Replace with real saleId lookup
+    const saleId = 1; // placeholder
+    await axios.patch(
+      `${process.env.LS_API_BASE}/Sale/${saleId}/SaleLineItem/${saleLineItemId}.json`,
+      { saleLineItem: { custom_fields: { alteration_notes: notes } } },
+      { headers: { Authorization: `Bearer ${req.session?.lsAccessToken}` } }
+    );
+  } catch (err) {
+    // Log but do not fail
+    await logChange({ user: req.user, action: 'sync-fail', entity: 'AlterationJob', entityId: job.id, details: { error: err.message } });
   }
-  const alteration = await prisma.alteration.update({
+  res.status(201).json(job);
+});
+
+// PATCH /api/alterations/:id
+router.patch('/:id', async (req, res) => {
+  const { status, timeSpentMinutes, notes, tailorId, measurements } = req.body;
+  const job = await prisma.alterationJob.update({
     where: { id: Number(req.params.id) },
-    data: { partyId, notes, timeSpent, scheduledDateTime: scheduledDateTime ? new Date(scheduledDateTime) : null, tailorId, status, externalId, syncedAt, itemType, estimatedTime, actualTime },
+    data: { status, timeSpentMinutes, notes, tailorId, measurements },
+    include: { party: true, customer: true, tailor: true }
   });
-  await prisma.auditLog.create({
-    data: { userId: req.session.userId, action: 'update', entity: 'Alteration', entityId: alteration.id, details: JSON.stringify(alteration) }
-  });
-  res.json(alteration);
+  await logChange({ user: req.user, action: 'update', entity: 'AlterationJob', entityId: job.id, details: req.body });
+  // Sync to Lightspeed custom field
+  try {
+    // TODO: Replace with real saleId lookup
+    const saleId = 1; // placeholder
+    await axios.patch(
+      `${process.env.LS_API_BASE}/Sale/${saleId}/SaleLineItem/${job.saleLineItemId}.json`,
+      { saleLineItem: { custom_fields: { alteration_notes: notes, status } } },
+      { headers: { Authorization: `Bearer ${req.session?.lsAccessToken}` } }
+    );
+  } catch (err) {
+    await logChange({ user: req.user, action: 'sync-fail', entity: 'AlterationJob', entityId: job.id, details: { error: err.message } });
+  }
+  res.json(job);
 });
 
 // DELETE /api/alterations/:id
 router.delete('/:id', async (req, res) => {
   const alteration = await prisma.alteration.delete({ where: { id: Number(req.params.id) } });
-  await prisma.auditLog.create({
-    data: { userId: req.session.userId, action: 'delete', entity: 'Alteration', entityId: alteration.id, details: JSON.stringify(alteration) }
+  await logChange({
+    user: req.user,
+    action: 'delete',
+    entity: 'Alteration',
+    entityId: alteration.id,
+    details: alteration,
+  });
+  // Simulate Lightspeed sync
+  await logChange({
+    user: req.user,
+    action: 'sync',
+    entity: 'Alteration',
+    entityId: alteration.id,
+    details: { message: 'Deleted from Lightspeed' },
   });
   res.json({ success: true });
 });

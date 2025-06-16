@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
-import '@fullcalendar/common/main.css';
 import '@fullcalendar/timegrid/main.css';
 
 export default function TailorSchedule() {

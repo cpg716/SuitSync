@@ -4,12 +4,134 @@
 @tailwind components;
 @tailwind utilities;
 
-/* apply your background and default text color */
-body {
-  @apply bg-background text-neutral-900;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+:root {
+  --ss-white: #ffffff;
+  --ss-black: #000000;
+  --ss-primary: #0055A5;
+  --ss-accent: #FFC200;
+  --ss-red: #EF4444;
+  --ss-green: #22C55E;
+  --ss-yellow: #EAB308;
+  --ss-blue: #2563EB;
+
+  /* Background & surface shades */
+  --bg-light: #F9FAFB;
+  --bg-default: #F9FAFB;
+  --bg-dark: #121212;
+  --surface-default: #FFFFFF;
+  --surface-muted: #E5E7EB;
+
+  /* Text colors */
+  --text-primary-light: #1F2D3D;
+  --text-primary-dark: #E4E4E7;
+
+  /* Accent */
+  --accent: var(--ss-accent);
+  /* Accent hover */
+  --accent-hover: #E6A700;
+}
+
+html {
+  font-family: 'Inter', system-ui, sans-serif;
+  color-scheme: light dark;
+  background: linear-gradient(to bottom right, #dbeafe 0%, #fff 50%, #bfdbfe 100%);
+  color: var(--text-primary-light);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+html.dark {
+  background: var(--bg-dark);
+  color: var(--text-primary-dark);
 }
 
 html, body, #__next {
   height: 100%;
   min-height: 100vh;
+}
+
+/* Base body styles using variables */
+body {
+  background: none;
+  color: var(--text-primary-light);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+html.dark body {
+  background: none;
+  --bg-default: var(--bg-dark);
+  color: var(--text-primary-dark);
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.15s ease;
+}
+.bg-primary { background-color: var(--ss-primary) !important; }
+.text-primary { color: var(--ss-primary) !important; }
+.bg-accent { background-color: var(--ss-accent) !important; }
+.text-accent { color: var(--ss-accent) !important; }
+.bg-white { background-color: var(--ss-white) !important; }
+.text-black { color: var(--ss-black) !important; }
+.text-white { color: var(--ss-white) !important; }
+.bg-red { background-color: var(--ss-red) !important; }
+.bg-green { background-color: var(--ss-green) !important; }
+.bg-yellow { background-color: var(--ss-yellow) !important; }
+.bg-blue { background-color: var(--ss-blue) !important; }
+
+a {
+  color: var(--accent);
+  transition: color 0.2s;
+}
+a:hover {
+  color: var(--accent-hover);
+}
+
+/* Minimal FullCalendar v6+ custom style for usability */
+.fc {
+  font-family: inherit;
+  font-size: 1rem;
+}
+.fc .fc-toolbar-title {
+  font-weight: 600;
+  color: var(--ss-primary);
+}
+.fc .fc-button {
+  background: var(--ss-primary);
+  color: #fff;
+  border: none;
+  border-radius: 0.375rem;
+  padding: 0.25rem 0.75rem;
+  margin: 0 0.125rem;
+  transition: background 0.2s;
+}
+.fc .fc-button:hover, .fc .fc-button:focus {
+  background: var(--ss-accent);
+  color: #000;
+}
+.fc .fc-daygrid-day-number {
+  color: var(--ss-primary);
+  font-weight: 500;
+}
+.fc .fc-day-today {
+  background: var(--ss-accent);
+  color: #000;
+}
+
+.text-primary-dark {
+  color: var(--text-primary-dark) !important;
+}
+.text-primary-light {
+  color: var(--text-primary-light) !important;
+}
+.text-gray-dark {
+  color: #1F2D3D !important;
+}
+.text-gray-light {
+  color: #E4E4E7 !important;
 }

@@ -2,7 +2,7 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 async function main() {
-  await prisma.alteration.deleteMany();
+  await prisma.alterationJob.deleteMany();
   await prisma.appointment.deleteMany();
   await prisma.partyMember.deleteMany();
   await prisma.saleAssignment.deleteMany();
@@ -12,8 +12,18 @@ async function main() {
   await prisma.user.deleteMany();
   await prisma.skill.deleteMany();
 
-  // Seed demo users (tailors)
+  // Seed demo admin user
   const users = [];
+  users.push(await prisma.user.create({
+    data: {
+      email: 'admin@demo.com',
+      passwordHash: 'admin', // Not secure, just for demo
+      name: 'Admin User',
+      role: 'admin',
+    }
+  }));
+
+  // Seed demo users (tailors)
   for (let i = 1; i <= 3; i++) {
     users.push(await prisma.user.create({
       data: {
@@ -21,6 +31,32 @@ async function main() {
         passwordHash: 'demo', // Not secure, just for demo
         name: `Tailor ${i}`,
         role: 'tailor',
+      }
+    }));
+  }
+
+  // Seed demo users (sales associates)
+  const associates = [];
+  for (let i = 1; i <= 3; i++) {
+    associates.push(await prisma.user.create({
+      data: {
+        email: `sales${i}@demo.com`,
+        passwordHash: 'demo',
+        name: `Sales Associate ${i}`,
+        role: 'associate',
+      }
+    }));
+  }
+
+  // Seed demo users (support)
+  const supportStaff = [];
+  for (let i = 1; i <= 2; i++) {
+    supportStaff.push(await prisma.user.create({
+      data: {
+        email: `support${i}@demo.com`,
+        passwordHash: 'demo',
+        name: `Support Staff ${i}`,
+        role: 'support',
       }
     }));
   }
@@ -84,19 +120,15 @@ async function main() {
     // 2 alterations each
     for (let j = 1; j <= 2; j++) {
       const skill = skills[(i+j)%skills.length];
-      await prisma.alteration.create({
+      await prisma.alterationJob.create({
         data: {
+          saleLineItemId: 1000 + i * 10 + j, // fake line item id
           partyId: party.id,
+          customerId: null,
           notes: `Alteration ${j} for party ${i}`,
-          timeSpent: 30 * j,
-          scheduledDateTime: new Date(Date.now() + (i+j) * 3600000),
-          tailorId: users[(i+j)%users.length].id,
           status: 'pending',
-          externalId: null,
-          syncedAt: null,
-          itemType: skill.name,
-          estimatedTime: 30 + 10 * j,
-          actualTime: null,
+          timeSpentMinutes: 30 * j,
+          tailorId: users[(i+j)%users.length].id,
         }
       });
     }
@@ -105,11 +137,9 @@ async function main() {
       data: {
         partyId: party.id,
         dateTime: new Date(Date.now() + i * 7200000),
-        duration: 60,
+        durationMinutes: 60,
         tailorId: users[i%users.length].id,
         status: 'scheduled',
-        externalId: null,
-        syncedAt: null,
       }
     });
   }
@@ -136,7 +166,7 @@ async function main() {
     await prisma.saleAssignment.create({
       data: {
         saleId: `LS-SALE-${i+1}`,
-        associateId: users[i%users.length].id,
+        associateId: associates[i%associates.length].id,
         commissionRate: 0.1,
         amount: 100 + i * 10,
       }

@@ -27,15 +27,19 @@ function getLightspeedApi(accessToken) {
  * Exchanges a refresh token for a new access token (and refresh token).
  */
 async function refreshAccessToken(refreshToken) {
-  const { LS_CLIENT_ID, LS_CLIENT_SECRET, APP_DOMAIN } = process.env;
-  const REDIRECT_URI = `https://${APP_DOMAIN}/auth/callback`;
-  const resp = await axios.post('https://cloud.lightspeedapp.com/oauth/access_token', {
-    client_id:     LS_CLIENT_ID,
+  const { LS_CLIENT_ID, LS_CLIENT_SECRET, LS_DOMAIN, LS_REDIRECT_URI } = process.env;
+  const params = new URLSearchParams({
+    grant_type: 'refresh_token',
+    client_id: LS_CLIENT_ID,
     client_secret: LS_CLIENT_SECRET,
     refresh_token: refreshToken,
-    grant_type:    'refresh_token',
-    redirect_uri:  REDIRECT_URI,
+    redirect_uri: LS_REDIRECT_URI,
   });
+  const resp = await axios.post(
+    `https://${LS_DOMAIN}.retail.lightspeed.app/oauth/token`,
+    params.toString(),
+    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+  );
   return resp.data; // { access_token, refresh_token, ... }
 }
 

@@ -71,7 +71,10 @@ export default function CustomerProfile() {
       <Card>
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-2xl font-bold">{customer.name}</h1>
-          <Button className="px-3 py-1 text-sm" onClick={openEditModal}>Edit</Button>
+          <div className="flex gap-2">
+            <Button className="px-3 py-1 text-sm" onClick={openEditModal}>Edit</Button>
+            <Button className="px-3 py-1 text-sm" onClick={() => router.push(`/customers/${customer.id}/measurements`)}>Measurements</Button>
+          </div>
         </div>
         <div className="text-neutral-700 mb-1">Email: {customer.email}</div>
         <div className="text-neutral-700 mb-1">Phone: {customer.phone}</div>

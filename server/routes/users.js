@@ -1,8 +1,10 @@
 const express = require('express');
 const prisma = require('../prismaClient');
 const router = express.Router();
+const requireAuth = require('../../backend/middleware/auth');
+const { logChange } = require('../../backend/src/services/AuditLogService');
 
-// router.use(requireAuth); // TEMP: Disabled for unauthenticated API testing
+router.use(requireAuth);
 
 // GET /api/users
 router.get('/', async (req, res) => {
@@ -31,8 +33,12 @@ router.post('/', async (req, res) => {
     data: { email, passwordHash, name, role },
     select: { id: true, email: true, name: true, role: true, createdAt: true, updatedAt: true }
   });
-  await prisma.auditLog.create({
-    data: { userId: req.session.userId, action: 'create', entity: 'User', entityId: user.id, details: JSON.stringify(user) }
+  await logChange({
+    user: req.user,
+    action: 'create',
+    entity: 'User',
+    entityId: user.id,
+    details: req.body,
   });
   res.status(201).json(user);
 });
@@ -45,8 +51,12 @@ router.put('/:id', async (req, res) => {
     data: { email, name, role },
     select: { id: true, email: true, name: true, role: true, createdAt: true, updatedAt: true }
   });
-  await prisma.auditLog.create({
-    data: { userId: req.session.userId, action: 'update', entity: 'User', entityId: user.id, details: JSON.stringify(user) }
+  await logChange({
+    user: req.user,
+    action: 'update',
+    entity: 'User',
+    entityId: user.id,
+    details: req.body,
   });
   res.json(user);
 });
@@ -54,8 +64,12 @@ router.put('/:id', async (req, res) => {
 // DELETE /api/users/:id
 router.delete('/:id', async (req, res) => {
   const user = await prisma.user.delete({ where: { id: Number(req.params.id) } });
-  await prisma.auditLog.create({
-    data: { userId: req.session.userId, action: 'delete', entity: 'User', entityId: user.id, details: JSON.stringify(user) }
+  await logChange({
+    user: req.user,
+    action: 'delete',
+    entity: 'User',
+    entityId: user.id,
+    details: user,
   });
   res.json({ success: true });
 });
@@ -77,6 +91,21 @@ router.post('/saleassignments', async (req, res) => {
     data: { saleId, associateId, commissionRate, amount },
     include: { associate: true }
   });
+  await logChange({
+    user: req.user,
+    action: 'create',
+    entity: 'SaleAssignment',
+    entityId: assignment.id,
+    details: req.body,
+  });
+  // Simulate Lightspeed sync
+  await logChange({
+    user: req.user,
+    action: 'sync',
+    entity: 'SaleAssignment',
+    entityId: assignment.id,
+    details: { message: 'Synced to Lightspeed' },
+  });
   res.status(201).json(assignment);
 });
 
@@ -88,12 +117,42 @@ router.put('/saleassignments/:id', async (req, res) => {
     data: { saleId, associateId, commissionRate, amount },
     include: { associate: true }
   });
+  await logChange({
+    user: req.user,
+    action: 'update',
+    entity: 'SaleAssignment',
+    entityId: assignment.id,
+    details: req.body,
+  });
+  // Simulate Lightspeed sync
+  await logChange({
+    user: req.user,
+    action: 'sync',
+    entity: 'SaleAssignment',
+    entityId: assignment.id,
+    details: { message: 'Synced to Lightspeed' },
+  });
   res.json(assignment);
 });
 
 // DELETE /api/saleassignments/:id
 router.delete('/saleassignments/:id', async (req, res) => {
   await prisma.saleAssignment.delete({ where: { id: Number(req.params.id) } });
+  await logChange({
+    user: req.user,
+    action: 'delete',
+    entity: 'SaleAssignment',
+    entityId: Number(req.params.id),
+    details: { id: req.params.id },
+  });
+  // Simulate Lightspeed sync
+  await logChange({
+    user: req.user,
+    action: 'sync',
+    entity: 'SaleAssignment',
+    entityId: Number(req.params.id),
+    details: { message: 'Deleted from Lightspeed' },
+  });
   res.json({ success: true });
 });
 

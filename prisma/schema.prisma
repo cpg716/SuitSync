@@ -15,6 +15,8 @@ model Customer {
   email      String   @unique
   phone      String?
   parties    Party[]
+  alterationJobs AlterationJob[]
+  measurements Json?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
@@ -26,13 +28,15 @@ model User {
   name       String
   role       String   // e.g. 'tailor', 'admin'
   appointments Appointment[] @relation("TailorAppointments")
-  alterations  Alteration[]  @relation("TailorAlterations")
+  alterationJobs AlterationJob[]
   auditLogs   AuditLog[]
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
-  assignedAlterations Alteration[] @relation("AssignedTailorAlterations")
   saleAssignments     SaleAssignment[] @relation("UserSaleAssignments")
   skills        Skill[]
+  tailorAbilities TailorAbility[] @relation("UserTailorAbilities")
+  tailorSchedules TailorSchedule[] @relation("UserTailorSchedules")
+  assignedJobParts AlterationJobPart[] @relation("AssignedTailorJobParts")
 }
 
 model Party {
@@ -43,7 +47,7 @@ model Party {
   customer         Customer      @relation(fields: [customerId], references: [id])
   externalId       String?       // Lightspeed sale ID
   syncedAt         DateTime?
-  alterations      Alteration[]
+  alterationJobs   AlterationJob[]
   appointments     Appointment[]
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -53,49 +57,83 @@ model Party {
   members          PartyMember[]
 }
 
-model Alteration {
+model AlterationJob {
   id               Int      @id @default(autoincrement())
-  partyId          Int
-  party            Party    @relation(fields: [partyId], references: [id])
+  saleLineItemId   Int     // Lightspeed sale line item (required)
+  partyId          Int?    // optional party
+  customerId       Int?    // for walk-ins (optional)
   notes            String?
-  timeSpent        Int?
-  scheduledDateTime DateTime?
+  status           String  // e.g. "Pending", "InProgress", "Complete"
+  timeSpentMinutes Int?
   tailorId         Int?
-  tailor           User?    @relation("TailorAlterations", fields: [tailorId], references: [id])
-  status           String   @default("pending")
-  externalId       String?
-  syncedAt         DateTime?
+  measurements     Json?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
-  memberId         Int?
-  member           PartyMember? @relation("MemberAlterations", fields: [memberId], references: [id])
-  lsLineItemId     String?
-  assignedTailorId Int?
-  assignedTailor   User?    @relation("AssignedTailorAlterations", fields: [assignedTailorId], references: [id])
-  itemType      String?  // e.g. 'Coat', 'Vest', 'Trousers'
-  estimatedTime Int?     // Estimated time in minutes
-  actualTime    Int?     // Actual time spent in minutes
+  party            Party?  @relation(fields: [partyId], references: [id])
+  customer         Customer? @relation(fields: [customerId], references: [id])
+  tailor           User?   @relation(fields: [tailorId], references: [id])
+  jobParts         AlterationJobPart[] @relation("JobParts")
 }
 
 model Appointment {
   id               Int      @id @default(autoincrement())
   partyId          Int
   party            Party    @relation(fields: [partyId], references: [id])
+  customerId       String?  // Lightspeed Customer ID
+  saleId           String?  // Lightspeed Sale ID
   dateTime         DateTime
-  duration         Int?
-  tailorId         Int?
-  tailor           User?    @relation("TailorAppointments", fields: [tailorId], references: [id])
-  status           String   @default("scheduled")
-  externalId       String?
-  syncedAt         DateTime?
+  durationMinutes  Int?
+  type             AppointmentType? @default(fitting)
+  notes            String?
+  status           AppointmentStatus @default(scheduled)
+  syncedToLightspeed Boolean @default(false)
+  recurrenceRule   String?  // RFC 5545 RRULE
+  parentId         Int?
+  parent           Appointment? @relation("AppointmentRecurrence", fields: [parentId], references: [id])
+  children         Appointment[] @relation("AppointmentRecurrence")
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   memberId         Int?
   member           PartyMember? @relation("MemberAppointments", fields: [memberId], references: [id])
-  endDatetime      DateTime?
-  type             String?
-  notes            String?
+  tailorId         Int?
+  tailor           User?    @relation("TailorAppointments", fields: [tailorId], references: [id])
   lsEventId        String?
+  syncLogs         SyncLog[]
+}
+
+enum AppointmentType {
+  fitting
+  pickup
+  final_try
+  other
+}
+
+enum AppointmentStatus {
+  scheduled
+  rescheduled
+  canceled
+  completed
+}
+
+model SyncLog {
+  id            Int      @id @default(autoincrement())
+  appointment   Appointment @relation(fields: [appointmentId], references: [id])
+  appointmentId Int
+  direction     SyncDirection
+  status        SyncStatus
+  message       String?
+  payload       Json?
+  createdAt     DateTime @default(now())
+}
+
+enum SyncDirection {
+  inbound
+  outbound
+}
+
+enum SyncStatus {
+  success
+  failed
 }
 
 model AuditLog {
@@ -115,13 +153,12 @@ model PartyMember {
   party         Party    @relation(fields: [partyId], references: [id])
   lsCustomerId  String?  // Lightspeed customer ID
   role          String
-  measurements  String?
   notes         String?
   status        String   @default("Selected")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
-  alterations   Alteration[] @relation("MemberAlterations")
   appointments  Appointment[] @relation("MemberAppointments")
+  measurements  Json?
 }
 
 model SaleAssignment {
@@ -139,4 +176,58 @@ model Skill {
   id    Int    @id @default(autoincrement())
   name  String @unique
   users User[]
+}
+
+model Settings {
+  id         Int      @id @default(1)
+  reminderIntervals String @default("24,4")
+  emailSubject     String @default("Reminder: Your appointment at {shopName}")
+  emailBody        String @default("Hi {customerName},\nThis is a reminder for your appointment with {partyName} on {dateTime}.")
+  smsBody          String @default("Reminder: {partyName} appointment on {dateTime} at {shopName}.")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model AlterationTaskType {
+  id            Int    @id @default(autoincrement())
+  name          String @unique
+  defaultDuration Int  // in minutes
+  parts         String // e.g. 'Coat,Pants,Vest,Shirt,Other' (CSV)
+  abilities     TailorAbility[]
+  jobParts      AlterationJobPart[]
+}
+
+model TailorAbility {
+  id            Int    @id @default(autoincrement())
+  tailorId      Int
+  tailor        User   @relation("UserTailorAbilities", fields: [tailorId], references: [id])
+  taskTypeId    Int
+  taskType      AlterationTaskType @relation(fields: [taskTypeId], references: [id])
+  proficiency   Int    // 1-5 or similar
+}
+
+model TailorSchedule {
+  id            Int    @id @default(autoincrement())
+  tailorId      Int
+  tailor        User   @relation("UserTailorSchedules", fields: [tailorId], references: [id])
+  dayOfWeek     Int    // 0=Sunday, 6=Saturday
+  startTime     String // '09:00'
+  endTime       String // '17:00'
+}
+
+model AlterationJobPart {
+  id            Int    @id @default(autoincrement())
+  jobId         Int
+  job           AlterationJob @relation("JobParts", fields: [jobId], references: [id])
+  part          String
+  taskTypeId    Int
+  taskType      AlterationTaskType @relation(fields: [taskTypeId], references: [id])
+  assignedTailorId Int?
+  assignedTailor   User? @relation("AssignedTailorJobParts", fields: [assignedTailorId], references: [id])
+  scheduledTime DateTime?
+  duration      Int?   // in minutes
+  status        String // e.g. 'pending', 'in_progress', 'complete'
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }

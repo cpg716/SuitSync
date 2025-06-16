@@ -10,8 +10,8 @@ export default function Card({
   className?: string;
 }) {
   return (
-    <div className={`bg-white rounded-2xl shadow-lg p-6 space-y-4 ${className}`}>
-      {title && <h2 className="text-xl font-semibold">{title}</h2>}
+    <div className={`bg-surface.DEFAULT dark:bg-surface.muted shadow-card rounded-2xl p-6 ${className}`}>
+      {title && <h2 className="text-xl font-semibold text-black dark:text-white">{title}</h2>}
       {children}
     </div>
   );

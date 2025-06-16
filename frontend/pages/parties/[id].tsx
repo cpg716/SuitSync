@@ -64,7 +64,7 @@ export default function PartyDetail() {
       <button className="mb-4 px-4 py-2 bg-blue-600 text-white rounded" onClick={() => setShowAdd(true)}>Add Member</button>
       <table className="w-full border rounded">
         <thead>
-          <tr className="bg-gray-100">
+          <tr className="bg-gray-100 dark:bg-neutral-800">
             <th className="p-2 text-left">Role</th>
             <th className="p-2 text-left">Measurements</th>
             <th className="p-2 text-left">Status</th>
@@ -97,7 +97,7 @@ export default function PartyDetail() {
             <input className="border p-2 rounded w-full mb-2" placeholder="Status" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} />
             <textarea className="border p-2 rounded w-full mb-2" placeholder="Notes" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
             <div className="flex gap-2 justify-end">
-              <button className="px-4 py-2 bg-gray-300 rounded" onClick={() => setShowAdd(false)}>Cancel</button>
+              <button className="px-4 py-2 bg-gray-300 rounded dark:bg-gray-800 dark:text-gray-100" onClick={() => setShowAdd(false)}>Cancel</button>
               <button className="px-4 py-2 bg-blue-600 text-white rounded" onClick={handleAdd}>Add</button>
             </div>
           </div>
@@ -113,7 +113,7 @@ export default function PartyDetail() {
             <input className="border p-2 rounded w-full mb-2" placeholder="Status" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} />
             <textarea className="border p-2 rounded w-full mb-2" placeholder="Notes" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
             <div className="flex gap-2 justify-end">
-              <button className="px-4 py-2 bg-gray-300 rounded" onClick={() => setShowEdit(false)}>Cancel</button>
+              <button className="px-4 py-2 bg-gray-300 rounded dark:bg-gray-800 dark:text-gray-100" onClick={() => setShowEdit(false)}>Cancel</button>
               <button className="px-4 py-2 bg-blue-600 text-white rounded" onClick={handleEdit}>Save</button>
             </div>
           </div>

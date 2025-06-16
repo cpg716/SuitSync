@@ -5,12 +5,15 @@ import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import Input from '../components/ui/Input';
-import { Calendar as CalendarIcon, List as ListIcon, Plus, GripVertical, Clock, User } from 'lucide-react';
+import { Calendar as CalendarIcon, List as ListIcon, Plus, GripVertical, Clock, User, Scissors } from 'lucide-react';
 import { useToast } from '../components/ToastContext';
-
-const FullCalendar = dynamic(() => import('@fullcalendar/react'), { ssr: false });
+import Skeleton from '../components/ui/Skeleton';
+import FullCalendar from '@fullcalendar/react';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import dayGridPlugin from '@fullcalendar/daygrid';
+import TagPreview from '../components/ui/TagPreview';
+import AlterationModal from '../components/ui/AlterationModal';
+import ConfirmModal from '../components/ui/ConfirmModal';
 
 const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then(r => r.json());
 
@@ -20,321 +23,390 @@ const statusCols = [
   { key: 'complete', label: 'Completed' },
 ];
 
-export default function AlterationKanban() {
-  const { data: alterations = [], mutate } = useSWR('/api/alterations', fetcher);
-  const { data: parties = [] } = useSWR('/api/parties', fetcher);
-  const { data: users = [] } = useSWR('/api/users', fetcher);
-  const [tab, setTab] = useState<'list' | 'schedule'>('list');
-  const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState({ partyId: '', notes: '', timeSpent: '', scheduledDateTime: '', tailorId: '', status: 'pending' });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editForm, setEditForm] = useState({ id: '', partyId: '', notes: '', timeSpent: '', scheduledDateTime: '', tailorId: '', status: 'pending' });
-  const [editSaving, setEditSaving] = useState(false);
-  const [editError, setEditError] = useState('');
-  const [jobs, setJobs] = useState([]);
-  const [skills, setSkills] = useState([]);
-  const [tailors, setTailors] = useState({});
-  const [dragged, setDragged] = useState(null);
+export default function AlterationsPage() {
+  const [tab, setTab] = useState<'list' | 'calendar'>('list');
+  const [alterations, setAlterations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
   const { success, error: toastError } = useToast();
+  const [printJob, setPrintJob] = useState<any | null>(null);
+  const [calendarJob, setCalendarJob] = useState<any | null>(null);
+  const [statusUpdating, setStatusUpdating] = useState(false);
+  const [timeEditing, setTimeEditing] = useState(false);
+  const [timeVal, setTimeVal] = useState<number | null>(null);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [tailorFilter, setTailorFilter] = useState('');
+  const [editJob, setEditJob] = useState<any | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
+  const [deleteJob, setDeleteJob] = useState<any | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [jobTab, setJobTab] = useState<'all' | 'party' | 'walkin'>('all');
+
+  // Get unique tailors from data
+  const tailorOptions = Array.from(new Set(alterations.map(a => a.tailor?.name).filter(Boolean)));
+
+  // Tailor time tracking for today
+  const today = new Date();
+  const todayStr = today.toISOString().slice(0, 10);
+  const tailorTimeToday = {};
+  alterations.forEach(a => {
+    if (a.scheduledDateTime && a.scheduledDateTime.slice(0, 10) === todayStr && a.tailor?.name) {
+      if (!tailorTimeToday[a.tailor.name]) {
+        tailorTimeToday[a.tailor.name] = { time: 0, jobs: 0, jobList: [] };
+      }
+      tailorTimeToday[a.tailor.name].time += a.timeSpent || 0;
+      tailorTimeToday[a.tailor.name].jobs += 1;
+      tailorTimeToday[a.tailor.name].jobList.push(a);
+    }
+  });
 
   useEffect(() => {
-    fetch('/api/alterations').then(r => r.json()).then(data => { setJobs(data); setLoading(false); });
-    fetch('/api/alterations/skills').then(r => r.json()).then(setSkills);
+    setLoading(true);
+    fetch('/api/alterations')
+      .then(res => res.json())
+      .then(data => {
+        setAlterations(data);
+        setLoading(false);
+      })
+      .catch(() => {
+        setError('Failed to load alterations');
+        setLoading(false);
+      });
   }, []);
 
-  const getEligibleTailors = async (itemType) => {
-    if (tailors[itemType]) return tailors[itemType];
-    const res = await fetch(`/api/alterations/available-tailors?skill=${encodeURIComponent(itemType)}`);
-    const data = await res.json();
-    setTailors(t => ({ ...t, [itemType]: data }));
-    return data;
-  };
+  const filtered = alterations.filter(a => {
+    if (jobTab === 'party' && !a.party) return false;
+    if (jobTab === 'walkin' && !a.customer) return false;
+    return (
+      ((a.party?.name || '').toLowerCase().includes(search.toLowerCase()) ||
+        (a.customer?.name || '').toLowerCase().includes(search.toLowerCase()) ||
+        (a.tailor?.name || '').toLowerCase().includes(search.toLowerCase()) ||
+        (a.itemType || '').toLowerCase().includes(search.toLowerCase())) &&
+      (!statusFilter || a.status === statusFilter) &&
+      (!tailorFilter || a.tailor?.name === tailorFilter)
+    );
+  });
 
-  const handleStatusChange = async (job, newStatus) => {
-    await fetch(`/api/alterations/${job.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...job, status: newStatus })
-    });
-    setJobs(jobs => jobs.map(j => j.id === job.id ? { ...j, status: newStatus } : j));
-  };
-
-  const handleTailorChange = async (job, tailorId) => {
-    await fetch(`/api/alterations/${job.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...job, tailorId })
-    });
-    setJobs(jobs => jobs.map(j => j.id === job.id ? { ...j, tailorId } : j));
-  };
-
-  const handleTimeEdit = async (job, estimatedTime) => {
-    await fetch(`/api/alterations/${job.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...job, estimatedTime })
-    });
-    setJobs(jobs => jobs.map(j => j.id === job.id ? { ...j, estimatedTime } : j));
-  };
-
-  const events = alterations.filter((a: any) => a.scheduledDateTime).map((a: any) => ({
-    title: `Alt: ${parties.find((p: any) => p.id === a.partyId)?.name || ''}`,
+  // Calendar events
+  const events = filtered.map((a: any) => ({
+    title: `🔧 ${a.notes || 'Alteration'}`,
     start: a.scheduledDateTime,
     allDay: false,
+    extendedProps: { job: a },
+    id: a.id,
   }));
 
-  async function handleAddAlteration(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true); setError('');
-    if (!form.partyId || !form.status) {
-      setError('Party and status are required');
-      toastError('Party and status are required');
-      setSaving(false);
-      return;
+  function handleEventClick(info: any) {
+    setCalendarJob(info.event.extendedProps.job);
+    setTimeVal(info.event.extendedProps.job.estimatedTime || 30);
+  }
+
+  async function handleStatusChange(job: any, status: string) {
+    setStatusUpdating(true);
+    try {
+      await fetch(`/api/alterations/${job.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      success('Status updated');
+      setAlterations(alterations => alterations.map(a => a.id === job.id ? { ...a, status } : a));
+      setCalendarJob((j: any) => j && j.id === job.id ? { ...j, status } : j);
+    } catch {
+      toastError('Failed to update status');
+    } finally {
+      setStatusUpdating(false);
     }
+  }
+
+  async function handleTimeEdit(job: any, newTime: number) {
+    setTimeEditing(true);
+    try {
+      await fetch(`/api/alterations/${job.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timeSpentMinutes: newTime }),
+      });
+      success('Time updated');
+      setAlterations(alterations => alterations.map(a => a.id === job.id ? { ...a, timeSpentMinutes: newTime } : a));
+      setCalendarJob((j: any) => j && j.id === job.id ? { ...j, timeSpentMinutes: newTime } : j);
+    } catch {
+      toastError('Failed to update time');
+    } finally {
+      setTimeEditing(false);
+    }
+  }
+
+  // Edit handler
+  const handleEditSubmit = async (formData) => {
+    setEditLoading(true);
+    try {
+      const res = await fetch(`/api/alterations/${editJob.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+      if (!res.ok) throw new Error('Failed to update');
+      success('Alteration updated');
+      setAlterations(alterations => alterations.map(a => a.id === editJob.id ? { ...a, ...formData } : a));
+      setEditJob(null);
+    } catch (err) {
+      toastError('Failed to update alteration');
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  // Create handler
+  const handleCreateSubmit = async (formData) => {
+    setEditLoading(true);
     try {
       const res = await fetch('/api/alterations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          partyId: Number(form.partyId),
-          notes: form.notes,
-          timeSpent: form.timeSpent ? Number(form.timeSpent) : null,
-          scheduledDateTime: form.scheduledDateTime || null,
-          tailorId: form.tailorId ? Number(form.tailorId) : null,
-          status: form.status,
-        }),
+        body: JSON.stringify(formData),
       });
-      if (!res.ok) throw new Error('Failed to add alteration');
-      setModalOpen(false);
-      setForm({ partyId: '', notes: '', timeSpent: '', scheduledDateTime: '', tailorId: '', status: 'pending' });
-      mutate();
-      success('Alteration added');
+      if (!res.ok) throw new Error('Failed to create');
+      const newAlt = await res.json();
+      success('Alteration created');
+      setAlterations(alterations => [...alterations, newAlt]);
+      setCreateOpen(false);
     } catch (err) {
-      setError('Could not add alteration');
-      toastError('Could not add alteration');
+      toastError('Failed to create alteration');
     } finally {
-      setSaving(false);
+      setEditLoading(false);
     }
-  }
+  };
 
-  function openEditModal(alt: any) {
-    setEditForm({
-      id: alt.id,
-      partyId: String(alt.partyId),
-      notes: alt.notes || '',
-      timeSpent: alt.timeSpent ? String(alt.timeSpent) : '',
-      scheduledDateTime: alt.scheduledDateTime ? alt.scheduledDateTime.slice(0, 16) : '',
-      tailorId: alt.tailorId ? String(alt.tailorId) : '',
-      status: alt.status,
-    });
-    setEditModalOpen(true);
-    setEditError('');
-  }
-
-  async function handleEditAlteration(e: React.FormEvent) {
-    e.preventDefault();
-    setEditSaving(true); setEditError('');
-    if (!editForm.partyId || !editForm.status) {
-      setEditError('Party and status are required');
-      toastError('Party and status are required');
-      setEditSaving(false);
-      return;
-    }
+  // Delete handler
+  const handleDeleteConfirm = async () => {
+    setDeleteLoading(true);
     try {
-      const res = await fetch(`/api/alterations/${editForm.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          partyId: Number(editForm.partyId),
-          notes: editForm.notes,
-          timeSpent: editForm.timeSpent ? Number(editForm.timeSpent) : null,
-          scheduledDateTime: editForm.scheduledDateTime || null,
-          tailorId: editForm.tailorId ? Number(editForm.tailorId) : null,
-          status: editForm.status,
-        }),
+      const res = await fetch(`/api/alterations/${deleteJob.id}`, {
+        method: 'DELETE'
       });
-      if (!res.ok) throw new Error('Failed to update alteration');
-      setEditModalOpen(false);
-      mutate();
-      success('Alteration updated');
+      if (!res.ok) throw new Error('Failed to delete');
+      success('Alteration deleted');
+      setAlterations(alterations => alterations.filter(a => a.id !== deleteJob.id));
+      setDeleteJob(null);
     } catch (err) {
-      setEditError('Could not update alteration');
-      toastError('Could not update alteration');
+      toastError('Failed to delete alteration');
     } finally {
-      setEditSaving(false);
+      setDeleteLoading(false);
     }
-  }
+  };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4 mb-2">
-        <Button className={`px-4 py-2 ${tab === 'list' ? 'bg-primary text-white' : 'bg-white text-primary border border-primary'}`} onClick={() => setTab('list')} aria-label="List view"><ListIcon className="mr-2" /> List</Button>
-        <Button className={`px-4 py-2 ${tab === 'schedule' ? 'bg-primary text-white' : 'bg-white text-primary border border-primary'}`} onClick={() => setTab('schedule')} aria-label="Schedule view"><CalendarIcon className="mr-2" /> Schedule</Button>
-        <div className="flex-1" />
-        <Button onClick={() => setModalOpen(true)} aria-label="Add Alteration"><Plus className="mr-1" /> Add Alteration</Button>
-      </div>
-      {tab === 'list' ? (
-        <Card className="p-0">
-          <div className="p-4 border-b flex items-center font-semibold"><CalendarIcon className="mr-2" /> Alterations Schedule</div>
-          <div className="p-4">
-            <FullCalendar
-              plugins={[dayGridPlugin, timeGridPlugin]}
-              initialView="timeGridWeek"
-              headerToolbar={{ left: 'prev,next today', center: 'title', right: 'timeGridWeek,timeGridDay' }}
-              events={events}
-              height="auto"
-            />
-          </div>
-        </Card>
-      ) : (
-        <Card className="p-0">
-          <div className="p-4 border-b flex items-center font-semibold"><CalendarIcon className="mr-2" /> Alteration Queue</div>
-          <div className="p-4 max-w-full overflow-x-auto">
-            <div className="flex gap-4 overflow-x-auto">
-              {statusCols.map(col => (
-                <div key={col.key} className="flex-1 min-w-[320px] bg-neutral-100 dark:bg-neutral-900 rounded-2xl shadow-card p-3">
-                  <h2 className="font-semibold mb-2 text-primary dark:text-accent">{col.label}</h2>
-                  <div className="flex flex-col gap-3 min-h-[200px]">
-                    {loading ? (
-                      <div className="animate-pulse h-32 bg-neutral-200 dark:bg-neutral-800 rounded" />
-                    ) : (
-                      jobs.filter(j => j.status === col.key).map(job => (
-                        <KanbanCard key={job.id} job={job} getEligibleTailors={getEligibleTailors} onStatusChange={handleStatusChange} onTailorChange={handleTailorChange} onTimeEdit={handleTimeEdit} />
-                      ))
-                    )}
-                  </div>
+    <div className="w-full max-w-screen-lg mx-auto bg-white text-black dark:bg-gray-dark dark:text-white">
+      {/* Tailor Time Tracking */}
+      <Card title="Tailor Time Tracking (Today)" className="mb-6 bg-white dark:bg-gray-dark border border-gray-light dark:border-neutral-700">
+        {loading ? <Skeleton className="h-24 w-full" /> : (
+          Object.keys(tailorTimeToday).length === 0 ? <div className="text-gray-500">No tailor jobs today.</div> :
+          <ul className="divide-y">
+            {Object.entries(tailorTimeToday).map(([name, { time, jobs, jobList }]) => (
+              <li key={name} className="py-2">
+                <div className="flex flex-col md:flex-row md:items-center md:gap-4">
+                  <span className="font-semibold text-primary">{name}</span>
+                  <span className="ml-2 text-xs">{jobs} job{jobs !== 1 ? 's' : ''}</span>
+                  <span className="ml-2 text-xs">{time} min</span>
                 </div>
+                <ul className="ml-4 mt-1 text-xs text-gray-700">
+                  {jobList.map(j => (
+                    <li key={j.id} className="flex gap-2 items-center">
+                      <span>{j.itemType}</span>
+                      <span>{j.scheduledDateTime ? new Date(j.scheduledDateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+                      <span>{j.timeSpent ? `${j.timeSpent} min` : ''}</span>
+                      <span className={`px-2 py-1 rounded-full ${j.status === 'complete' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200' : j.status === 'pending' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-200' : 'bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-200'}`}>{j.status}</span>
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+      {/* Tabs for job type */}
+      <div className="flex gap-4 mb-6 border-b">
+        <button className={`px-4 py-2 font-semibold ${jobTab === 'all' ? 'border-b-2 border-primary text-primary' : 'text-gray-500'}`} onClick={() => setJobTab('all')}>All</button>
+        <button className={`px-4 py-2 font-semibold ${jobTab === 'party' ? 'border-b-2 border-primary text-primary' : 'text-gray-500'}`} onClick={() => setJobTab('party')}>Party Jobs</button>
+        <button className={`px-4 py-2 font-semibold ${jobTab === 'walkin' ? 'border-b-2 border-primary text-primary' : 'text-gray-500'}`} onClick={() => setJobTab('walkin')}>Walk-In Jobs</button>
+      </div>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+        <h1 className="text-3xl font-bold text-primary flex items-center"><Scissors className="mr-2" />Alterations</h1>
+        <div className="flex gap-2 w-full md:w-auto">
+          <input
+            type="text"
+            placeholder="Search by party, tailor, or item type..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="border border-neutral-300 rounded-lg px-4 py-2 w-full md:w-64 focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="border rounded px-2 py-1">
+            <option value="">All Statuses</option>
+            <option value="pending">Pending</option>
+            <option value="in_progress">In Progress</option>
+            <option value="complete">Complete</option>
+          </select>
+          <select value={tailorFilter} onChange={e => setTailorFilter(e.target.value)} className="border rounded px-2 py-1">
+            <option value="">All Tailors</option>
+            {tailorOptions.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <Button className="ml-2 px-4 py-2" aria-label="Add Alteration" onClick={() => setCreateOpen(true)}>+ Add Alteration</Button>
+        </div>
+      </div>
+      {tab === 'list' && (
+        <Card className="p-0 bg-white dark:bg-gray-dark border border-gray-light dark:border-neutral-700">
+          {loading ? (
+            <div className="space-y-4 p-6">
+              {[...Array(5)].map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
               ))}
             </div>
-          </div>
+          ) : error ? (
+            <div className="p-6 text-red-600">{error}</div>
+          ) : filtered.length === 0 ? (
+            <div className="p-6 text-gray-500">No alterations found.</div>
+          ) : (
+            <table className="w-full border-t rounded text-black dark:text-white bg-white dark:bg-gray-dark border-gray-light dark:border-neutral-700">
+              <thead>
+                <tr className="bg-gray-100 dark:bg-neutral-800">
+                  <th className="p-3 text-left">ID</th>
+                  <th className="p-3 text-left">Party</th>
+                  <th className="p-3 text-left">Customer</th>
+                  <th className="p-3 text-left">Tailor</th>
+                  <th className="p-3 text-left">Status</th>
+                  <th className="p-3 text-left">Item Type</th>
+                  <th className="p-3 text-left">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(a => (
+                  <tr key={a.id} className="border-t hover:bg-blue-50 transition">
+                    <td className="p-3 font-medium">{a.id}</td>
+                    <td className="p-3">{a.party?.name || '—'}</td>
+                    <td className="p-3">{a.customer?.name || '—'}</td>
+                    <td className="p-3">{a.tailor?.name || '—'}</td>
+                    <td className="p-3">
+                      <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${a.status === 'complete' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200' : a.status === 'pending' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-200' : 'bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-200'}`}>{a.status}</span>
+                    </td>
+                    <td className="p-3">{a.itemType}</td>
+                    <td className="p-3">
+                      <Button className="px-3 py-1 text-xs bg-yellow-400 text-black mr-2" onClick={() => setEditJob(a)}>Edit</Button>
+                      <Button className="px-3 py-1 text-xs bg-red-500 text-white mr-2" onClick={() => setDeleteJob(a)}>Delete</Button>
+                      <Button className="px-3 py-1 text-xs bg-blue-500 text-white" onClick={() => setPrintJob(a)}>Print Tag</Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </Card>
       )}
-      {/* Add Alteration Modal */}
-      <Modal isOpen={modalOpen}>
-        <form onSubmit={handleAddAlteration} className="space-y-4 p-4 w-80">
-          <h2 className="text-lg font-semibold mb-2">Add Alteration</h2>
-          <select
-            value={form.partyId}
-            onChange={e => setForm(f => ({ ...f, partyId: e.target.value }))}
-            required
-            className="w-full border rounded px-3 py-2"
-            aria-label="Party"
-          >
-            <option value="">Select party…</option>
-            {parties.map((p: any) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-          <Input
-            placeholder="Notes"
-            value={form.notes}
-            onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-            aria-label="Notes"
+      {tab === 'calendar' && (
+        <div>
+          <FullCalendar
+            plugins={[dayGridPlugin, timeGridPlugin]}
+            initialView="timeGridWeek"
+            headerToolbar={{
+              left: 'prev,next today',
+              center: 'title',
+              right: 'dayGridMonth,timeGridWeek,timeGridDay',
+            }}
+            events={events}
+            height="auto"
+            eventClick={handleEventClick}
           />
-          <Input
-            type="number"
-            placeholder="Time spent (min)"
-            value={form.timeSpent}
-            onChange={e => setForm(f => ({ ...f, timeSpent: e.target.value }))}
-            aria-label="Time spent"
-          />
-          <Input
-            type="datetime-local"
-            value={form.scheduledDateTime}
-            onChange={e => setForm(f => ({ ...f, scheduledDateTime: e.target.value }))}
-            aria-label="Scheduled date/time"
-          />
-          <select
-            value={form.tailorId}
-            onChange={e => setForm(f => ({ ...f, tailorId: e.target.value }))}
-            className="w-full border rounded px-3 py-2"
-            aria-label="Tailor"
-          >
-            <option value="">Select tailor…</option>
-            {users.map((u: any) => (
-              <option key={u.id} value={u.id}>{u.name}</option>
-            ))}
-          </select>
-          <select
-            value={form.status}
-            onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
-            className="w-full border rounded px-3 py-2"
-            aria-label="Status"
-          >
-            <option value="pending">Pending</option>
-            <option value="complete">Complete</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-          {error && <div className="text-red-600 text-sm">{error}</div>}
-          <Button type="submit" className="w-full" disabled={saving}>{saving ? 'Saving…' : 'Add Alteration'}</Button>
-        </form>
-      </Modal>
-      {/* Edit Alteration Modal */}
-      <Modal isOpen={editModalOpen}>
-        <form onSubmit={handleEditAlteration} className="space-y-4 p-4 w-80">
-          <h2 className="text-lg font-semibold mb-2">Edit Alteration</h2>
-          <select
-            value={editForm.partyId}
-            onChange={e => setEditForm(f => ({ ...f, partyId: e.target.value }))}
-            required
-            className="w-full border rounded px-3 py-2"
-            aria-label="Party"
-          >
-            <option value="">Select party…</option>
-            {parties.map((p: any) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-          <Input
-            placeholder="Notes"
-            value={editForm.notes}
-            onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))}
-            aria-label="Notes"
-          />
-          <Input
-            type="number"
-            placeholder="Time spent (min)"
-            value={editForm.timeSpent}
-            onChange={e => setEditForm(f => ({ ...f, timeSpent: e.target.value }))}
-            aria-label="Time spent"
-          />
-          <Input
-            type="datetime-local"
-            value={editForm.scheduledDateTime}
-            onChange={e => setEditForm(f => ({ ...f, scheduledDateTime: e.target.value }))}
-            aria-label="Scheduled date/time"
-          />
-          <select
-            value={editForm.tailorId}
-            onChange={e => setEditForm(f => ({ ...f, tailorId: e.target.value }))}
-            className="w-full border rounded px-3 py-2"
-            aria-label="Tailor"
-          >
-            <option value="">Select tailor…</option>
-            {users.map((u: any) => (
-              <option key={u.id} value={u.id}>{u.name}</option>
-            ))}
-          </select>
-          <select
-            value={editForm.status}
-            onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))}
-            className="w-full border rounded px-3 py-2"
-            aria-label="Status"
-          >
-            <option value="pending">Pending</option>
-            <option value="complete">Complete</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-          {editError && <div className="text-red-600 text-sm">{editError}</div>}
-          <Button type="submit" className="w-full" disabled={editSaving}>{editSaving ? 'Saving…' : 'Save Changes'}</Button>
-        </form>
-      </Modal>
+        </div>
+      )}
+      {/* Tag Print Modal (List) */}
+      {printJob && (
+        <Modal open={!!printJob} onClose={() => setPrintJob(null)}>
+          <div className="p-4">
+            <TagPreview job={{
+              ...printJob,
+              customerName: printJob.party?.customer?.name,
+              tailorName: printJob.tailor?.name,
+              remarks: printJob.notes,
+            }} />
+            <div className="flex justify-end mt-4">
+              <Button className="px-4 py-2 bg-accent text-black rounded print:hidden" onClick={() => window.print()}>Print</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      {/* Calendar Event Modal with Tag Print, Status, and Time Controls */}
+      {calendarJob && (
+        <Modal open={!!calendarJob} onClose={() => setCalendarJob(null)}>
+          <div className="p-4">
+            <TagPreview job={{
+              ...calendarJob,
+              customerName: calendarJob.party?.customer?.name,
+              tailorName: calendarJob.tailor?.name,
+              remarks: calendarJob.notes,
+            }} />
+            <div className="flex gap-2 mt-4 items-center">
+              <span className="font-semibold">Status:</span>
+              {['pending', 'in_progress', 'complete'].map(s => (
+                <Button
+                  key={s}
+                  className={`px-3 py-1 text-xs ${calendarJob.status === s ? 'bg-primary text-white' : 'bg-gray-200 text-gray-700'}`}
+                  disabled={statusUpdating || calendarJob.status === s}
+                  onClick={() => handleStatusChange(calendarJob, s)}
+                >
+                  {s.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                </Button>
+              ))}
+            </div>
+            <div className="flex gap-2 mt-4 items-center">
+              <span className="font-semibold">Time Est:</span>
+              {timeEditing ? (
+                <input
+                  type="number"
+                  className="w-16 border rounded p-1 text-xs"
+                  value={timeVal ?? ''}
+                  min={5}
+                  max={240}
+                  onChange={e => setTimeVal(Number(e.target.value))}
+                  onBlur={() => { setTimeEditing(false); if (timeVal !== null) handleTimeEdit(calendarJob, timeVal); }}
+                  autoFocus
+                />
+              ) : (
+                <span onClick={() => setTimeEditing(true)} className="cursor-pointer">{calendarJob.estimatedTime || 30} min</span>
+              )}
+            </div>
+            <div className="flex justify-end mt-4">
+              <Button className="px-4 py-2 bg-accent text-black rounded print:hidden" onClick={() => window.print()}>Print</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      {/* Edit Modal */}
+      <AlterationModal
+        open={!!editJob}
+        onClose={() => setEditJob(null)}
+        onSubmit={handleEditSubmit}
+        alteration={editJob}
+        loading={editLoading}
+      />
+      {/* Delete Confirm Modal */}
+      <ConfirmModal
+        open={!!deleteJob}
+        onClose={() => setDeleteJob(null)}
+        onConfirm={handleDeleteConfirm}
+        loading={deleteLoading}
+        title="Delete Alteration"
+        message="Are you sure you want to delete this alteration? This cannot be undone."
+      />
+      {/* Create Modal */}
+      <AlterationModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onSubmit={handleCreateSubmit}
+        alteration={null}
+        loading={editLoading}
+      />
     </div>
   );
 }

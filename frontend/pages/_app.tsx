@@ -1,33 +1,18 @@
 // frontend/pages/_app.tsx
 import '../styles/globals.css';
 import type { AppProps } from 'next/app';
-import Layout from '../components/Layout';
-import { ToastProvider } from '../components/ToastContext';
 import { AuthProvider } from '../src/AuthContext';
-import { useEffect, useState } from 'react';
+import { ToastProvider } from '../components/ToastContext';
+import Layout from '../components/Layout';
 
 export default function App({ Component, pageProps }: AppProps) {
-  const [dark, setDark] = useState(false);
-  useEffect(() => {
-    const stored = localStorage.getItem('theme');
-    if (stored === 'dark') setDark(true);
-  }, []);
-  useEffect(() => {
-    if (dark) {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
-    }
-  }, [dark]);
+  // Support per-page layout: if a page exports getLayout, use it; otherwise, wrap in Layout
+  const getLayout = (Component as any).getLayout || ((page: React.ReactNode) => <Layout>{page}</Layout>);
   return (
-    <ToastProvider>
-      <AuthProvider>
-        <Layout>
-          <Component {...pageProps} />
-        </Layout>
-      </AuthProvider>
-    </ToastProvider>
+    <AuthProvider>
+      <ToastProvider>
+        {getLayout(<Component {...pageProps} />)}
+      </ToastProvider>
+    </AuthProvider>
   );
 }

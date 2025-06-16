@@ -9,25 +9,33 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        background: {
+          light: "#F9FAFB",
+          DEFAULT: "#FFFFFF",
+          dark: "#F1F3F5",
+        },
+        surface: {
+          DEFAULT: "#FFFFFF",
+          muted: "#F4F5F7",
+        },
         primary: {
-          DEFAULT: '#0055A5',
-          light: '#3380C2',
-          dark: '#003366',
+          DEFAULT: "#2D2D2D",
+          light: "#4A4A4A",
+          muted: "#6B6B6B",
         },
         accent: {
-          DEFAULT: '#FFC200',
-          light: '#FFE066',
-          dark: '#CC9900',
+          DEFAULT: "#00AFB9",
+          hover:   "#008A8F",
+        },
+        foreground: {
+          light: "#2D2D2D",
+          dark: "#FFFFFF",
         },
         neutral: {
           900: '#1F2D3D',
           700: '#4B5563',
           400: '#E5E7EB',
           100: '#F8FAFC',
-        },
-        background: {
-          light: '#F8FAFC',
-          dark: '#1F2D3D',
         },
       },
       fontFamily: {
@@ -38,7 +46,7 @@ module.exports = {
         '2xl': '1.5rem',
       },
       boxShadow: {
-        card: '0 2px 8px 0 rgba(31,45,61,0.08)',
+        card: "0 1px 2px rgba(0,0,0,0.05), 0 1px 3px rgba(0,0,0,0.1)",
       },
     },
   },

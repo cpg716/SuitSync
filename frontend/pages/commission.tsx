@@ -11,10 +11,10 @@ export default function CommissionLeaderboard() {
 
   return (
     <div className="max-w-2xl mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-4">Commission Leaderboard</h1>
-      <table className="w-full mb-8 border rounded">
+      <h1 className="text-3xl font-bold mb-4 text-primary dark:text-accent">Commission Leaderboard</h1>
+      <table className="w-full mb-8 border rounded bg-white dark:bg-gray-900 text-black dark:text-white">
         <thead>
-          <tr className="bg-gray-100 dark:bg-gray-800">
+          <tr className="bg-gray-100 dark:bg-gray-800 text-gray-dark dark:text-gray-light">
             <th className="p-2 text-left">Associate</th>
             <th className="p-2 text-left">Email</th>
             <th className="p-2 text-left">Total Commission</th>
@@ -30,7 +30,7 @@ export default function CommissionLeaderboard() {
           ))}
         </tbody>
       </table>
-      <h2 className="text-xl font-semibold mb-2">Bar Chart</h2>
+      <h2 className="text-xl font-semibold mb-2 text-primary dark:text-accent">Bar Chart</h2>
       <div className="bg-white dark:bg-gray-900 p-4 rounded shadow">
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={data.map(row => ({ name: row.associate?.name, commission: row.totalCommission }))}>

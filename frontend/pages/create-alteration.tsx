@@ -6,7 +6,7 @@ export default function CreateAlterationPage() {
 
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-semibold mb-4">New Alteration Tag</h1>
+      <h1 className="text-2xl font-semibold mb-4">New Alteration (Party or Walk-In)</h1>
       <AlterationTagEditor
         onSave={async (data) => {
           await fetch('/api/alterations', {

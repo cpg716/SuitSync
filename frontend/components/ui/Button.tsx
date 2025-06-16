@@ -1,17 +1,14 @@
 import React, { ButtonHTMLAttributes } from 'react';
 
-export default function Button(
-  props: ButtonHTMLAttributes<HTMLButtonElement>
-) {
+export default function Button({ children, variant = 'primary', ...props }) {
+  const base = "inline-flex items-center justify-center font-medium rounded-md px-4 py-2 transition";
+  const styles = {
+    primary: "bg-accent text-white hover:bg-accent.hover",
+    outline: "border border-primary text-primary hover:bg-primary/10",
+  };
   return (
-    <button
-      {...props}
-      className={`
-        inline-flex items-center justify-center px-6 py-2 rounded-md
-        font-semibold shadow-sm transition duration-150 ease-in-out
-        bg-primary text-white hover:bg-primary-dark disabled:opacity-50
-        ${props.className || ''}
-      `}
-    />
+    <button className={`${base} ${styles[variant]}`} {...props}>
+      {children}
+    </button>
   );
 }
