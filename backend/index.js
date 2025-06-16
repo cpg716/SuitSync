@@ -11,6 +11,7 @@ app.use('/api/admin/settings', require('./routes/adminSettings'));
 app.use('/api/commissions', require('./routes/commissions'));
 app.use('/api/parties', require('./routes/parties'));
 app.use('/api/alterations', require('./routes/alterations'));
+app.use('/api/push', require('./routes/push'));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

@@ -198,6 +198,8 @@ export default function AlterationsPage() {
     }
   };
 
+  AlterationsPage.title = 'Alterations';
+
   return (
     <div className="w-full max-w-screen-lg mx-auto bg-white text-black dark:bg-gray-dark dark:text-white">
       {/* Tailor Time Tracking */}

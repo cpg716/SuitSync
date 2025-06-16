@@ -2,7 +2,10 @@
   "/_app": "pages/_app.js",
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
-  "/admin": "pages/admin.js",
+  "/appointments": "pages/appointments.js",
   "/commission": "pages/commission.js",
-  "/appointments": "pages/appointments.js"
+  "/": "pages/index.js",
+  "/tag": "pages/tag.js",
+  "/alterations": "pages/alterations.js",
+  "/admin": "pages/admin.js"
 }

@@ -35,7 +35,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-100 via-white to-blue-200 dark:from-neutral-900 dark:via-neutral-800 dark:to-neutral-900">
       <Card className="w-full max-w-md p-8">
         <div className="flex flex-col items-center mb-6">
-          <img src="/riverside-logo-full.jpg" alt="Riverside Men's Shop Logo" className="h-20 w-auto mb-2 drop-shadow-lg" />
+          <img src="/suitsync-logoh.png" alt="SuitSync Logo" className="h-20 w-auto mb-2 drop-shadow-lg" />
           <h1 className="text-2xl font-bold mb-2 text-primary">Sign in to SuitSync</h1>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4" aria-label="Login form">

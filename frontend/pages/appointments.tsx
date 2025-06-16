@@ -324,3 +324,5 @@ export default function AppointmentsPage() {
     </div>
   );
 }
+
+AppointmentsPage.title = 'Appointments';

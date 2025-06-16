@@ -156,6 +156,8 @@ export default function Dashboard() {
   );
 }
 
+Dashboard.title = 'Dashboard';
+
 function Card({ title, value, link, children, iconColor }) {
   if (link) {
     return (

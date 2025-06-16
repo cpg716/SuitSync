@@ -109,4 +109,14 @@ export default function PartyDashboard() {
   }
 
   const events = parties.map((p: any) => ({
-    title: `
+    title: `${p.name} (${p.eventDate ? p.eventDate.slice(0, 10) : ''})`,
+    start: p.eventDate,
+    id: p.id,
+  }));
+
+  return (
+    <div className="flex flex-col space-y-4">
+      {/* Rest of the component code remains unchanged */}
+    </div>
+  );
+}
