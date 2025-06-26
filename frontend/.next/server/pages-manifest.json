@@ -2,10 +2,8 @@
   "/_app": "pages/_app.js",
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
-  "/appointments": "pages/appointments.js",
-  "/commission": "pages/commission.js",
   "/": "pages/index.js",
-  "/tag": "pages/tag.js",
+  "/appointments": "pages/appointments.js",
   "/alterations": "pages/alterations.js",
-  "/admin": "pages/admin.js"
+  "/login": "pages/login.js"
 }

@@ -1,23 +1,119 @@
-import { useEffect, useState, useRef } from 'react';
-import Card from '../components/ui/Card';
-import Button from '../components/ui/Button';
-import Skeleton from '../components/ui/Skeleton';
+import React, { useState, useMemo } from 'react';
+import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '../components/ToastContext';
 import { AppointmentStatus, AppointmentType } from '../src/types/appointments';
 import AppointmentModal from '../components/ui/AppointmentModal';
-import ConfirmModal from '../components/ui/ConfirmModal';
-import FullCalendar from '@fullcalendar/react';
-import dayGridPlugin from '@fullcalendar/daygrid';
-import timeGridPlugin from '@fullcalendar/timegrid';
-import interactionPlugin from '@fullcalendar/interaction';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { toast } from 'react-hot-toast';
+import Pagination from '../components/ui/Pagination';
+import useSWR from 'swr';
+import { api } from '../lib/apiClient';
+import 'react-big-calendar/lib/css/react-big-calendar.css';
+import { Calendar, dateFnsLocalizer, View } from 'react-big-calendar';
+import { format, parse, startOfWeek, getDay, addMinutes, isValid } from 'date-fns';
+import { enUS } from 'date-fns/locale/en-US/index.js';
+import { useAuth } from '@/src/AuthContext';
+import { ListIcon, CalendarIcon, Plus } from 'lucide-react';
+
+const locales = { 'en-US': enUS };
+
+const localizer = dateFnsLocalizer({
+  format,
+  parse,
+  startOfWeek,
+  getDay,
+  locales
+});
+
+type CalendarView = 'month' | 'week' | 'day' | 'agenda';
+const AVAILABLE_VIEWS: CalendarView[] = ['month', 'week', 'day', 'agenda'];
+
+// Custom event styles
+const eventStyleGetter = (event: any) => {
+  let style: React.CSSProperties = {
+    backgroundColor: '#3182ce',
+    borderRadius: '4px',
+    opacity: 0.8,
+    color: 'white',
+    border: 'none',
+    display: 'block',
+    fontSize: '0.875rem'
+  };
+
+  if (event?.resource?.status === 'completed') {
+    style.backgroundColor = '#48bb78';
+  } else if (event?.resource?.status === 'canceled') {
+    style.backgroundColor = '#a0aec0';
+    style.textDecoration = 'line-through';
+  }
+
+  if (event?.resource?.type === 'fitting') {
+    style.borderLeft = '4px solid #4299e1';
+  } else if (event?.resource?.type === 'pickup') {
+    style.borderLeft = '4px solid #48bb78';
+  }
+
+  return { style };
+};
+
+// Custom event component
+const EventComponent = React.memo(({ event, title }: { event: any; title: string }) => {
+  if (!event) return null;
+  
+  const startTime = format(event.start, 'h:mm a');
+  const endTime = format(event.end, 'h:mm a');
+  
+  return (
+    <div className="truncate px-1 text-sm font-medium">
+      <div className="font-semibold">{String(title || '')}</div>
+      <div className="text-xs opacity-75">
+        {startTime} - {endTime}
+      </div>
+    </div>
+  );
+});
+
+EventComponent.displayName = 'EventComponent';
+
+// Custom toolbar component
+const CustomToolbar = React.memo(({ label, onNavigate, onView, view }: any) => {
+  const viewNames = {
+    month: 'Month',
+    week: 'Week',
+    day: 'Day',
+    agenda: 'Agenda'
+  };
+
+  return (
+    <div className="rbc-toolbar dark:bg-gray-800">
+      <span className="rbc-btn-group">
+        <button type="button" onClick={() => onNavigate('PREV')} className="dark:text-white dark:hover:bg-gray-700">Back</button>
+        <button type="button" onClick={() => onNavigate('TODAY')} className="dark:text-white dark:hover:bg-gray-700">Today</button>
+        <button type="button" onClick={() => onNavigate('NEXT')} className="dark:text-white dark:hover:bg-gray-700">Next</button>
+      </span>
+      <span className="rbc-toolbar-label dark:text-white">{String(label)}</span>
+      <span className="rbc-btn-group">
+        {AVAILABLE_VIEWS.map((name) => (
+          <button
+            key={name}
+            type="button"
+            className={`dark:text-white dark:hover:bg-gray-700 ${view === name ? 'rbc-active' : ''}`}
+            onClick={() => onView(name)}
+          >
+            {viewNames[name]}
+          </button>
+        ))}
+      </span>
+    </div>
+  );
+});
+
+CustomToolbar.displayName = 'CustomToolbar';
 
 export default function AppointmentsPage() {
   const [tab, setTab] = useState<'list' | 'calendar'>('list');
-  // List state
-  const [appointments, setAppointments] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
@@ -26,46 +122,23 @@ export default function AppointmentsPage() {
   const [editAppt, setEditAppt] = useState(null);
   const [deleteAppt, setDeleteAppt] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
-  // Calendar state
-  const [calendarLoading, setCalendarLoading] = useState(true);
-  const [calendarAppts, setCalendarAppts] = useState<any[]>([]);
-  const [calendarModalOpen, setCalendarModalOpen] = useState(false);
-  const [calendarEditAppt, setCalendarEditAppt] = useState(null);
-  const [calendarActionLoading, setCalendarActionLoading] = useState(false);
-  const calendarRef = useRef(null);
+  const [view, setView] = useState<CalendarView>('week');
+  const [date, setDate] = useState(new Date());
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
+  const { user } = useAuth();
 
-  // Fetch for list
-  useEffect(() => {
-    if (tab === 'list') {
-      setLoading(true);
-      fetch('http://localhost:3000/api/appointments', { credentials: 'include' })
-        .then(res => res.json())
-        .then(data => {
-          setAppointments(data);
-          setLoading(false);
-        })
-        .catch(() => {
-          setError('Failed to load appointments');
-          setLoading(false);
-        });
+  const { data: appointments = [], error: swrError, isLoading, mutate } = useSWR('/appointments', {
+    revalidateOnFocus: true,
+    revalidateOnReconnect: true,
+    refreshInterval: 5000,
+    onError: (error) => {
+      toastError('Failed to load appointments: ' + error.message);
     }
-  }, [tab]);
-
-  // Fetch for calendar
-  useEffect(() => {
-    if (tab === 'calendar') {
-      setCalendarLoading(true);
-      fetch('http://localhost:3000/api/appointments', { credentials: 'include' })
-        .then(res => res.json())
-        .then(data => {
-          setCalendarAppts(data);
-          setCalendarLoading(false);
-        });
-    }
-  }, [tab]);
+  });
 
   // List view logic
-  const filtered = appointments.filter(a =>
+  const filtered = (Array.isArray(appointments) ? appointments : []).filter(a =>
     (a.party?.name || '').toLowerCase().includes(search.toLowerCase()) ||
     (a.tailor?.name || '').toLowerCase().includes(search.toLowerCase())
   ).filter(a =>
@@ -73,256 +146,507 @@ export default function AppointmentsPage() {
     (!typeFilter || a.type === typeFilter)
   );
 
-  // Calendar logic
-  const events = calendarAppts.map(appt => ({
-    id: appt.id,
-    title: `${appt.party?.name || 'Party'}${appt.member ? ' - ' + appt.member.role : ''}`,
-    start: appt.dateTime,
-    end: appt.endDatetime || undefined,
-    backgroundColor: getEventColor(appt),
-    borderColor: getEventColor(appt),
-    textColor: '#fff',
-    extendedProps: { appt },
-  }));
-  function getEventColor(appt) {
-    if (!appt.syncedToLightspeed) return '#dc2626';
-    if (appt.status === 'completed') return '#22c55e';
-    if (appt.status === 'canceled') return '#6b7280';
-    if (appt.type === 'fitting') return '#2563eb';
-    if (appt.type === 'pickup') return '#16a34a';
-    if (appt.type === 'final_try') return '#f59e42';
-    return '#0055A5';
+  const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  // Enhanced event mapping with validation
+  const events = useMemo(() => {
+    if (!Array.isArray(appointments)) return [];
+    
+    return appointments.reduce((acc: any[], appt: any) => {
+      try {
+        // Validate required date
+        const startDate = new Date(appt.dateTime);
+        if (!isValid(startDate)) {
+          console.warn('Invalid date for appointment:', appt);
+          return acc;
+        }
+
+        // Calculate end time
+        const endDate = appt.endDatetime 
+          ? new Date(appt.endDatetime)
+          : addMinutes(startDate, appt.durationMinutes || 60);
+
+        if (!isValid(endDate)) {
+          console.warn('Invalid end date for appointment:', appt);
+          return acc;
+        }
+
+        // Safe string conversions
+        const partyName = String(appt.party?.name || 'Unnamed Party');
+        const memberRole = appt.member ? String(appt.member.role || '') : '';
+        const title = memberRole ? `${partyName} - ${memberRole}` : partyName;
+
+        acc.push({
+          id: String(appt.id),
+          title,
+          start: startDate,
+          end: endDate,
+          resource: appt,
+        });
+      } catch (err) {
+        console.error('Error processing appointment:', err, appt);
+      }
+      return acc;
+    }, []);
+  }, [appointments]);
+
+  function handleSelectEvent(event: any) {
+    if (event?.resource) {
+      setEditAppt(event.resource);
+      setModalOpen(true);
+    }
   }
-  const handleEventDrop = async (info) => {
-    const newDate = info.event.start;
-    await fetch(`http://localhost:3000/api/appointments/${info.event.id}`, {
-      credentials: 'include',
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dateTime: newDate })
-    });
-    toast.success('Appointment rescheduled!');
-    setCalendarLoading(true);
-    fetch('http://localhost:3000/api/appointments', { credentials: 'include' }).then(res => res.json()).then(setCalendarAppts).finally(() => setCalendarLoading(false));
+
+  function handleNavigate(newDate: Date) {
+    setDate(newDate);
+  }
+
+  const handleSave = async (data: any) => {
+    try {
+      if (editAppt) {
+        // Update
+        await api.put(`/appointments/${editAppt.id}`, data);
+        success('Appointment updated successfully');
+      } else {
+        // Create
+        await api.post('/appointments', data);
+        success('Appointment created successfully');
+      }
+      mutate();
+      setEditAppt(null);
+      setModalOpen(false);
+    } catch (err) {
+      toastError('Error saving appointment: ' + err.message);
+    }
   };
-  const handleEventClick = (info) => {
-    setCalendarEditAppt(info.event.extendedProps.appt);
-    setCalendarModalOpen(true);
+
+  const handleDelete = async () => {
+    if (!deleteAppt) return;
+    try {
+      await api.delete(`/appointments/${deleteAppt.id}`);
+      success('Appointment deleted successfully');
+      mutate(appointments.filter(a => a.id !== deleteAppt.id));
+      setDeleteAppt(null);
+    } catch (err) {
+      toastError('Error deleting appointment: ' + err.message);
+    }
   };
-  function renderEventContent(arg) {
-    const appt = arg.event.extendedProps.appt;
+
+  if (swrError) {
     return (
-      <div className="flex flex-col">
-        <span className="font-semibold text-xs">{arg.event.title}</span>
-        <span className="text-xs text-neutral-400">{appt.tailor?.name || ''}</span>
-        <span className={`text-xs ${appt.syncedToLightspeed ? 'text-green-600' : 'text-red-600'}`}>{appt.syncedToLightspeed ? 'Synced' : 'Sync Error'}</span>
+      <div className="w-full max-w-screen-lg mx-auto p-4">
+        <Card className="p-6 text-center">
+          <h2 className="text-xl font-semibold text-red-600 mb-2">Error Loading Appointments</h2>
+          <p className="text-gray-600 dark:text-gray-400">{swrError.message}</p>
+          <Button onClick={() => mutate()} className="mt-4">
+            Retry
+          </Button>
+        </Card>
       </div>
     );
   }
-  // Print handler
-  function handlePrint() {
-    window.print();
-  }
 
   return (
-    <div className="w-full max-w-screen-lg mx-auto bg-white text-black dark:bg-gray-dark dark:text-white">
-      <div className="flex gap-2 mb-3 border-b border-gray-light dark:border-gray">
-        <button className={`px-4 py-2 font-semibold ${tab === 'list' ? 'border-b-2 border-primary text-primary' : 'text-gray'}`} onClick={() => setTab('list')}>List</button>
-        <button className={`px-4 py-2 font-semibold ${tab === 'calendar' ? 'border-b-2 border-primary text-primary' : 'text-gray'}`} onClick={() => setTab('calendar')}>Calendar</button>
-      </div>
-      {tab === 'list' && (
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-          <h1 className="text-3xl font-bold text-primary">Appointments</h1>
-          <div className="flex gap-2 w-full md:w-auto">
+    <div className="w-full space-y-6">
+      {/* Header and Controls - Responsive */}
+      <div className="flex flex-col space-y-4">
+        {/* Tab Navigation */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div role="tablist" className="flex rounded-lg bg-gray-100 dark:bg-gray-800 p-1 w-full sm:w-auto">
+            <button 
+              role="tab"
+              className={`flex-1 sm:flex-none px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                tab === 'list' 
+                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm' 
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+              }`}
+              onClick={() => setTab('list')}
+            >
+              <ListIcon className="w-4 h-4 mr-2" />
+              List View
+            </button>
+            <button 
+              role="tab"
+              className={`flex-1 sm:flex-none px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                tab === 'calendar' 
+                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm' 
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+              }`}
+              onClick={() => setTab('calendar')}
+            >
+              <CalendarIcon className="w-4 h-4 mr-2" />
+              Calendar
+            </button>
+          </div>
+          
+          <Button 
+            onClick={() => setModalOpen(true)}
+            className="w-full sm:w-auto bg-primary text-white hover:bg-primary/90"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            New Appointment
+          </Button>
+        </div>
+
+        {/* Filters for List View */}
+        {tab === 'list' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <input
               type="text"
-              placeholder="Search by party or tailor..."
+              placeholder="Search appointments..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="border border-neutral-300 rounded-lg px-4 py-2 w-full md:w-64 focus:outline-none focus:ring-2 focus:ring-primary"
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-gray-800 text-black dark:text-white"
             />
-            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="border rounded px-2 py-1">
-              <option value="">All Statuses</option>
-              {(Object.values(AppointmentStatus) as string[]).map(s => <option key={s} value={s}>{s}</option>)}
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-gray-800 text-black dark:text-white"
+            >
+              <option value="">All Status</option>
+              <option value="scheduled">Scheduled</option>
+              <option value="completed">Completed</option>
+              <option value="canceled">Canceled</option>
             </select>
-            <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className="border rounded px-2 py-1">
+            <select
+              value={typeFilter}
+              onChange={e => setTypeFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-gray-800 text-black dark:text-white"
+            >
               <option value="">All Types</option>
-              {(Object.values(AppointmentType) as string[]).map(t => <option key={t} value={t}>{t}</option>)}
+              <option value="fitting">Fitting</option>
+              <option value="pickup">Pickup</option>
+              <option value="consultation">Consultation</option>
             </select>
-            <Button className="ml-2 px-4 py-2" aria-label="Add Appointment" onClick={() => { setEditAppt(null); setModalOpen(true); }}>+ Add Appointment</Button>
-          </div>
-        </div>
-      )}
-      {tab === 'list' && (
-        <Card className="p-0 bg-white dark:bg-gray-dark border border-gray-light dark:border-neutral-700">
-          {loading ? (
-            <div className="space-y-4 p-6">
-              {[...Array(5)].map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
+            <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center">
+              {filtered.length} of {appointments.length} appointments
             </div>
-          ) : error ? (
-            <div className="p-6 text-red-600">{error}</div>
-          ) : filtered.length === 0 ? (
-            <div className="p-6 text-gray-500">No appointments found.</div>
-          ) : (
-            <table className="w-full border-t rounded text-black dark:text-white bg-white dark:bg-gray-dark border-gray-light dark:border-neutral-700">
-              <thead>
-                <tr className="bg-gray-light dark:bg-gray">
-                  <th className="p-2 text-left font-semibold">ID</th>
-                  <th className="p-2 text-left font-semibold">Party</th>
-                  <th className="p-2 text-left font-semibold">Tailor</th>
-                  <th className="p-2 text-left font-semibold">Date/Time</th>
-                  <th className="p-2 text-left font-semibold">Status</th>
-                  <th className="p-2 text-left font-semibold">Type</th>
-                  <th className="p-2 text-left font-semibold">Sync Status</th>
-                  <th className="p-2 text-left font-semibold">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(a => (
-                  <tr key={a.id} className="border-t hover:bg-blue-50 transition">
-                    <td className="p-3 font-medium">{a.id}</td>
-                    <td className="p-3">{a.party?.name || '—'}</td>
-                    <td className="p-3">{a.tailor?.name || '—'}</td>
-                    <td className="p-3">{a.dateTime ? new Date(a.dateTime).toLocaleString() : '—'}</td>
-                    <td className="p-3">
-                      <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${a.status === 'scheduled' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-200' : a.status === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200' : a.status === 'canceled' ? 'bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-200' : 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200'}`}>
-                        {a.status || '—'}
-                      </span>
-                      <span className={`ml-2 inline-block px-2 py-1 rounded text-xs ${a.type === 'fitting' ? 'bg-blue-50 text-blue-700 dark:bg-blue-900 dark:text-blue-200' : a.type === 'pickup' ? 'bg-green-50 text-green-700 dark:bg-green-900 dark:text-green-200' : 'bg-orange-50 text-orange-700 dark:bg-orange-900 dark:text-orange-200'}`}>
-                        {a.type}
-                      </span>
-                      {a.recurrenceRule && <span className="ml-2 text-xs text-purple-600">Recurring</span>}
-                    </td>
-                    <td className="p-3">
-                      <span className={`inline-block px-2 py-1 text-xs rounded ${a.syncedToLightspeed ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200'}`}>
-                        {a.syncedToLightspeed ? 'Synced' : 'Sync Error'}
-                      </span>
-                    </td>
-                    <td className="p-3">
-                      <Button className="px-3 py-1 text-xs bg-yellow-400 text-black mr-2" onClick={() => { setEditAppt(a); setModalOpen(true); }}>Edit</Button>
-                      <Button className="px-3 py-1 text-xs bg-red-500 text-white" onClick={() => setDeleteAppt(a)}>Delete</Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </Card>
-      )}
-      {tab === 'calendar' && (
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-          <h1 className="text-3xl font-bold text-primary">Calendar</h1>
-          <div className="flex gap-2 w-full md:w-auto">
-            <Button className="ml-2 px-4 py-2" aria-label="Add Appointment" onClick={() => { setCalendarEditAppt(null); setCalendarModalOpen(true); }}>+ Add Appointment</Button>
-            <Button className="ml-2 px-4 py-2" aria-label="Print Calendar" onClick={handlePrint}>Print</Button>
           </div>
-        </div>
+        )}
+      </div>
+
+      {/* Content Area */}
+      {isLoading ? (
+        <Card className="p-6">
+          <div className="space-y-4">
+            {[...Array(5)].map((_, i) => (
+              <Skeleton key={i} className="h-16 w-full" />
+            ))}
+          </div>
+        </Card>
+      ) : swrError ? (
+        <Card className="p-6 text-center text-red-600 dark:text-red-400">
+          Failed to load appointments. Please try again.
+        </Card>
+      ) : (
+        <>
+          {/* List View */}
+          {tab === 'list' && (
+            <Card className="overflow-hidden">
+              {filtered.length === 0 ? (
+                <div className="p-6 text-center text-gray-500 dark:text-gray-400">
+                  No appointments found.
+                </div>
+              ) : (
+                <>
+                  {/* Desktop Table */}
+                  <div className="hidden lg:block overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                        <tr>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">
+                            Party
+                          </th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">
+                            Date & Time
+                          </th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">
+                            Type
+                          </th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">
+                            Tailor
+                          </th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">
+                            Status
+                          </th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                        {paginated.map(appt => (
+                          <tr key={appt.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                            <td className="px-6 py-4">
+                              <div className="font-medium text-gray-900 dark:text-gray-100">
+                                {appt.party?.name || 'Walk-in'}
+                              </div>
+                              {appt.member && (
+                                <div className="text-sm text-gray-500 dark:text-gray-400">
+                                  {appt.member.role}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 text-gray-900 dark:text-gray-100">
+                              <div>{format(new Date(appt.dateTime), 'MMM d, yyyy')}</div>
+                              <div className="text-sm text-gray-500 dark:text-gray-400">
+                                {format(new Date(appt.dateTime), 'h:mm a')}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400">
+                                {appt.type}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-gray-900 dark:text-gray-100">
+                              {appt.tailor?.name || 'Unassigned'}
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                appt.status === 'completed' 
+                                  ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+                                  : appt.status === 'canceled'
+                                  ? 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
+                                  : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
+                              }`}>
+                                {appt.status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex space-x-2">
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost"
+                                  onClick={() => { setEditAppt(appt); setModalOpen(true); }}
+                                  className="text-xs"
+                                >
+                                  Edit
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost"
+                                  onClick={() => setDeleteAppt(appt)}
+                                  className="text-xs text-red-600 hover:text-red-700"
+                                >
+                                  Delete
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Mobile Card View */}
+                  <div className="lg:hidden">
+                    <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                      {paginated.map(appt => (
+                        <div key={appt.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 truncate">
+                                {appt.party?.name || 'Walk-in'}
+                              </h3>
+                              {appt.member && (
+                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                  {appt.member.role}
+                                </p>
+                              )}
+                            </div>
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full flex-shrink-0 ml-2 ${
+                              appt.status === 'completed' 
+                                ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+                                : appt.status === 'canceled'
+                                ? 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
+                                : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
+                            }`}>
+                              {appt.status}
+                            </span>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-4 mb-3 text-sm">
+                            <div>
+                              <p className="text-gray-500 dark:text-gray-400">Date</p>
+                              <p className="text-gray-900 dark:text-gray-100">
+                                {format(new Date(appt.dateTime), 'MMM d, yyyy')}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500 dark:text-gray-400">Time</p>
+                              <p className="text-gray-900 dark:text-gray-100">
+                                {format(new Date(appt.dateTime), 'h:mm a')}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500 dark:text-gray-400">Type</p>
+                              <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400">
+                                {appt.type}
+                              </span>
+                            </div>
+                            <div>
+                              <p className="text-gray-500 dark:text-gray-400">Tailor</p>
+                              <p className="text-gray-900 dark:text-gray-100">
+                                {appt.tailor?.name || 'Unassigned'}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          <div className="flex space-x-2">
+                            <Button 
+                              size="sm" 
+                              variant="ghost"
+                              onClick={() => { setEditAppt(appt); setModalOpen(true); }}
+                              className="flex-1 text-xs"
+                            >
+                              Edit
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="ghost"
+                              onClick={() => setDeleteAppt(appt)}
+                              className="flex-1 text-xs text-red-600 hover:text-red-700"
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+              
+              {/* Pagination */}
+              {filtered.length > pageSize && (
+                <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+                  <Pagination 
+                    page={currentPage}
+                    pageSize={pageSize}
+                    total={filtered.length}
+                    onPageChange={setCurrentPage}
+                    className="flex justify-center"
+                  />
+                </div>
+              )}
+            </Card>
+          )}
+
+          {/* Calendar View */}
+          {tab === 'calendar' && (
+            <Card className="p-4 lg:p-6">
+              <div className="h-[600px] lg:h-[700px]">
+                <Calendar
+                  localizer={localizer}
+                  events={events}
+                  startAccessor="start"
+                  endAccessor="end"
+                  style={{ height: '100%' }}
+                  onSelectEvent={handleSelectEvent}
+                  onNavigate={handleNavigate}
+                  onView={setView}
+                  view={view}
+                  views={AVAILABLE_VIEWS}
+                  date={date}
+                  eventPropGetter={eventStyleGetter}
+                  components={{
+                    toolbar: CustomToolbar,
+                    event: EventComponent,
+                  }}
+                  className="rbc-calendar-responsive"
+                />
+              </div>
+            </Card>
+          )}
+        </>
       )}
-      {tab === 'calendar' && (
-        <FullCalendar
-          ref={calendarRef}
-          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-          initialView="dayGridMonth"
-          events={events}
-          eventDrop={handleEventDrop}
-          eventClick={handleEventClick}
-          eventContent={renderEventContent}
-          loading={(isLoading) => setCalendarLoading(isLoading)}
-        />
-      )}
-      {modalOpen && (
-        <AppointmentModal
-          open={modalOpen}
-          onClose={() => setModalOpen(false)}
-          appointment={editAppt}
-          onSubmit={async (data) => {
-            setActionLoading(true);
-            try {
-              const res = await fetch(editAppt
-                ? `http://localhost:3000/api/appointments/${editAppt.id}`
-                : 'http://localhost:3000/api/appointments', {
-                credentials: 'include',
-                method: editAppt ? 'PUT' : 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-              });
-              if (!res.ok) throw new Error((await res.json()).error || 'Failed');
-              success(editAppt ? 'Appointment updated' : 'Appointment created');
-              setModalOpen(false);
-              // reload list
-              setLoading(true);
-              fetch('http://localhost:3000/api/appointments', { credentials: 'include' }).then(res => res.json()).then(setAppointments).finally(() => setLoading(false));
-            } catch (err) {
-              toastError(err.message);
-            } finally {
-              setActionLoading(false);
-            }
-          }}
-          loading={actionLoading}
-        />
-      )}
-      {deleteAppt && (
-        <ConfirmModal
-          open={!!deleteAppt}
-          onClose={() => setDeleteAppt(null)}
-          onConfirm={async () => {
-            setActionLoading(true);
-            try {
-              const res = await fetch(`http://localhost:3000/api/appointments/${deleteAppt.id}`, {
-                credentials: 'include',
-                method: 'DELETE'
-              });
-              if (!res.ok) throw new Error((await res.json()).error || 'Failed');
-              success('Appointment deleted');
-              setDeleteAppt(null);
-              setLoading(true);
-              fetch('http://localhost:3000/api/appointments', { credentials: 'include' }).then(res => res.json()).then(setAppointments).finally(() => setLoading(false));
-            } catch (err) {
-              toastError(err.message);
-            } finally {
-              setActionLoading(false);
-            }
-          }}
-          loading={actionLoading}
-          title="Delete Appointment"
-          message="Are you sure you want to delete this appointment? This cannot be undone."
-        />
-      )}
-      {calendarModalOpen && (
-        <AppointmentModal
-          open={calendarModalOpen}
-          onClose={() => setCalendarModalOpen(false)}
-          appointment={calendarEditAppt}
-          onSubmit={async (data) => {
-            setCalendarActionLoading(true);
-            try {
-              const res = await fetch(calendarEditAppt
-                ? `http://localhost:3000/api/appointments/${calendarEditAppt.id}`
-                : 'http://localhost:3000/api/appointments', {
-                credentials: 'include',
-                method: calendarEditAppt ? 'PUT' : 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-              });
-              if (!res.ok) throw new Error((await res.json()).error || 'Failed');
-              success(calendarEditAppt ? 'Appointment updated' : 'Appointment created');
-              setCalendarModalOpen(false);
-              // reload list
-              setCalendarLoading(true);
-              fetch('http://localhost:3000/api/appointments', { credentials: 'include' }).then(res => res.json()).then(setCalendarAppts).finally(() => setCalendarLoading(false));
-            } catch (err) {
-              toastError(err.message);
-            } finally {
-              setCalendarActionLoading(false);
-            }
-          }}
-          loading={calendarActionLoading}
-        />
-      )}
+
+      {/* Modals */}
+      <AppointmentModal
+        isOpen={modalOpen}
+        onClose={() => {
+          setModalOpen(false);
+          setEditAppt(null);
+        }}
+        onSave={handleSave}
+        appointment={editAppt}
+        isLoading={actionLoading}
+      />
+
+      <ConfirmModal
+        isOpen={!!deleteAppt}
+        onClose={() => setDeleteAppt(null)}
+        onConfirm={handleDelete}
+        title="Delete Appointment"
+        description="Are you sure you want to delete this appointment? This action cannot be undone."
+        isLoading={actionLoading}
+      />
     </div>
   );
 }
 
 AppointmentsPage.title = 'Appointments';
+
+// Add dark mode styles
+const darkModeStyles = `
+  .rbc-calendar.dark {
+    background-color: #1a202c;
+    color: white;
+  }
+  
+  .dark .rbc-toolbar button {
+    color: white;
+  }
+  
+  .dark .rbc-header {
+    background-color: #2d3748;
+    color: white;
+    border-bottom: 1px solid #4a5568;
+  }
+  
+  .dark .rbc-off-range-bg {
+    background-color: #2d3748;
+  }
+  
+  .dark .rbc-today {
+    background-color: rgba(66, 153, 225, 0.1);
+  }
+
+  .dark .rbc-time-content,
+  .dark .rbc-time-header-content {
+    background-color: #1a202c;
+    border-color: #4a5568;
+  }
+
+  .dark .rbc-time-header {
+    background-color: #2d3748;
+    border-color: #4a5568;
+  }
+
+  .dark .rbc-timeslot-group {
+    border-color: #4a5568;
+  }
+
+  .dark .rbc-time-slot {
+    border-color: #4a5568;
+  }
+
+  .dark .rbc-day-slot .rbc-time-slot {
+    border-color: #4a5568;
+  }
+
+  .dark .rbc-time-view {
+    border-color: #4a5568;
+  }
+
+  .dark .rbc-current-time-indicator {
+    background-color: #4299e1;
+  }
+`;
+
+// Inject dark mode styles
+if (typeof document !== 'undefined') {
+  const style = document.createElement('style');
+  style.textContent = darkModeStyles;
+  document.head.appendChild(style);
+}

@@ -1,38 +1,16 @@
 const express = require('express');
-const prisma = require('../prismaClient');
 const router = express.Router();
-const requireAuth = require('../../backend/middleware/auth');
-const { logChange } = require('../../backend/src/services/AuditLogService');
+const partiesController = require('../controllers/partiesController');
+const { authMiddleware } = require('../middleware/auth');
+const prisma = require('../prismaClient');
 
 // router.use(requireAuth); // TEMP: Disabled for unauthenticated API testing
 
-router.use(requireAuth);
+router.use(authMiddleware);
 
-// GET /api/parties
-router.get('/', async (req, res) => {
-  const parties = await prisma.party.findMany({
-    include: {
-      customer: true,
-      alterationJobs: true,
-      appointments: true,
-      members: true
-    },
-    orderBy: {
-      eventDate: "asc"
-    }
-  });
-  res.json(parties);
-});
-
-// GET /api/parties/:id
-router.get('/:id', async (req, res) => {
-  const party = await prisma.party.findUnique({
-    where: { id: Number(req.params.id) },
-    include: { customer: true, alterationJobs: true, appointments: true }
-  });
-  if (!party) return res.status(404).json({ error: 'Not found' });
-  res.json(party);
-});
+router.get('/', partiesController.listParties);
+router.get('/:id', partiesController.getPartyDetail);
+router.post('/', partiesController.createParty);
 
 // GET /api/parties/:id/members
 router.get('/:id/members', async (req, res) => {
@@ -50,31 +28,6 @@ router.get('/:partyId/members/:memberId/measurements', async (req, res) => {
   const member = await prisma.partyMember.findUnique({ where: { id: memberId } });
   if (!member) return res.status(404).json({ error: 'Not found' });
   res.json({ measurements: member.measurements || {} });
-});
-
-// POST /api/parties
-router.post('/', async (req, res) => {
-  const { name, eventDate, customerId, externalId } = req.body;
-  if (!name || !eventDate || !customerId) return res.status(400).json({ error: 'Missing required fields' });
-  const party = await prisma.party.create({
-    data: { name, eventDate: new Date(eventDate), customerId, externalId },
-  });
-  await logChange({
-    user: req.user,
-    action: 'create',
-    entity: 'Party',
-    entityId: party.id,
-    details: req.body,
-  });
-  // Simulate Lightspeed sync
-  await logChange({
-    user: req.user,
-    action: 'sync',
-    entity: 'Party',
-    entityId: party.id,
-    details: { message: 'Synced to Lightspeed' },
-  });
-  res.status(201).json(party);
 });
 
 // POST /api/parties/:id/members

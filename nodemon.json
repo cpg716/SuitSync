@@ -1,0 +1,14 @@
+{
+  "watch": [
+    "server/"
+  ],
+  "ignore": [
+    "sessions.sqlite",
+    "ngrok.log",
+    "server.log",
+    "node_modules/",
+    "frontend/"
+  ],
+  "ext": "js,json",
+  "exec": "node server/index.js"
+} 

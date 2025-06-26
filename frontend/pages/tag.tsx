@@ -51,24 +51,25 @@ export default function TagPrint() {
   };
 
   return (
-    <div className="max-w-xl mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-4">Tag Printing</h1>
-      <div className="mb-4 flex gap-2 items-end">
-        <input className="border p-2 rounded w-32" placeholder="Job ID" value={jobId} onChange={e => setJobId(e.target.value)} />
-        <select className="border p-2 rounded" value={format} onChange={e => setFormat(e.target.value)}>
-          <option value="html">HTML</option>
-          <option value="zpl">ZPL</option>
-        </select>
-        <button className="px-4 py-2 bg-primary text-white rounded" onClick={fetchJob}>Preview</button>
-        {format === 'html' && job && (
-          <button className="ml-2 px-4 py-2 bg-accent text-black rounded print:hidden" onClick={() => window.print()}>Print</button>
+    <div className="max-w-4xl mx-auto p-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="mb-4 flex gap-2 items-end">
+          <input className="border p-2 rounded w-32" placeholder="Job ID" value={jobId} onChange={e => setJobId(e.target.value)} />
+          <select className="border p-2 rounded" value={format} onChange={e => setFormat(e.target.value)}>
+            <option value="html">HTML</option>
+            <option value="zpl">ZPL</option>
+          </select>
+          <button className="px-4 py-2 bg-primary text-white rounded" onClick={fetchJob}>Preview</button>
+          {format === 'html' && job && (
+            <button className="ml-2 px-4 py-2 bg-accent text-black rounded print:hidden" onClick={() => window.print()}>Print</button>
+          )}
+        </div>
+        {format === 'html' ? (
+          <TagPreview job={job} />
+        ) : (
+          <div className="border p-2 rounded bg-neutral-50 dark:bg-neutral-900 whitespace-pre-wrap min-h-[60px]">{preview}</div>
         )}
       </div>
-      {format === 'html' ? (
-        <TagPreview job={job} />
-      ) : (
-        <div className="border p-2 rounded bg-neutral-50 dark:bg-neutral-900 whitespace-pre-wrap min-h-[60px]">{preview}</div>
-      )}
     </div>
   );
 } 

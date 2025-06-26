@@ -18,27 +18,32 @@ export default function CustomerMeasurements() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!id) return;
-    fetch(`/api/customers/${id}/measurements`)
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data?.measurements) setMeasurements({ ...defaultMeasurements, ...data.measurements });
-        setLoading(false);
-      });
+    if (id) {
+      setLoading(true);
+      fetch(`/customers/${id}/measurements`)
+        .then(res => res.json())
+        .then(data => {
+          if (data?.measurements) setMeasurements({ ...defaultMeasurements, ...data.measurements });
+          setLoading(false);
+        });
+    }
   }, [id]);
 
-  async function handleSave(e) {
-    e.preventDefault();
-    setSaving(true);
-    const res = await fetch(`/api/customers/${id}/measurements`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ measurements }),
-    });
-    if (res.ok) success('Measurements saved');
-    else toastError('Failed to save measurements');
+  const handleSave = async (data: MeasurementData) => {
+    try {
+      const res = await fetch(`/customers/${id}/measurements`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ measurements }),
+      });
+      if (res.ok) success('Measurements saved');
+      else toastError('Failed to save measurements');
+    } catch (error) {
+      console.error('Error saving measurements:', error);
+      toastError('Failed to save measurements');
+    }
     setSaving(false);
-  }
+  };
 
   if (loading) return <div className="p-6">Loading…</div>;
 

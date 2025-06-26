@@ -1,0 +1,262 @@
+import { useState, useEffect } from 'react';
+import { Layout } from '../components/Layout';
+import { useAuth } from '../src/AuthContext';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
+import { Badge } from '../components/ui/Badge';
+import { useToast } from '../components/ToastContext';
+import { User, RefreshCw, Download } from 'lucide-react';
+
+interface User {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  photoUrl?: string;
+  lightspeedEmployeeId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface UsersData {
+  localUsers: User[];
+  lightspeedUsers: any[];
+}
+
+export default function UsersPage() {
+  const { user } = useAuth();
+  const { success: toastSuccess, error: toastError } = useToast();
+  const [users, setUsers] = useState<UsersData | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch users function
+  const fetchUsers = async () => {
+    try {
+      const response = await fetch('/api/users', {
+        credentials: 'include'
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setUsers(data);
+        console.log('Users page - Users data:', data);
+      } else {
+        toastError('Failed to fetch users');
+      }
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      toastError('Error fetching users');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Sync user photos function
+  const syncUserPhotos = async () => {
+    setSyncing(true);
+    try {
+      const response = await fetch('/api/sync/user-photos', {
+        method: 'POST',
+        credentials: 'include'
+      });
+      if (response.ok) {
+        toastSuccess('User photo sync started');
+        // Refresh users after a delay
+        setTimeout(() => {
+          fetchUsers();
+        }, 3000);
+      } else {
+        const errorData = await response.json();
+        toastError(errorData.error || 'Failed to start user photo sync');
+      }
+    } catch (error) {
+      console.error('Error syncing user photos:', error);
+      toastError('Error syncing user photos');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  if (!user) {
+    return (
+      <Layout>
+        <div className="container mx-auto px-4 py-8">
+          <h1 className="text-2xl font-bold text-red-600">Access Denied</h1>
+          <p>You must be logged in to access this page.</p>
+        </div>
+      </Layout>
+    );
+  }
+
+  return (
+    <Layout>
+      <div className="container mx-auto px-4 py-8 space-y-8">
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold">User Management</h1>
+          <div className="space-x-2">
+            <Button onClick={fetchUsers} variant="outline" size="sm" disabled={loading}>
+              <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+            <Button onClick={syncUserPhotos} disabled={syncing} size="sm">
+              <Download className="w-4 h-4 mr-2" />
+              {syncing ? 'Syncing Photos...' : 'Sync Photos'}
+            </Button>
+          </div>
+        </div>
+        
+        {loading ? (
+          <div className="text-center py-8">Loading users...</div>
+        ) : (
+          <>
+            {/* Current User Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Current User (You)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center space-x-4 p-4 border rounded-lg bg-blue-50">
+                  <div className="w-16 h-16 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
+                    {user.photoUrl ? (
+                      <img 
+                        src={user.photoUrl} 
+                        alt={user.name}
+                        className="w-full h-full object-cover"
+                        onLoad={() => console.log('Current user photo loaded successfully:', user.photoUrl)}
+                        onError={(e) => {
+                          console.error('Failed to load current user photo:', user.photoUrl);
+                          e.currentTarget.style.display = 'none';
+                          if (e.currentTarget.nextElementSibling) {
+                            e.currentTarget.nextElementSibling.style.display = 'flex';
+                          }
+                        }}
+                      />
+                    ) : null}
+                    <User className="w-8 h-8 text-gray-400" style={user.photoUrl ? { display: 'none' } : {}} />
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-bold text-lg">{user.name}</div>
+                    <div className="text-gray-600">{user.email}</div>
+                    <div className="text-sm text-blue-600">
+                      {user.photoUrl ? 'Photo loaded from Lightspeed' : 'No photo available'}
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Badge variant={user.role === 'admin' ? 'destructive' : 'secondary'}>
+                      {user.role}
+                    </Badge>
+                    {user.photoUrl && (
+                      <Badge variant="outline" className="text-green-600">
+                        ✓ Photo
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* All Users */}
+            {users && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>All Users</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-6">
+                    {/* Local Users */}
+                    <div>
+                      <h3 className="text-lg font-semibold mb-3">Local Users ({users.localUsers.length})</h3>
+                      <div className="grid gap-4">
+                        {users.localUsers.map((userData) => (
+                          <div key={userData.id} className="flex items-center space-x-4 p-4 border rounded-lg">
+                            <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
+                              {userData.photoUrl ? (
+                                <img 
+                                  src={userData.photoUrl} 
+                                  alt={userData.name}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    console.error('Failed to load user photo:', userData.photoUrl);
+                                    e.currentTarget.style.display = 'none';
+                                    if (e.currentTarget.nextElementSibling) {
+                                      e.currentTarget.nextElementSibling.style.display = 'flex';
+                                    }
+                                  }}
+                                />
+                              ) : null}
+                              <User className="w-6 h-6 text-gray-400" style={userData.photoUrl ? { display: 'none' } : {}} />
+                            </div>
+                            <div className="flex-1">
+                              <div className="font-medium">{userData.name}</div>
+                              <div className="text-sm text-gray-500">{userData.email}</div>
+                              {userData.lightspeedEmployeeId && (
+                                <div className="text-xs text-blue-600">Lightspeed ID: {userData.lightspeedEmployeeId}</div>
+                              )}
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <Badge variant={userData.role === 'admin' ? 'destructive' : 'secondary'}>
+                                {userData.role}
+                              </Badge>
+                              {userData.photoUrl && (
+                                <Badge variant="outline" className="text-green-600">
+                                  ✓ Photo
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Lightspeed Users */}
+                    {users.lightspeedUsers.length > 0 && (
+                      <div>
+                        <h3 className="text-lg font-semibold mb-3">Lightspeed Users ({users.lightspeedUsers.length})</h3>
+                        <div className="grid gap-4">
+                          {users.lightspeedUsers.map((lsUser) => (
+                            <div key={lsUser.id} className="flex items-center space-x-4 p-4 border rounded-lg bg-blue-50">
+                              <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
+                                {lsUser.photo ? (
+                                  <img 
+                                    src={lsUser.photo} 
+                                    alt={lsUser.display_name}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <User className="w-6 h-6 text-gray-400" />
+                                )}
+                              </div>
+                              <div className="flex-1">
+                                <div className="font-medium">{lsUser.display_name}</div>
+                                <div className="text-sm text-gray-500">{lsUser.email}</div>
+                                <div className="text-xs text-blue-600">Lightspeed User (ID: {lsUser.id})</div>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <Badge variant="outline">
+                                  {lsUser.account_type}
+                                </Badge>
+                                {lsUser.photo && (
+                                  <Badge variant="outline" className="text-green-600">
+                                    ✓ Photo
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </>
+        )}
+      </div>
+    </Layout>
+  );
+} 

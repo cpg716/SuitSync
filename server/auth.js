@@ -5,11 +5,12 @@ const axios   = require('axios');
 const prisma  = require('./prismaClient');
 const bcrypt  = require('bcryptjs'); // For password hashing
 const router  = express.Router();
+const jwt = require('jsonwebtoken');
 
 const { LS_CLIENT_ID, LS_CLIENT_SECRET, APP_DOMAIN } = process.env;
 const REDIRECT_URI = `https://${APP_DOMAIN}/auth/callback`;
 
-// 0) Session-based login
+// 0) JWT-based login
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Missing credentials' });
@@ -19,14 +20,16 @@ router.post('/login', async (req, res) => {
   // const valid = await bcrypt.compare(password, user.passwordHash);
   const valid = password === user.passwordHash;
   if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
-  req.session.userId = user.id;
-  console.log('[LOGIN] Set session.userId:', req.session.userId, 'Session:', req.session.id);
+  // Issue JWT cookie
+  const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, process.env.JWT_SECRET, { expiresIn: '1d' });
+  res.cookie('token', token, {
+    httpOnly: true,
+    secure: false,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 86400000
+  });
   res.json({ id: user.id, email: user.email, name: user.name, role: user.role });
-});
-
-// 0b) Logout
-router.post('/logout', (req, res) => {
-  req.session.destroy(() => res.json({ success: true }));
 });
 
 // 1) Login redirect (Lightspeed OAuth)
@@ -35,7 +38,6 @@ router.get('/ls/login', (req, res) => {
   url.searchParams.set('client_id', process.env.LS_CLIENT_ID);
   url.searchParams.set('redirect_uri', process.env.LS_REDIRECT_URI);
   url.searchParams.set('response_type', 'code');
-  url.searchParams.set('scope', 'customer_read sale_read workflow_write');
   res.redirect(url.toString());
 });
 
@@ -63,25 +65,6 @@ router.get('/ls/callback', async (req, res) => {
     console.error(e);
     res.status(500).send('OAuth failed');
   }
-});
-
-// Session check endpoint
-router.get('/session', async (req, res) => {
-  console.log('[SESSION CHECK] Session:', req.session);
-  if (!req.session.userId) {
-    console.log('[SESSION CHECK] No userId in session');
-    return res.status(401).json({ error: 'Not logged in', session: req.session });
-  }
-  const user = await prisma.user.findUnique({
-    where: { id: req.session.userId },
-    select: { id: true, email: true, name: true, role: true }
-  });
-  if (!user) {
-    console.log('[SESSION CHECK] No user found for userId:', req.session.userId);
-    return res.status(401).json({ error: 'Not logged in', userId: req.session.userId });
-  }
-  console.log('[SESSION CHECK] Authenticated user:', user);
-  res.json(user);
 });
 
 // Debug endpoint to dump session

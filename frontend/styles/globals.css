@@ -1,5 +1,3 @@
-/* frontend/styles/globals.css */
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -69,6 +67,43 @@ html.dark body {
   color: var(--text-primary-dark);
 }
 
+/* Responsive utilities */
+.container-responsive {
+  width: 100%;
+  max-width: 100vw;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+@media (min-width: 640px) {
+  .container-responsive {
+    padding: 0 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .container-responsive {
+    padding: 0 2rem;
+  }
+}
+
+/* Table responsive styles */
+.table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-responsive table {
+  min-width: 100%;
+  white-space: nowrap;
+}
+
+@media (max-width: 1023px) {
+  .table-responsive table {
+    min-width: 800px;
+  }
+}
+
 .animate-fade-in {
   animation: fadeIn 0.15s ease;
 }
@@ -76,12 +111,9 @@ html.dark body {
 .text-primary { color: var(--ss-primary) !important; }
 .bg-accent { background-color: var(--ss-accent) !important; }
 .text-accent { color: var(--ss-accent) !important; }
-.bg-white { background-color: var(--ss-white) !important; }
-.text-black { color: var(--ss-black) !important; }
-.text-white { color: var(--ss-white) !important; }
 .bg-red { background-color: var(--ss-red) !important; }
 .bg-green { background-color: var(--ss-green) !important; }
-.bg-yellow { background-color: var(--ss-yellow) !important; }
+.bg-yellow { color: var(--ss-yellow) !important; }
 .bg-blue { background-color: var(--ss-blue) !important; }
 
 a {
@@ -92,7 +124,7 @@ a:hover {
   color: var(--accent-hover);
 }
 
-/* Minimal FullCalendar v6+ custom style for usability */
+/* Enhanced FullCalendar responsive styles */
 .fc {
   font-family: inherit;
   font-size: 1rem;
@@ -121,6 +153,76 @@ a:hover {
 .fc .fc-day-today {
   background: var(--ss-accent);
   color: #000;
+}
+
+/* Responsive calendar adjustments */
+@media (max-width: 768px) {
+  .fc .fc-toolbar {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .fc .fc-toolbar-chunk {
+    display: flex;
+    justify-content: center;
+  }
+  
+  .fc .fc-button-group {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  
+  .fc .fc-daygrid-event {
+    font-size: 0.75rem;
+    padding: 1px 2px;
+  }
+  
+  .fc .fc-col-header-cell {
+    font-size: 0.875rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .fc .fc-toolbar-title {
+    font-size: 1.125rem;
+  }
+  
+  .fc .fc-button {
+    padding: 0.125rem 0.5rem;
+    font-size: 0.875rem;
+  }
+  
+  .fc .fc-daygrid-event {
+    font-size: 0.625rem;
+  }
+}
+
+/* Dark mode calendar adjustments */
+html.dark .fc {
+  color: var(--text-primary-dark);
+}
+
+html.dark .fc .fc-toolbar-title {
+  color: var(--ss-accent);
+}
+
+html.dark .fc .fc-col-header-cell,
+html.dark .fc .fc-daygrid-day-number {
+  color: var(--text-primary-dark);
+}
+
+html.dark .fc .fc-day-today {
+  background: var(--ss-accent);
+  color: var(--ss-black);
+}
+
+html.dark .fc .fc-daygrid-day {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+html.dark .fc .fc-scrollgrid {
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .text-primary-dark {

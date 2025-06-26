@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import useSWR from 'swr';
 import dynamic from 'next/dynamic';
 import Card from '../components/ui/Card';
@@ -9,12 +9,23 @@ import { Calendar as CalendarIcon, Plus } from 'lucide-react';
 import { useToast } from '../components/ToastContext';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
+import Pagination from '../components/ui/Pagination';
+import { fetcher } from '@/lib/apiClient';
 
 const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then(r => r.json());
 
+function CalendarErrorBoundary({ children }: { children: React.ReactNode }) {
+  try {
+    return children;
+  } catch (e) {
+    return <div className="text-red-600">Calendar failed to load.</div>;
+  }
+}
+
 export default function PartyDashboard() {
-  const { data: parties = [], mutate } = useSWR('/api/parties', fetcher);
-  const { data: customers = [] } = useSWR('/api/customers', fetcher);
+  const { data: parties = [], mutate } = useSWR('/parties', fetcher);
+  const { data: customers = [], mutate: mutateCustomers } = useSWR('/customers', fetcher);
+  const { data: appointments = [] } = useSWR('/appointments/upcoming', fetcher);
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState({ name: '', eventDate: '', customerId: '' });
@@ -25,12 +36,23 @@ export default function PartyDashboard() {
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState('');
   const { success, error: toastError } = useToast();
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
+  const [atRiskParties, setAtRiskParties] = useState([]);
+
+  useEffect(() => {
+    fetch('/api/parties/at-risk', { credentials: 'include' })
+      .then(res => res.json())
+      .then(setAtRiskParties);
+  }, []);
 
   const filtered = useMemo(() =>
-    parties.filter((p: any) =>
+    (Array.isArray(parties) ? parties : []).filter((p: any) =>
       p.name.toLowerCase().includes(search.toLowerCase()) ||
-      customers.find((c: any) => c.id === p.customerId)?.name?.toLowerCase().includes(search.toLowerCase())
+      (Array.isArray(customers) ? customers : []).find((c: any) => c.id === p.customerId)?.name?.toLowerCase().includes(search.toLowerCase())
     ), [parties, customers, search]);
+
+  const paginated = filtered.slice((page-1)*pageSize, page*pageSize);
 
   async function handleAddParty(e: React.FormEvent) {
     e.preventDefault();
@@ -116,7 +138,34 @@ export default function PartyDashboard() {
 
   return (
     <div className="flex flex-col space-y-4">
-      {/* Rest of the component code remains unchanged */}
+      {atRiskParties.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-xl font-bold text-red-700 mb-2">At-Risk / Overdue Parties</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {atRiskParties.map((p: any) => (
+              <Card key={p.id} className="border-2 border-red-500 bg-red-50 dark:bg-red-900">
+                <div className="font-bold text-lg">{p.name}</div>
+                <div className="text-gray-700 dark:text-gray-200">Event: {new Date(p.eventDate).toLocaleDateString()}</div>
+                <div className="text-gray-700 dark:text-gray-200">Main Customer: {p.customer?.name || '—'}</div>
+                <div className="text-red-800 dark:text-red-200 mt-2 font-semibold">{p.notes}</div>
+                <div className="mt-2 text-xs text-gray-500">Members: {p.members.length} | Appointments: {p.appointments.length}</div>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+      <ul className="divide-y">
+        {paginated.map((p: any) => (
+          // ... existing code ...
+        ))}
+      </ul>
+      <Pagination
+        page={page}
+        pageSize={pageSize}
+        total={filtered.length}
+        onPageChange={setPage}
+        className="my-4 flex justify-center"
+      />
     </div>
   );
 }

@@ -1,13 +1,9 @@
 const express = require('express');
 const prisma = require('../prismaClient');
 const router = express.Router();
+const { authMiddleware, requireAdmin } = require('../middleware/auth');
 
-function requireAuth(req, res, next) {
-  if (!req.session || !req.session.userId) return res.status(401).json({ error: 'Unauthorized' });
-  next();
-}
-
-router.use(requireAuth);
+router.use(authMiddleware, requireAdmin);
 
 // GET /api/auditlog
 router.get('/', async (req, res) => {

@@ -1,0 +1,55 @@
+# Node modules
+node_modules/
+
+# Environment variables
+.env
+.env.*
+
+# OS/system files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Database
+*.sqlite
+*.db
+
+# Build output
+.next/
+dist/
+build/
+
+# Backups and archives
+*.zip
+*.tar.gz
+*.bak
+*.backup
+
+# Misc
+coverage/
+.vscode/
+.cursor/
+
+# Ignore session and cookies
+cookies.txt
+sessions.sqlite
+
+# Ignore local backups
+suitsync_full_backup_*
+
+# Ignore frontend build artifacts
+frontend/.next/
+frontend/out/
+frontend 2/.next/
+frontend 2/out/
+
+# Ignore server build artifacts
+server/.next/
+server/out/
+
+# Ignore test output
+*.test.js
+*.spec.js

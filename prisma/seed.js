@@ -1,25 +1,33 @@
 const { PrismaClient } = require("@prisma/client");
+const path = require('path');
 const prisma = new PrismaClient();
+const bcrypt = require('bcryptjs');
 
 async function main() {
-  await prisma.alterationJob.deleteMany();
-  await prisma.appointment.deleteMany();
-  await prisma.partyMember.deleteMany();
-  await prisma.saleAssignment.deleteMany();
-  await prisma.auditLog.deleteMany();
-  await prisma.party.deleteMany();
-  await prisma.customer.deleteMany();
-  await prisma.user.deleteMany();
-  await prisma.skill.deleteMany();
+  // Double-run guard: if users exist, exit
+  const userCount = await prisma.user.count();
+  if (userCount > 0) {
+    console.log("Users exist, clearing and re-seeding...");
+    // Clear existing data in correct order due to foreign key constraints
+    for (const model of [
+      'alterationJob', 'appointment', 'partyMember', 'saleAssignment', 'auditLog', 'party', 'customer', 'user', 'skill']) {
+      try {
+        await prisma[model].deleteMany();
+      } catch (e) {
+        console.warn(`Warning: Could not deleteMany for ${model}:`, e.message);
+      }
+    }
+  }
 
   // Seed demo admin user
   const users = [];
   users.push(await prisma.user.create({
     data: {
       email: 'admin@demo.com',
-      passwordHash: 'admin', // Not secure, just for demo
+      passwordHash: bcrypt.hashSync('admin', 10),
       name: 'Admin User',
       role: 'admin',
+      photoUrl: 'https://randomuser.me/api/portraits/men/1.jpg',
     }
   }));
 
@@ -28,9 +36,10 @@ async function main() {
     users.push(await prisma.user.create({
       data: {
         email: `tailor${i}@demo.com`,
-        passwordHash: 'demo', // Not secure, just for demo
+        passwordHash: bcrypt.hashSync('demo', 10),
         name: `Tailor ${i}`,
         role: 'tailor',
+        photoUrl: `https://randomuser.me/api/portraits/men/${i+1}.jpg`,
       }
     }));
   }
@@ -41,9 +50,10 @@ async function main() {
     associates.push(await prisma.user.create({
       data: {
         email: `sales${i}@demo.com`,
-        passwordHash: 'demo',
+        passwordHash: bcrypt.hashSync('demo', 10),
         name: `Sales Associate ${i}`,
         role: 'associate',
+        photoUrl: `https://randomuser.me/api/portraits/women/${i+1}.jpg`,
       }
     }));
   }
@@ -54,9 +64,10 @@ async function main() {
     supportStaff.push(await prisma.user.create({
       data: {
         email: `support${i}@demo.com`,
-        passwordHash: 'demo',
+        passwordHash: bcrypt.hashSync('demo', 10),
         name: `Support Staff ${i}`,
         role: 'support',
+        photoUrl: `https://randomuser.me/api/portraits/men/${i+4}.jpg`,
       }
     }));
   }
@@ -171,6 +182,72 @@ async function main() {
         amount: 100 + i * 10,
       }
     });
+  }
+
+  // Seed more SaleAssignments for each associate
+  for (const associate of associates) {
+    for (let i = 0; i < 5; i++) {
+      await prisma.saleAssignment.create({
+        data: {
+          saleId: `LS-SALE-${associate.id}-${i+1}`,
+          associateId: associate.id,
+          commissionRate: 0.08 + 0.02 * (i % 3), // 8-12%
+          amount: 120 + Math.floor(Math.random() * 300),
+        }
+      });
+    }
+  }
+
+  // Add more appointments with varied statuses and times
+  const appointmentStatuses = ['scheduled', 'completed', 'canceled'];
+  for (let i = 0; i < parties.length; i++) {
+    for (let j = 0; j < 3; j++) {
+      await prisma.appointment.create({
+        data: {
+          partyId: parties[i].id,
+          dateTime: new Date(Date.now() + (i * 2 + j) * 3600000),
+          durationMinutes: 30 + 15 * j,
+          tailorId: users[(i + j) % users.length].id,
+          status: appointmentStatuses[(i + j) % appointmentStatuses.length],
+        }
+      });
+    }
+  }
+
+  // Add more alteration jobs with varied statuses, tailors, and time spent
+  const alterationStatuses = ['pending', 'complete'];
+  for (let i = 0; i < parties.length; i++) {
+    for (let j = 0; j < 4; j++) {
+      const skill = skills[(i * 2 + j) % skills.length];
+      await prisma.alterationJob.create({
+        data: {
+          saleLineItemId: 2000 + i * 10 + j,
+          partyId: parties[i].id,
+          customerId: customers[(i + j) % customers.length].id,
+          notes: `Extra alteration ${j + 1} for party ${i + 1}`,
+          status: alterationStatuses[(i + j) % alterationStatuses.length],
+          timeSpentMinutes: 20 + 10 * j,
+          tailorId: users[(i + j) % users.length].id,
+        }
+      });
+    }
+  }
+
+  // Add more party members with varied roles and measurements
+  const memberRoles = ['Groom', 'Groomsman', 'Best Man', 'Father', 'Ring Bearer'];
+  for (let i = 0; i < parties.length; i++) {
+    for (let j = 5; j <= 8; j++) {
+      await prisma.partyMember.create({
+        data: {
+          partyId: parties[i].id,
+          lsCustomerId: customers[(i + j) % customers.length].id.toString(),
+          role: memberRoles[j % memberRoles.length],
+          measurements: `Chest: ${36 + j}, Waist: ${30 + j}, Height: ${65 + j} in`,
+          notes: `Extra notes for member ${j} of party ${i + 1}`,
+          status: j % 2 === 0 ? 'Selected' : 'Fitted',
+        }
+      });
+    }
   }
 
   console.log("✅ Demo data seeded");

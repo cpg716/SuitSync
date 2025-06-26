@@ -1,8 +1,8 @@
 import React from 'react';
 import Card from './Card';
-import Button from './Button';
+import { Button } from './Button';
 
-export default function ConfirmModal({ open, onClose, onConfirm, loading, title, message }) {
+export const ConfirmModal = ({ open, onClose, onConfirm, loading, title, message }) => {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
@@ -17,4 +17,4 @@ export default function ConfirmModal({ open, onClose, onConfirm, loading, title,
       </Card>
     </div>
   );
-} 
+}; 

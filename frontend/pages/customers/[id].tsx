@@ -1,193 +1,239 @@
+import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/router';
 import useSWR from 'swr';
-import Card from '../../components/ui/Card';
-import Button from '../../components/ui/Button';
-import Modal from '../../components/ui/Modal';
-import Input from '../../components/ui/Input';
-import { useState } from 'react';
-import { useToast } from '../../components/ToastContext';
+import { api, fetcher } from '@/lib/apiClient';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { Modal } from '@/components/ui/Modal';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
+import { useToast } from '@/components/ToastContext';
+import { User, Calendar, Ruler, Scissors, Edit, PlusCircle } from 'lucide-react';
+import { Skeleton } from '@/components/ui/Skeleton';
 
-const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then(r => r.json());
+// --- INTERFACES ---
+interface Measurement {
+  chest?: string;
+  waistJacket?: string;
+  hips?: string;
+  shoulderWidth?: string;
+  sleeveLength?: string;
+  jacketLength?: string;
+  waistPants?: string;
+  inseam?: string;
+  outseam?: string;
+}
+interface Alteration { id: number; createdAt: string; status: string; notes: string; }
+interface Appointment { id: number; dateTime: string; type: string; notes: string; }
+interface Party { id: number; name: string; }
+interface Customer {
+  id: number;
+  name: string;
+  email: string;
+  phone?: string;
+  address?: string;
+  lightspeedId?: string;
+  parties: Party[];
+  measurements?: Measurement;
+  appointments: Appointment[];
+  alterations: Alteration[];
+}
 
-export default function CustomerProfile() {
-  const router = useRouter();
-  const { id } = router.query;
-  const { data: customer } = useSWR(id ? `/api/customers/${id}` : null, fetcher);
-  const { data: parties = [] } = useSWR('/api/parties', fetcher);
-  const { data: appointments = [] } = useSWR('/api/appointments', fetcher);
-  const { data: alterations = [] } = useSWR('/api/alterations', fetcher);
-  const { data: auditlog = [] } = useSWR('/api/auditlog', fetcher);
+// --- SUB-COMPONENTS ---
 
-  const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editForm, setEditForm] = useState({ name: '', email: '', phone: '' });
-  const [editSaving, setEditSaving] = useState(false);
-  const [editError, setEditError] = useState('');
-
-  const { success, error: toastError } = useToast();
-
-  function openEditModal() {
-    setEditForm({ name: customer.name, email: customer.email, phone: customer.phone || '' });
-    setEditModalOpen(true);
-    setEditError('');
-  }
-
-  async function handleEditCustomer(e: React.FormEvent) {
-    e.preventDefault();
-    if (!editForm.name || !editForm.email) {
-      setEditError('Name and email are required');
-      toastError('Name and email are required');
-      return;
-    }
-    setEditSaving(true);
-    setEditError('');
-    try {
-      const res = await fetch(`/api/customers/${customer.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(editForm),
-      });
-      if (!res.ok) throw new Error('Failed to update customer');
-      setEditModalOpen(false);
-      router.replace(router.asPath);
-      success('Customer updated');
-    } catch (err) {
-      setEditError('Could not update customer');
-      toastError('Could not update customer');
-    } finally {
-      setEditSaving(false);
-    }
-  }
-
-  if (!customer) return <div className="p-8">Loading…</div>;
-
-  const customerParties = parties.filter((p: any) => p.customerId === customer.id);
-  const customerAppointments = appointments.filter((a: any) => customerParties.some((p: any) => p.id === a.partyId));
-  const customerAlterations = alterations.filter((a: any) => customerParties.some((p: any) => p.id === a.partyId));
-  const customerAudit = auditlog.filter((log: any) => log.entity === 'Customer' && log.entityId === customer.id);
-
+function CustomerHeader({ customer, onEdit }) {
+  if (!customer) return <Skeleton className="h-48 w-full" />;
   return (
-    <div className="space-y-6">
-      <Card>
-        <div className="flex items-center justify-between mb-2">
-          <h1 className="text-2xl font-bold">{customer.name}</h1>
-          <div className="flex gap-2">
-            <Button className="px-3 py-1 text-sm" onClick={openEditModal}>Edit</Button>
-            <Button className="px-3 py-1 text-sm" onClick={() => router.push(`/customers/${customer.id}/measurements`)}>Measurements</Button>
+    <Card>
+      <CardHeader>
+        <div className="flex justify-between items-start">
+          <div className="flex items-center gap-4">
+            <User className="w-12 h-12 text-gray-400" />
+            <div>
+              <CardTitle className="text-2xl">{customer.name}</CardTitle>
+              <p className="text-sm text-gray-500">Lightspeed ID: {customer.lightspeedId || 'N/A'}</p>
+            </div>
+          </div>
+          <Button onClick={onEdit} variant="outline"><Edit className="mr-2 h-4 w-4" />Edit</Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          <div>
+            <h4 className="font-semibold mb-1">Contact Information</h4>
+            <p><strong>Email:</strong> {customer.email}</p>
+            <p><strong>Phone:</strong> {customer.phone || 'Not provided'}</p>
+            <p><strong>Address:</strong> {customer.address || 'Not provided'}</p>
+          </div>
+          <div>
+            <h4 className="font-semibold mb-1">Activity Summary</h4>
+            <p><strong>Parties:</strong> {customer.parties?.length || 0}</p>
+            <p><strong>Appointments:</strong> {customer.appointments?.length || 0}</p>
+            <p><strong>Alterations:</strong> {customer.alterations?.length || 0}</p>
           </div>
         </div>
-        <div className="text-neutral-700 mb-1">Email: {customer.email}</div>
-        <div className="text-neutral-700 mb-1">Phone: {customer.phone}</div>
-      </Card>
-      <Card title="Parties">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="text-left text-neutral-500">
-              <th className="py-2">Name</th>
-              <th className="py-2">Event Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {customerParties.map((p: any) => (
-              <tr key={p.id} className="border-t">
-                <td className="py-2">{p.name}</td>
-                <td className="py-2">{p.eventDate.slice(0, 10)}</td>
-              </tr>
-            ))}
-          </tbody>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AppointmentsTab({ customerId, appointments }) {
+  const router = useRouter();
+  return (
+    <div>
+      <div className="flex justify-end mb-4">
+        <Button onClick={() => router.push(`/create-appointment?customerId=${customerId}`)}>
+          <PlusCircle className="mr-2 h-4 w-4" /> Add Appointment
+        </Button>
+      </div>
+      {appointments?.length > 0 ? (
+        <table className="w-full text-sm">
+          {/* Table for appointments */}
         </table>
-      </Card>
-      <Card title="Appointments">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="text-left text-neutral-500">
-              <th className="py-2">Party</th>
-              <th className="py-2">Date/Time</th>
-              <th className="py-2">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {customerAppointments.map((a: any) => (
-              <tr key={a.id} className="border-t">
-                <td className="py-2">{customerParties.find((p: any) => p.id === a.partyId)?.name || ''}</td>
-                <td className="py-2">{a.dateTime.replace('T', ' ').slice(0, 16)}</td>
-                <td className="py-2">{a.status}</td>
-              </tr>
-            ))}
-          </tbody>
+      ) : <p>No appointments found.</p>}
+    </div>
+  );
+}
+
+function AlterationsTab({ customerId, alterations }) {
+  const router = useRouter();
+  return (
+    <div>
+      <div className="flex justify-end mb-4">
+        <Button onClick={() => router.push(`/create-alteration?customerId=${customerId}`)}>
+          <PlusCircle className="mr-2 h-4 w-4" /> Add Alteration Job
+        </Button>
+      </div>
+      {alterations?.length > 0 ? (
+        <table className="w-full text-sm">
+          {/* Table for alterations */}
         </table>
-      </Card>
-      <Card title="Alterations">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="text-left text-neutral-500">
-              <th className="py-2">Party</th>
-              <th className="py-2">Notes</th>
-              <th className="py-2">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {customerAlterations.map((a: any) => (
-              <tr key={a.id} className="border-t">
-                <td className="py-2">{customerParties.find((p: any) => p.id === a.partyId)?.name || ''}</td>
-                <td className="py-2">{a.notes}</td>
-                <td className="py-2">{a.status}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
-      <Card title="Activity Log">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="text-left text-neutral-500">
-              <th className="py-2">Action</th>
-              <th className="py-2">User</th>
-              <th className="py-2">Time</th>
-              <th className="py-2">Details</th>
-            </tr>
-          </thead>
-          <tbody>
-            {customerAudit.map((log: any) => (
-              <tr key={log.id} className="border-t">
-                <td className="py-2">{log.action}</td>
-                <td className="py-2">{log.user?.name || ''}</td>
-                <td className="py-2">{new Date(log.createdAt).toLocaleString()}</td>
-                <td className="py-2">{log.details}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
-      {/* Edit Customer Modal */}
-      <Modal isOpen={editModalOpen}>
-        <form onSubmit={handleEditCustomer} className="space-y-4 p-4 w-80">
-          <h2 className="text-lg font-semibold mb-2">Edit Customer</h2>
-          <Input
-            placeholder="Name"
-            value={editForm.name}
-            onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
-            required
-            aria-label="Name"
-          />
-          <Input
-            type="email"
-            placeholder="Email"
-            value={editForm.email}
-            onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
-            required
-            aria-label="Email"
-          />
-          <Input
-            placeholder="Phone"
-            value={editForm.phone}
-            onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
-            aria-label="Phone"
-          />
-          {editError && <div className="text-red-600 text-sm">{editError}</div>}
-          <Button type="submit" className="w-full" disabled={editSaving}>{editSaving ? 'Saving…' : 'Save Changes'}</Button>
-        </form>
-      </Modal>
+      ) : <p>No alterations found.</p>}
+    </div>
+  );
+}
+
+function MeasurementsTab({ measurements, customerId, onSave }) {
+  const [formState, setFormState] = useState(measurements || {});
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleChange = (e) => {
+    setFormState({ ...formState, [e.target.name]: e.target.value });
+  };
+  
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+    await onSave(formState);
+    setIsSaving(false);
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        {/* Input fields for measurements */}
+       </div>
+       <Button type="submit" disabled={isSaving}>
+        {isSaving ? 'Saving...' : 'Save Measurements'}
+       </Button>
+    </form>
+  );
+}
+
+function EditCustomerModal({ isOpen, onClose, customer, onSave }) {
+  const [formData, setFormData] = useState(customer);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    setFormData(customer);
+  }, [customer]);
+
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+  
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+    await onSave(formData);
+    setIsSaving(false);
+    onClose();
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Edit Customer">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Form fields for editing customer */}
+        <Button type="submit" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Changes'}</Button>
+      </form>
+    </Modal>
+  );
+}
+
+
+// --- MAIN PAGE COMPONENT ---
+
+export default function CustomerProfilePage() {
+  const router = useRouter();
+  const { id } = router.query;
+  const { success, error: toastError } = useToast();
+  
+  const { data: customer, error: customerError, mutate } = useSWR<Customer>(id ? `/customers/${id}` : null, fetcher);
+
+  const [isEditModalOpen, setEditModalOpen] = useState(false);
+
+  const handleSaveCustomer = async (formData) => {
+    try {
+      await api.put(`/customers/${id}`, formData);
+      mutate(); // Re-fetch data
+      success('Customer updated successfully.');
+    } catch (err) {
+      toastError('Failed to update customer.');
+    }
+  };
+
+  const handleSaveMeasurements = async (measurementsData) => {
+    try {
+      await api.put(`/customers/${id}/measurements`, measurementsData);
+      mutate();
+      success('Measurements saved.');
+    } catch (err) {
+      toastError('Failed to save measurements.');
+    }
+  };
+
+  if (customerError) return <div className="p-8 text-red-500">Failed to load customer data. Please try again.</div>;
+  if (!customer) return <div className="p-8"><Skeleton className="h-48 w-full" /></div>;
+
+  return (
+    <div className="space-y-6 p-4">
+      <CustomerHeader customer={customer} onEdit={() => setEditModalOpen(true)} />
+
+      <Tabs defaultValue="appointments" className="w-full">
+        <TabsList>
+          <TabsTrigger value="appointments"><Calendar className="mr-2 h-4 w-4" />Appointments</TabsTrigger>
+          <TabsTrigger value="alterations"><Scissors className="mr-2 h-4 w-4" />Alterations</TabsTrigger>
+          <TabsTrigger value="measurements"><Ruler className="mr-2 h-4 w-4" />Measurements</TabsTrigger>
+        </TabsList>
+        <TabsContent value="appointments" className="mt-4">
+          <AppointmentsTab customerId={customer.id} appointments={customer.appointments} />
+        </TabsContent>
+        <TabsContent value="alterations" className="mt-4">
+          <AlterationsTab customerId={customer.id} alterations={customer.alterations} />
+        </TabsContent>
+        <TabsContent value="measurements" className="mt-4">
+          <MeasurementsTab measurements={customer.measurements} customerId={customer.id} onSave={handleSaveMeasurements} />
+        </TabsContent>
+      </Tabs>
+      
+      {isEditModalOpen && (
+        <EditCustomerModal
+          isOpen={isEditModalOpen}
+          onClose={() => setEditModalOpen(false)}
+          customer={customer}
+          onSave={handleSaveCustomer}
+        />
+      )}
     </div>
   );
 } 

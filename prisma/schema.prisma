@@ -1,104 +1,352 @@
 // prisma/schema.prisma
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
 generator client {
   provider = "prisma-client-js"
+  output   = "../server/node_modules/.prisma/client"
 }
 
 model Customer {
-  id         Int      @id @default(autoincrement())
-  name       String
-  email      String   @unique
-  phone      String?
-  parties    Party[]
-  alterationJobs AlterationJob[]
-  measurements Json?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                Int             @id @default(autoincrement())
+  name              String
+  email             String?         @unique
+  phone             String?
+  address           String?
+  lightspeedId      String          @unique
+  lightspeedVersion BigInt?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  syncedAt          DateTime?
+  createdBy         Int?
+  measurements      Measurements?
+  parties           Party[]
+  alterationJobs    AlterationJob[]
+  createdByUser     User?           @relation("CustomerCreator", fields: [createdBy], references: [id])
+  sales             Sale[]
+
+  @@index([lightspeedId])
+  @@index([email])
+}
+
+model Measurements {
+  id            Int      @id @default(autoincrement())
+  customerId    Int      @unique
+  chest         String?
+  waistJacket   String?
+  hips          String?
+  shoulderWidth String?
+  sleeveLength  String?
+  jacketLength  String?
+  overarm       String?
+  neck          String?
+  trouserWaist  String?
+  inseam        String?
+  outseam       String?
+  height        String?
+  weight        String?
+  shirtCollar   String?
+  shirtSleeve   String?
+  fitPreference String?
+  outOfTown     Boolean  @default(false)
+  notes         String?
+  updatedAt     DateTime @updatedAt
+  customer      Customer @relation(fields: [customerId], references: [id])
 }
 
 model User {
-  id         Int      @id @default(autoincrement())
-  email      String   @unique
-  passwordHash String
-  name       String
-  role       String   // e.g. 'tailor', 'admin'
-  appointments Appointment[] @relation("TailorAppointments")
-  alterationJobs AlterationJob[]
-  auditLogs   AuditLog[]
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  saleAssignments     SaleAssignment[] @relation("UserSaleAssignments")
-  skills        Skill[]
-  tailorAbilities TailorAbility[] @relation("UserTailorAbilities")
-  tailorSchedules TailorSchedule[] @relation("UserTailorSchedules")
-  assignedJobParts AlterationJobPart[] @relation("AssignedTailorJobParts")
+  id                   Int                 @id @default(autoincrement())
+  email                String              @unique
+  passwordHash         String?
+  name                 String
+  role                 String
+  commissionRate       Float?              @default(0.1)
+  appointments         Appointment[]       @relation("TailorAppointments")
+  alterationJobs       AlterationJob[]
+  auditLogs            AuditLog[]
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  saleAssignments      SaleAssignment[]    @relation("UserSaleAssignments")
+  skills               Skill[]
+  tailorAbilities      TailorAbility[]     @relation("UserTailorAbilities")
+  tailorSchedules      TailorSchedule[]    @relation("UserTailorSchedules")
+  assignedJobParts     AlterationJobPart[] @relation("AssignedTailorJobParts")
+  lightspeedEmployeeId String?             @unique
+  photoUrl             String?
+  notificationPrefs    Json?
+  createdCustomers     Customer[]          @relation("CustomerCreator")
+  taskLogs             AlterationTaskLog[] @relation("TaskLogUser")
+  qrScans              QRScanLog[]         @relation("QRScanUser")
+  workflowStepsCompleted AlterationWorkflowStep[] @relation("WorkflowStepUser")
+  assignedTasks        AlterationTask[]    @relation("TaskAssignedUser")
+  assignmentLogs       AssignmentLog[]
+  userSchedules        UserSchedule[]
+}
+
+model UserSchedule {
+  id           Int      @id @default(autoincrement())
+  user         User     @relation(fields: [userId], references: [id])
+  userId       Int
+  weekStart    DateTime? // null = default/recurring schedule, otherwise Monday of week
+  days         Json      // Array of 7 objects: { isOff: boolean, blocks: [{ start: String, end: String }] }
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([userId, weekStart])
+}
+
+// DEPRECATED: Use UserSchedule instead
+model TailorSchedule {
+  id          Int      @id @default(autoincrement())
+  tailorId    Int
+  tailor      User     @relation("UserTailorSchedules", fields: [tailorId], references: [id])
+  dayOfWeek   Int      // 0=Sunday, 6=Saturday
+  startTime   String   // '09:00'
+  endTime     String   // '17:00'
 }
 
 model Party {
-  id               Int           @id @default(autoincrement())
-  name             String
-  eventDate        DateTime
-  customerId       Int
-  customer         Customer      @relation(fields: [customerId], references: [id])
-  externalId       String?       // Lightspeed sale ID
-  syncedAt         DateTime?
-  alterationJobs   AlterationJob[]
-  appointments     Appointment[]
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  notes            String?
-  syncedToLs       Boolean     @default(false)
-  lsPartyId        String?
-  members          PartyMember[]
+  id                Int             @id @default(autoincrement())
+  name              String
+  eventDate         DateTime
+  customerId        Int
+  customer          Customer        @relation(fields: [customerId], references: [id])
+  externalId        String?
+  syncedAt          DateTime?
+  alterationJobs    AlterationJob[]
+  appointments      Appointment[]
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  notes             String?
+  syncedToLs        Boolean         @default(false)
+  lightspeedGroupId String?
+  members           PartyMember[]
+
+  @@index([customerId])
 }
 
 model AlterationJob {
-  id               Int      @id @default(autoincrement())
-  saleLineItemId   Int     // Lightspeed sale line item (required)
-  partyId          Int?    // optional party
-  customerId       Int?    // for walk-ins (optional)
-  notes            String?
-  status           String  // e.g. "Pending", "InProgress", "Complete"
-  timeSpentMinutes Int?
-  tailorId         Int?
-  measurements     Json?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  party            Party?  @relation(fields: [partyId], references: [id])
-  customer         Customer? @relation(fields: [customerId], references: [id])
-  tailor           User?   @relation(fields: [tailorId], references: [id])
-  jobParts         AlterationJobPart[] @relation("JobParts")
+  id                       Int                 @id @default(autoincrement())
+  jobNumber                String              @unique // Auto-generated job number
+  lightspeedServiceOrderId String?             @unique
+  partyId                  Int?
+  customerId               Int?
+  partyMemberId            Int?
+  partyMember              PartyMember?        @relation(fields: [partyMemberId], references: [id])
+  notes                    String?
+  status                   AlterationJobStatus @default(NOT_STARTED)
+  orderStatus              OrderStatus         @default(ALTERATION_ONLY)
+  timeSpentMinutes         Int?
+  tailorId                 Int?
+  measurements             Json?
+  receivedDate             DateTime            @default(now())
+  dueDate                  DateTime?
+  rushOrder                Boolean             @default(false)
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
+  party                    Party?              @relation(fields: [partyId], references: [id])
+  customer                 Customer?           @relation(fields: [customerId], references: [id])
+  tailor                   User?               @relation(fields: [tailorId], references: [id])
+  jobParts                 AlterationJobPart[] @relation("JobParts")
+  qrCode                   String              @unique // Main job QR code
+  workflowSteps            AlterationWorkflowStep[]
+  assignmentLogs           AssignmentLog[]
+
+  @@index([partyId])
+  @@index([customerId])
+  @@index([tailorId])
+  @@index([partyMemberId])
+  @@index([jobNumber])
+  @@index([qrCode])
+}
+
+enum AlterationJobStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETE
+  PICKED_UP
+  ON_HOLD
+}
+
+enum OrderStatus {
+  ORDERED
+  IN_STOCK
+  ALTERATION_ONLY
+}
+
+model AlterationJobPart {
+  id              Int                   @id @default(autoincrement())
+  jobId           Int
+  job             AlterationJob         @relation("JobParts", fields: [jobId], references: [id], onDelete: Cascade)
+  partName        String                // e.g., "Jacket", "Pants", "Vest", "Shirt"
+  partType        GarmentPartType
+  status          AlterationJobStatus   @default(NOT_STARTED)
+  assignedTo      Int?
+  assignedUser    User?                 @relation("AssignedTailorJobParts", fields: [assignedTo], references: [id])
+  abilityId       Int?
+  ability         TailorAbility?        @relation(fields: [abilityId], references: [id])
+  timeSpent       Int?                  // minutes
+  qrCode          String                @unique // Unique QR code for this part
+  notes           String?
+  priority        PartPriority          @default(NORMAL)
+  estimatedTime   Int?                  // estimated minutes
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  tasks           AlterationTask[]      @relation("PartTasks")
+  scanLogs        QRScanLog[]           @relation("PartScanLogs")
+  assignmentLogs  AssignmentLog[]
+
+  @@index([jobId])
+  @@index([assignedTo])
+  @@index([qrCode])
+  @@index([status])
+}
+
+enum GarmentPartType {
+  JACKET
+  PANTS
+  VEST
+  SHIRT
+  DRESS
+  SKIRT
+  OTHER
+}
+
+enum PartPriority {
+  LOW
+  NORMAL
+  HIGH
+  RUSH
+}
+
+model AlterationTask {
+  id          Int                   @id @default(autoincrement())
+  partId      Int
+  part        AlterationJobPart     @relation("PartTasks", fields: [partId], references: [id], onDelete: Cascade)
+  taskName    String                // e.g., "Hem", "Shorten Sleeves", "Take in Sides"
+  taskType    String                // Category of task
+  status      AlterationJobStatus   @default(NOT_STARTED)
+  startTime   DateTime?
+  finishTime  DateTime?
+  assignedTo  Int?
+  assignedUser User?                @relation("TaskAssignedUser", fields: [assignedTo], references: [id])
+  timeSpent   Int?                  // minutes
+  initials    String?               // Tailor initials/signature
+  notes       String?
+  measurements String?              // Specific measurements for this task
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  taskLogs    AlterationTaskLog[]   @relation("TaskLogs")
+
+  @@index([partId])
+  @@index([assignedTo])
+  @@index([status])
+}
+
+model AlterationTaskLog {
+  id        Int      @id @default(autoincrement())
+  taskId    Int
+  task      AlterationTask @relation("TaskLogs", fields: [taskId], references: [id], onDelete: Cascade)
+  userId    Int
+  user      User     @relation("TaskLogUser", fields: [userId], references: [id])
+  action    String   // "started", "finished", "paused", "updated"
+  timestamp DateTime @default(now())
+  notes     String?
+  metadata  Json?    // Additional data like location, device, etc.
+
+  @@index([taskId])
+  @@index([userId])
+  @@index([timestamp])
+}
+
+model AlterationWorkflowStep {
+  id          Int           @id @default(autoincrement())
+  jobId       Int
+  job         AlterationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  stepName    String        // e.g., "Measured", "Suit Ordered", "Alterations Marked"
+  stepType    WorkflowStepType
+  completed   Boolean       @default(false)
+  completedAt DateTime?
+  completedBy Int?
+  completedByUser User?     @relation("WorkflowStepUser", fields: [completedBy], references: [id])
+  notes       String?
+  sortOrder   Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([jobId])
+  @@index([stepType])
+}
+
+enum WorkflowStepType {
+  MEASURED
+  SUIT_ORDERED
+  SUIT_ARRIVED
+  ALTERATIONS_MARKED
+  COMPLETE
+  QC_CHECKED
+  READY_FOR_PICKUP
+  PICKED_UP
+}
+
+model QRScanLog {
+  id        Int               @id @default(autoincrement())
+  qrCode    String
+  partId    Int?
+  part      AlterationJobPart? @relation("PartScanLogs", fields: [partId], references: [id])
+  scannedBy Int
+  user      User              @relation("QRScanUser", fields: [scannedBy], references: [id])
+  scanType  QRScanType
+  location  String?           // Optional location/device info
+  timestamp DateTime          @default(now())
+  metadata  Json?             // Additional scan data
+  result    String?           // Success/error message
+
+  @@index([qrCode])
+  @@index([partId])
+  @@index([scannedBy])
+  @@index([timestamp])
+}
+
+enum QRScanType {
+  START_WORK
+  FINISH_WORK
+  PICKUP
+  STATUS_CHECK
+  QUALITY_CHECK
 }
 
 model Appointment {
-  id               Int      @id @default(autoincrement())
-  partyId          Int
-  party            Party    @relation(fields: [partyId], references: [id])
-  customerId       String?  // Lightspeed Customer ID
-  saleId           String?  // Lightspeed Sale ID
-  dateTime         DateTime
-  durationMinutes  Int?
-  type             AppointmentType? @default(fitting)
-  notes            String?
-  status           AppointmentStatus @default(scheduled)
-  syncedToLightspeed Boolean @default(false)
-  recurrenceRule   String?  // RFC 5545 RRULE
-  parentId         Int?
-  parent           Appointment? @relation("AppointmentRecurrence", fields: [parentId], references: [id])
-  children         Appointment[] @relation("AppointmentRecurrence")
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  memberId         Int?
-  member           PartyMember? @relation("MemberAppointments", fields: [memberId], references: [id])
-  tailorId         Int?
-  tailor           User?    @relation("TailorAppointments", fields: [tailorId], references: [id])
-  lsEventId        String?
-  syncLogs         SyncLog[]
+  id                 Int               @id @default(autoincrement())
+  partyId            Int
+  party              Party             @relation(fields: [partyId], references: [id])
+  customerId         String?
+  saleId             String?
+  dateTime           DateTime
+  durationMinutes    Int?
+  type               AppointmentType?  @default(fitting)
+  notes              String?
+  status             AppointmentStatus @default(scheduled)
+  syncedToLightspeed Boolean           @default(false)
+  recurrenceRule     String?
+  parentId           Int?
+  parent             Appointment?      @relation("AppointmentRecurrence", fields: [parentId], references: [id])
+  children           Appointment[]     @relation("AppointmentRecurrence")
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  memberId           Int?
+  member             PartyMember?      @relation("MemberAppointments", fields: [memberId], references: [id])
+  tailorId           Int?
+  tailor             User?             @relation("TailorAppointments", fields: [tailorId], references: [id])
+  lsEventId          String?
+
+  @@index([partyId])
+  @@index([parentId])
+  @@index([memberId])
+  @@index([tailorId])
 }
 
 enum AppointmentType {
@@ -116,14 +364,14 @@ enum AppointmentStatus {
 }
 
 model SyncLog {
-  id            Int      @id @default(autoincrement())
-  appointment   Appointment @relation(fields: [appointmentId], references: [id])
-  appointmentId Int
+  id            Int           @id @default(autoincrement())
+  createdAt     DateTime      @default(now())
+  resource      String
   direction     SyncDirection
-  status        SyncStatus
+  status        String
   message       String?
-  payload       Json?
-  createdAt     DateTime @default(now())
+  recordCount   Int
+  lightspeedIds String[]
 }
 
 enum SyncDirection {
@@ -131,39 +379,49 @@ enum SyncDirection {
   outbound
 }
 
-enum SyncStatus {
-  success
-  failed
+model SyncStatus {
+  id                Int      @id @default(autoincrement())
+  resource          String   @unique
+  lastSyncedVersion BigInt?
+  lastSyncedAt      DateTime @default(now()) @updatedAt
+  status            String   @default("IDLE") // e.g., IDLE, SYNCING, SUCCESS, FAILED
+  errorMessage      String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model AuditLog {
-  id         Int      @id @default(autoincrement())
-  userId     Int?
-  user       User?    @relation(fields: [userId], references: [id])
-  action     String
-  entity     String
-  entityId   Int
-  details    String?
-  createdAt  DateTime @default(now())
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  action    String // create, update, delete, sync
+  entity    String // Customer, Party, etc.
+  entityId  Int
+  details   String // JSON string of change details
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([entity, entityId])
+  @@index([userId])
 }
 
 model PartyMember {
-  id            Int      @id @default(autoincrement())
-  partyId       Int
-  party         Party    @relation(fields: [partyId], references: [id])
-  lsCustomerId  String?  // Lightspeed customer ID
-  role          String
-  notes         String?
-  status        String   @default("Selected")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  appointments  Appointment[] @relation("MemberAppointments")
-  measurements  Json?
+  id             Int             @id @default(autoincrement())
+  partyId        Int
+  party          Party           @relation(fields: [partyId], references: [id])
+  lsCustomerId   String? // Lightspeed customer ID
+  role           String
+  notes          String?
+  status         String          @default("Selected")
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  appointments   Appointment[]   @relation("MemberAppointments")
+  measurements   Json?
+  alterationJobs AlterationJob[]
 }
 
 model SaleAssignment {
   id             Int      @id @default(autoincrement())
-  saleId         String   // Lightspeed sale ID
+  saleId         String // Lightspeed sale ID
   associateId    Int
   associate      User     @relation("UserSaleAssignments", fields: [associateId], references: [id])
   commissionRate Float
@@ -179,63 +437,125 @@ model Skill {
 }
 
 model Settings {
-  id         Int      @id @default(1)
-  reminderIntervals String @default("24,4")
-  emailSubject     String @default("Reminder: Your appointment at {shopName}")
-  emailBody        String @default("Hi {customerName},\nThis is a reminder for your appointment with {partyName} on {dateTime}.")
-  smsBody          String @default("Reminder: {partyName} appointment on {dateTime} at {shopName}.")
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                Int      @id @default(1)
+  reminderIntervals String   @default("24,4")
+  emailSubject      String   @default("Reminder: Your appointment at {shopName}")
+  emailBody         String   @default("Hi {customerName},\nThis is a reminder for your appointment with {partyName} on {dateTime}.")
+  smsBody           String   @default("Reminder: {partyName} appointment on {dateTime} at {shopName}.")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model AlterationTaskType {
-  id            Int    @id @default(autoincrement())
-  name          String @unique
-  defaultDuration Int  // in minutes
-  parts         String // e.g. 'Coat,Pants,Vest,Shirt,Other' (CSV)
-  abilities     TailorAbility[]
-  jobParts      AlterationJobPart[]
+  id              Int             @id @default(autoincrement())
+  name            String          @unique
+  defaultDuration Int
+  parts           String
+  abilities       TailorAbility[]
 }
 
 model TailorAbility {
-  id            Int    @id @default(autoincrement())
-  tailorId      Int
-  tailor        User   @relation("UserTailorAbilities", fields: [tailorId], references: [id])
-  taskTypeId    Int
-  taskType      AlterationTaskType @relation(fields: [taskTypeId], references: [id])
-  proficiency   Int    // 1-5 or similar
-}
+  id                 Int                 @id @default(autoincrement())
+  tailorId           Int
+  tailor             User                @relation("UserTailorAbilities", fields: [tailorId], references: [id])
+  taskTypeId         Int
+  taskType           AlterationTaskType  @relation(fields: [taskTypeId], references: [id])
+  proficiency        Int // 1-5
+  notes              String?
+  alterationJobParts AlterationJobPart[]
 
-model TailorSchedule {
-  id            Int    @id @default(autoincrement())
-  tailorId      Int
-  tailor        User   @relation("UserTailorSchedules", fields: [tailorId], references: [id])
-  dayOfWeek     Int    // 0=Sunday, 6=Saturday
-  startTime     String // '09:00'
-  endTime       String // '17:00'
-}
-
-model AlterationJobPart {
-  id            Int    @id @default(autoincrement())
-  jobId         Int
-  job           AlterationJob @relation("JobParts", fields: [jobId], references: [id])
-  part          String
-  taskTypeId    Int
-  taskType      AlterationTaskType @relation(fields: [taskTypeId], references: [id])
-  assignedTailorId Int?
-  assignedTailor   User? @relation("AssignedTailorJobParts", fields: [assignedTailorId], references: [id])
-  scheduledTime DateTime?
-  duration      Int?   // in minutes
-  status        String // e.g. 'pending', 'in_progress', 'complete'
-  notes         String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  @@unique([tailorId, taskTypeId])
 }
 
 model PushSubscription {
+  id       Int    @id @default(autoincrement())
+  endpoint String @unique
+  p256dh   String
+  auth     String
+  userId   Int?
+}
+
+model CommunicationLog {
   id        Int      @id @default(autoincrement())
-  endpoint  String   @unique
-  keys      Json
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  type      String // sms, email
+  recipient String
+  message   String
+  status    String // sent, failed
+  sentAt    DateTime @default(now())
+}
+
+// These are read-only mirrors of Lightspeed data for local querying
+model Product {
+  id                Int              @id @default(autoincrement())
+  lightspeedId      String           @unique
+  name              String
+  sku               String?
+  price             Float
+  category          String?
+  brand             String?
+  lightspeedVersion BigInt?
+  syncedAt          DateTime?
+  saleLineItems     SaleLineItem[]
+
+  @@index([lightspeedId])
+}
+
+model Sale {
+  id                Int              @id @default(autoincrement())
+  lightspeedId      String           @unique
+  customerId        Int
+  customer          Customer         @relation(fields: [customerId], references: [id])
+  total             Float
+  saleDate          DateTime
+  lineItems         SaleLineItem[]
+  syncedAt          DateTime?
+}
+
+model SaleLineItem {
+  id           Int      @id @default(autoincrement())
+  lightspeedId String   @unique
+  saleId       Int
+  sale         Sale     @relation(fields: [saleId], references: [id])
+  productId    Int
+  product      Product  @relation(fields: [productId], references: [id])
+  quantity     Int
+  price        Float
+  syncedAt     DateTime @updatedAt
+}
+
+model SyncState {
+  id          Int      @id @default(autoincrement())
+  entity      String   @unique
+  lastVersion BigInt
+  lastSynced  DateTime @updatedAt
+}
+
+model ApiToken {
+  id           Int      @id @default(autoincrement())
+  service      String   @unique
+  accessToken  String   @db.Text
+  refreshToken String   @db.Text
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model AssignmentLog {
+  id          Int      @id @default(autoincrement())
+  jobId       Int
+  partId      Int
+  oldTailorId Int?
+  newTailorId Int?
+  userId      Int?
+  method      String   // 'auto' or 'manual'
+  reason      String?
+  timestamp   DateTime @default(now())
+
+  job         AlterationJob @relation(fields: [jobId], references: [id])
+  part        AlterationJobPart @relation(fields: [partId], references: [id])
+  user        User? @relation(fields: [userId], references: [id])
+
+  @@index([jobId])
+  @@index([partId])
+  @@index([userId])
 }

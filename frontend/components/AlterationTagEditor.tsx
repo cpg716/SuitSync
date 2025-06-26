@@ -88,7 +88,7 @@ export default function AlterationTagEditor({
           <label className="block mb-1">Party</label>
           <select className="w-full border rounded px-3 py-2" value={partyId} onChange={e => setPartyId(e.target.value)} required={jobType === 'party'}>
             <option value="">Select Party</option>
-            {parties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            {(Array.isArray(parties) ? parties : []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
       ) : (
@@ -96,7 +96,7 @@ export default function AlterationTagEditor({
           <label className="block mb-1">Customer</label>
           <select className="w-full border rounded px-3 py-2" value={customerId} onChange={e => setCustomerId(e.target.value)} required={jobType === 'walkin'}>
             <option value="">Select Customer</option>
-            {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {(Array.isArray(customers) ? customers : []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
       )}

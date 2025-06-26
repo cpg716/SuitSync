@@ -1,11 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useToast } from '../components/ToastContext';
-import Card from '../components/ui/Card';
-import Button from '../components/ui/Button';
-import Input from '../components/ui/Input';
-import Skeleton from '../components/ui/Skeleton';
+import { Card } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
+import { Skeleton } from '../components/ui/Skeleton';
 import { Settings, RefreshCw, Mail, MessageCircle, KeyRound, Info } from 'lucide-react';
-import ConfirmModal from '../components/ui/ConfirmModal';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/Tabs';
+import { Modal } from '../components/ui/Modal';
+import UserSettings from './UserSettings';
+import { useAuth } from '../src/AuthContext';
 
 const defaultConfig = {
   podiumApiKey: '',
@@ -73,24 +77,24 @@ function ReminderSettingsCard() {
     setTimeout(() => setSaved(false), 2000);
   };
   return (
-    <div className="bg-white dark:bg-gray-dark rounded shadow p-4 mb-6">
+    <div className="bg-white dark:bg-gray-900 rounded shadow p-4 mb-6 dark:text-gray-100">
       <h2 className="font-semibold mb-2">Reminder Settings</h2>
       <form onSubmit={handleSave} className="space-y-3">
         <div>
           <label className="block text-sm font-medium mb-1">Reminder Intervals (hours before appointment, comma separated)</label>
-          <input type="text" className="border rounded px-2 py-1 w-full" value={intervals.join(', ')} onChange={e => setIntervals(e.target.value.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n)))} />
+          <input type="text" className="border rounded px-2 py-1 w-full bg-white dark:bg-gray-800 text-black dark:text-gray-100" value={intervals.join(', ')} onChange={e => setIntervals(e.target.value.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n)))} />
         </div>
         <div>
           <label className="block text-sm font-medium mb-1">Email Subject Template</label>
-          <input type="text" className="border rounded px-2 py-1 w-full" value={emailSubject} onChange={e => setEmailSubject(e.target.value)} />
+          <input type="text" className="border rounded px-2 py-1 w-full bg-white dark:bg-gray-800 text-black dark:text-gray-100" value={emailSubject} onChange={e => setEmailSubject(e.target.value)} />
         </div>
         <div>
           <label className="block text-sm font-medium mb-1">Email Body Template</label>
-          <textarea className="border rounded px-2 py-1 w-full" rows={3} value={emailBody} onChange={e => setEmailBody(e.target.value)} />
+          <textarea className="border rounded px-2 py-1 w-full bg-white dark:bg-gray-800 text-black dark:text-gray-100" rows={3} value={emailBody} onChange={e => setEmailBody(e.target.value)} />
         </div>
         <div>
           <label className="block text-sm font-medium mb-1">SMS Body Template</label>
-          <input type="text" className="border rounded px-2 py-1 w-full" value={smsBody} onChange={e => setSmsBody(e.target.value)} />
+          <input type="text" className="border rounded px-2 py-1 w-full bg-white dark:bg-gray-800 text-black dark:text-gray-100" value={smsBody} onChange={e => setSmsBody(e.target.value)} />
         </div>
         <div className="flex items-center gap-3 mt-2">
           <button type="submit" className="px-4 py-2 rounded bg-primary text-white font-semibold" disabled={saving}>{saving ? 'Saving...' : 'Save'}</button>
@@ -188,7 +192,10 @@ function TailorAbilitiesAdmin() {
       fetch('/api/users').then(r => r.json()),
       fetch('/api/admin/settings/task-types').then(r => r.json()),
     ]).then(([a, u, t]) => {
-      setAbilities(a); setTailors(u.filter(u => u.role === 'tailor')); setTaskTypes(t);
+      setAbilities(a);
+      const userArr = Array.isArray(u) ? u : (Array.isArray(u.localUsers) ? u.localUsers : []);
+      setTailors(userArr.filter(u => u.role === 'tailor'));
+      setTaskTypes(t);
       setLoading(false);
     });
   }, []);
@@ -271,7 +278,9 @@ function TailorSchedulesAdmin() {
       fetch('/api/admin/settings/tailor-schedules').then(r => r.json()),
       fetch('/api/users').then(r => r.json()),
     ]).then(([s, u]) => {
-      setSchedules(s); setTailors(u.filter(u => u.role === 'tailor'));
+      setSchedules(s);
+      const userArr = Array.isArray(u) ? u : (Array.isArray(u.localUsers) ? u.localUsers : []);
+      setTailors(userArr.filter(u => u.role === 'tailor'));
       setLoading(false);
     });
   }, []);
@@ -340,14 +349,103 @@ function TailorSchedulesAdmin() {
   );
 }
 
+function UsersAdminCard() {
+  const [users, setUsers] = useState([]);
+  const [localUsers, setLocalUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [profileUserId, setProfileUserId] = useState<number|null>(null);
+  const [page, setPage] = useState(1);
+  const USERS_PER_ROW = 5;
+  const USERS_PER_PAGE = 15;
+  useEffect(() => {
+    fetch('/api/users').then(r => r.json()).then(data => {
+      setUsers(Array.isArray(data.lightspeedUsers) ? data.lightspeedUsers : []);
+      setLocalUsers(Array.isArray(data.localUsers) ? data.localUsers : []);
+      setLoading(false);
+    });
+  }, []);
+  const getLocalUser = (lsUser) => localUsers.find(u => u.lightspeedEmployeeId && String(u.lightspeedEmployeeId) === String(lsUser.id));
+  const getUserId = (u) => {
+    const local = getLocalUser(u);
+    if (local) return local.id;
+    if (u.id) return parseInt(u.id, 10);
+    return null;
+  };
+  const getPhone = (u) => {
+    const local = getLocalUser(u);
+    return local?.phone || u.phone || '-';
+  };
+  const pagedUsers = users.slice((page-1)*USERS_PER_PAGE, page*USERS_PER_PAGE);
+  const totalPages = Math.ceil(users.length / USERS_PER_PAGE);
+  return (
+    <Card title="Users (Lightspeed Staff Directory)" className="mb-8 w-full">
+      {loading ? <Skeleton className="h-24 w-full" /> : (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-6 w-full">
+            {pagedUsers.map(u => {
+              const local = getLocalUser(u) || {};
+              return (
+                <div
+                  key={u.id}
+                  className="bg-white dark:bg-gray-900 rounded-xl shadow-lg flex flex-col items-center border border-gray-200 dark:border-gray-700 w-full min-w-0 aspect-square justify-center p-6"
+                  style={{ aspectRatio: '1 / 1', minHeight: '18rem', maxHeight: '22rem' }}
+                >
+                  {u.photo ? <img src={u.photo} alt={u.display_name} className="h-24 w-24 rounded-full object-cover mb-3 shadow" /> : <div className="h-24 w-24 rounded-full bg-gray-200 mb-3" />}
+                  <div className="text-xl font-bold mb-1 text-center">{u.display_name}</div>
+                  <div className="text-gray-500 text-sm mb-1 text-center">{getPhone(u)}</div>
+                  <div className="text-gray-500 text-sm mb-1 text-center">{u.email}</div>
+                  <div className="text-primary text-sm font-semibold mb-3 capitalize text-center">{u.account_type || local.role || '-'}</div>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setProfileUserId(getUserId(u))}
+                    disabled={!getUserId(u)}
+                  >
+                    View Profile
+                  </Button>
+                  {!getUserId(u) && (
+                    <div className="text-xs text-gray-400 mt-2 text-center">No local profile</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {totalPages > 1 && (
+            <div className="flex justify-center items-center gap-2 mt-6">
+              <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage(page-1)}>Prev</Button>
+              <span className="text-sm">Page {page} of {totalPages}</span>
+              <Button variant="outline" size="sm" disabled={page === totalPages} onClick={() => setPage(page+1)}>Next</Button>
+            </div>
+          )}
+        </>
+      )}
+      <Modal isOpen={!!profileUserId} onClose={() => setProfileUserId(null)}>
+        {profileUserId && <UserSettings userId={profileUserId} adminView />}
+      </Modal>
+    </Card>
+  );
+}
+
+const TABS = [
+  { value: 'general', label: 'General' },
+  { value: 'notifications', label: 'Notifications' },
+  { value: 'users', label: 'Users' },
+  { value: 'tailors', label: 'Tailors' },
+  { value: 'availability', label: 'My Availability' },
+  { value: 'integrations', label: 'Integrations' },
+];
+
 export default function AdminSettings() {
   const { success, error: toastError } = useToast();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
   const [settings, setSettings] = useState<any>(null);
   const [dirty, setDirty] = useState(false);
+  const [tab, setTab] = useState('general');
+  const [viewMode, setViewMode] = useState<'admin' | 'user'>('admin');
 
   useEffect(() => {
     setLoading(true);
@@ -392,74 +490,107 @@ export default function AdminSettings() {
   };
 
   return (
-    <div className="w-full max-w-screen-lg mx-auto bg-white text-black dark:bg-gray-dark dark:text-white">
-      <div className="max-w-3xl mx-auto p-6 space-y-8">
-        <h1 className="text-3xl font-bold flex items-center gap-2 mb-6 text-primary">
-          <Settings className="inline-block mr-2" size={28} /> Admin Settings
-        </h1>
-        <form onSubmit={handleSave} className="space-y-8">
-          {/* Reminder Templates */}
-          <Card title={<span className="flex items-center gap-2"><Mail size={20} /> Reminder Templates</span>}>
-            {loading ? <Skeleton className="h-32 w-full" /> : (
-              <>
-                <div className="mb-4">
-                  <label className="block font-semibold mb-1 flex items-center gap-1">Reminder Intervals (hours before appointment)
-                    <Info size={16} className="text-gray-400" title="Comma separated, e.g. 24,4" />
-                  </label>
-                  <Input name="reminderIntervals" value={settings?.reminderIntervals || ''} onChange={handleChange} className="w-full border rounded px-3 py-2" placeholder="24,4" />
+    <div className="w-full min-h-screen bg-white text-black dark:bg-gray-900 dark:text-gray-100 flex flex-col">
+      <div className="w-full flex-1 px-2 md:px-6 xl:px-12 py-6">
+        <div className="w-full">
+          {user?.role === 'admin' && (
+            <div className="flex justify-end mb-4">
+              <Button
+                variant={viewMode === 'admin' ? 'default' : 'outline'}
+                className="mr-2"
+                onClick={() => setViewMode('admin')}
+              >
+                Admin Settings
+              </Button>
+              <Button
+                variant={viewMode === 'user' ? 'default' : 'outline'}
+                onClick={() => setViewMode('user')}
+              >
+                User Settings
+              </Button>
+            </div>
+          )}
+          {viewMode === 'user' ? (
+            <UserSettings />
+          ) : (
+            <>
+              <h1 className="text-3xl font-bold flex items-center gap-2 mb-6 text-primary">
+                <Settings className="inline-block mr-2" size={28} /> Admin Settings
+              </h1>
+              <Tabs value={tab} onValueChange={setTab} className="w-full">
+                <div className="flex gap-2 mb-6 border-b border-gray-200 dark:border-gray-700">
+                  {TABS.map(t => (
+                    <button
+                      key={t.value}
+                      className={
+                        `px-5 py-2 rounded-t-md font-semibold transition-all duration-150 ` +
+                        (tab === t.value
+                          ? 'bg-primary text-white shadow -mb-px border-b-2 border-primary'
+                          : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-primary/10')
+                      }
+                      onClick={() => setTab(t.value)}
+                      type="button"
+                    >
+                      {t.label}
+                    </button>
+                  ))}
                 </div>
-                <div className="mb-4">
-                  <label className="block font-semibold mb-1 flex items-center gap-1">Email Subject <Info size={16} className="text-gray-400" title="Subject for reminder emails" /></label>
-                  <Input name="emailSubject" value={settings?.emailSubject || ''} onChange={handleChange} className="w-full border rounded px-3 py-2" />
-                </div>
-                <div className="mb-4">
-                  <label className="block font-semibold mb-1 flex items-center gap-1">Email Body Template</label>
-                  <textarea name="emailBody" value={settings?.emailBody || ''} onChange={handleChange} className="w-full border rounded px-3 py-2" rows={3} />
-                  <div className="text-xs text-gray-500 mt-1">Available variables: {'{customerName}'}, {'{partyName}'}, {'{dateTime}'}, {'{shopName}'}</div>
-                </div>
-                <div className="mb-2">
-                  <label className="block font-semibold mb-1 flex items-center gap-1">SMS Body Template</label>
-                  <Input name="smsBody" value={settings?.smsBody || ''} onChange={handleChange} className="w-full border rounded px-3 py-2" />
-                </div>
-              </>
-            )}
-          </Card>
-          {/* API Keys & Integration */}
-          <Card title={<span className="flex items-center gap-2"><KeyRound size={20} /> API Keys & Integration</span>}>
-            <div className="mb-4">
-              <label className="block font-semibold mb-1 flex items-center gap-1">Podium SMS API Key <Info size={16} className="text-gray-400" title="Used for SMS reminders." /></label>
-              <Input name="podiumApiKey" value={settings?.podiumApiKey || ''} onChange={handleChange} className="w-full border rounded px-3 py-2" />
-            </div>
-            <div className="mb-4">
-              <label className="block font-semibold mb-1 flex items-center gap-1">SendGrid API Key <Info size={16} className="text-gray-400" title="Used for email reminders." /></label>
-              <Input name="sendgridApiKey" value={settings?.sendgridApiKey || ''} onChange={handleChange} className="w-full border rounded px-3 py-2" />
-            </div>
-            <div className="mb-4">
-              <label className="block font-semibold mb-1 flex items-center gap-1">SendGrid From Email <Info size={16} className="text-gray-400" title="Sender email for reminders." /></label>
-              <Input name="sendgridFrom" value={settings?.sendgridFrom || ''} onChange={handleChange} className="w-full border rounded px-3 py-2" type="email" />
-            </div>
-            <div className="mb-4">
-              <label className="block font-semibold mb-1 flex items-center gap-1">API Base URL <Info size={16} className="text-gray-400" title="Base URL for API calls." /></label>
-              <Input name="apiBaseUrl" value={settings?.apiBaseUrl || ''} onChange={handleChange} className="w-full border rounded px-3 py-2" type="url" />
-            </div>
-            <div className="mb-2">
-              <label className="block font-semibold mb-1 flex items-center gap-1">Sync Frequency (minutes) <Info size={16} className="text-gray-400" title="How often to sync with Lightspeed." /></label>
-              <Input name="syncFrequency" value={settings?.syncFrequency || ''} onChange={handleChange} className="w-full border rounded px-3 py-2" type="number" min={1} max={120} />
-            </div>
-          </Card>
-          {/* Save Button */}
-          <div className="flex items-center gap-4">
-            <Button type="submit" disabled={saving || !dirty || loading} className="px-6 py-2">
-              {saving ? <RefreshCw className="animate-spin mr-2" size={18} /> : null}
-              Save Settings
-            </Button>
-            {saved && <span className="text-green-600 font-medium flex items-center gap-1">Saved! <RefreshCw className="text-green-600 animate-spin" size={16} /></span>}
-            {error && <span className="text-red-600 font-medium">{error}</span>}
-          </div>
-        </form>
-        <TaskTypesAdmin />
-        <TailorAbilitiesAdmin />
-        <TailorSchedulesAdmin />
+                <TabsContent value="general">
+                  <form onSubmit={handleSave} className="space-y-8">
+                    {/* API Keys & Integration */}
+                    <Card title={<span className="flex items-center gap-2"><KeyRound size={20} /> API Keys & Integration</span>}>
+                      <div className="mb-4">
+                        <label className="block font-semibold mb-1 flex items-center gap-1">Podium SMS API Key <Info size={16} className="text-gray-400" title="Used for SMS reminders." /></label>
+                        <Input name="podiumApiKey" value={settings?.podiumApiKey || ''} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+                      </div>
+                      <div className="mb-4">
+                        <label className="block font-semibold mb-1 flex items-center gap-1">SendGrid API Key <Info size={16} className="text-gray-400" title="Used for email reminders." /></label>
+                        <Input name="sendgridApiKey" value={settings?.sendgridApiKey || ''} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+                      </div>
+                      <div className="mb-4">
+                        <label className="block font-semibold mb-1 flex items-center gap-1">SendGrid From Email <Info size={16} className="text-gray-400" title="Sender email for reminders." /></label>
+                        <Input name="sendgridFrom" value={settings?.sendgridFrom || ''} onChange={handleChange} className="w-full border rounded px-3 py-2" type="email" />
+                      </div>
+                      <div className="mb-4">
+                        <label className="block font-semibold mb-1 flex items-center gap-1">API Base URL <Info size={16} className="text-gray-400" title="Base URL for API calls." /></label>
+                        <Input name="apiBaseUrl" value={settings?.apiBaseUrl || ''} onChange={handleChange} className="w-full border rounded px-3 py-2" type="url" />
+                      </div>
+                      <div className="mb-2">
+                        <label className="block font-semibold mb-1 flex items-center gap-1">Sync Frequency (minutes) <Info size={16} className="text-gray-400" title="How often to sync with Lightspeed." /></label>
+                        <Input name="syncFrequency" value={settings?.syncFrequency || ''} onChange={handleChange} className="w-full border rounded px-3 py-2" type="number" min={1} max={120} />
+                      </div>
+                    </Card>
+                    <div className="flex items-center gap-4">
+                      <Button type="submit" disabled={saving || !dirty || loading} className="px-6 py-2">
+                        {saving ? <RefreshCw className="animate-spin mr-2" size={18} /> : null}
+                        Save Settings
+                      </Button>
+                      {saved && <span className="text-green-600 font-medium flex items-center gap-1">Saved! <RefreshCw className="text-green-600 animate-spin" size={16} /></span>}
+                      {error && <span className="text-red-600 font-medium">{error}</span>}
+                    </div>
+                  </form>
+                </TabsContent>
+                <TabsContent value="notifications">
+                  <ReminderSettingsCard />
+                </TabsContent>
+                <TabsContent value="users">
+                  <UsersAdminCard />
+                </TabsContent>
+                <TabsContent value="tailors">
+                  <TaskTypesAdmin />
+                  <TailorAbilitiesAdmin />
+                  <TailorSchedulesAdmin />
+                </TabsContent>
+                <TabsContent value="availability">
+                  {/* Availability Admin Card */}
+                </TabsContent>
+                <TabsContent value="integrations">
+                  {/* Integrations Admin Card */}
+                </TabsContent>
+              </Tabs>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
