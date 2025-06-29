@@ -1,15 +1,18 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/router';
 import useSWR from 'swr';
-import { api, fetcher } from '@/lib/apiClient';
+import { api } from '@/lib/apiClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { Button } from '../../components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
+import { Tabs } from '../../components/ui/Tabs';
+import { TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { useToast } from '@/components/ToastContext';
 import { User, Calendar, Ruler, Scissors, Edit, PlusCircle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/Skeleton';
+import type { Party } from '../../src/types/parties';
+import type { MeasurementData } from '../../src/types/measurements';
 
 // --- INTERFACES ---
 interface Measurement {
@@ -25,7 +28,6 @@ interface Measurement {
 }
 interface Alteration { id: number; createdAt: string; status: string; notes: string; }
 interface Appointment { id: number; dateTime: string; type: string; notes: string; }
-interface Party { id: number; name: string; }
 interface Customer {
   id: number;
   name: string;
@@ -161,7 +163,7 @@ function EditCustomerModal({ isOpen, onClose, customer, onSave }) {
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Edit Customer">
+    <Modal open={isOpen} onClose={onClose} title="Edit Customer">
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Form fields for editing customer */}
         <Button type="submit" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Changes'}</Button>
@@ -236,4 +238,7 @@ export default function CustomerProfilePage() {
       )}
     </div>
   );
-} 
+}
+
+// Replace fetcher with fetch and correct signature
+const fetcher = (url: string): Promise<any> => fetch(url).then(res => res.json()); 

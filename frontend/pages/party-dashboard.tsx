@@ -1,18 +1,15 @@
 import { useState, useMemo, useEffect } from 'react';
 import useSWR from 'swr';
 import dynamic from 'next/dynamic';
-import Card from '../components/ui/Card';
-import Button from '../components/ui/Button';
-import Modal from '../components/ui/Modal';
-import Input from '../components/ui/Input';
+import { Card } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
+import { Modal } from '../components/ui/Modal';
+import { Input } from '../components/ui/Input';
 import { Calendar as CalendarIcon, Plus } from 'lucide-react';
 import { useToast } from '../components/ToastContext';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
-import Pagination from '../components/ui/Pagination';
-import { fetcher } from '@/lib/apiClient';
-
-const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then(r => r.json());
+import { Pagination } from '../components/ui/Pagination';
 
 function CalendarErrorBoundary({ children }: { children: React.ReactNode }) {
   try {
@@ -23,9 +20,9 @@ function CalendarErrorBoundary({ children }: { children: React.ReactNode }) {
 }
 
 export default function PartyDashboard() {
-  const { data: parties = [], mutate } = useSWR('/parties', fetcher);
-  const { data: customers = [], mutate: mutateCustomers } = useSWR('/customers', fetcher);
-  const { data: appointments = [] } = useSWR('/appointments/upcoming', fetcher);
+  const { data: parties = [], mutate } = useSWR('/parties');
+  const { data: customers = [], mutate: mutateCustomers } = useSWR('/customers');
+  const { data: appointments = [] } = useSWR('/appointments/upcoming');
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState({ name: '', eventDate: '', customerId: '' });
@@ -156,7 +153,10 @@ export default function PartyDashboard() {
       )}
       <ul className="divide-y">
         {paginated.map((p: any) => (
-          // ... existing code ...
+          <li key={p.id} className="p-4">
+            <div className="font-bold">{p.name}</div>
+            <div className="text-gray-500 text-sm">{p.eventDate ? new Date(p.eventDate).toLocaleDateString() : ''}</div>
+          </li>
         ))}
       </ul>
       <Pagination

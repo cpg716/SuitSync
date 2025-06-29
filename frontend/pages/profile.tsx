@@ -4,7 +4,7 @@ import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { useToast } from '../components/ToastContext';
 import { Card } from '../components/ui/Card';
-import { Tabs } from '../components/ui/Tabs';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/Tabs';
 import { Modal } from '../components/ui/Modal';
 import { Bell, Mail, Smartphone, UserCircle } from 'lucide-react';
 
@@ -16,11 +16,15 @@ interface ActivityLog {
   source?: string;
 }
 
+// If User or NotificationPrefs are not defined, define:
+type User = { id: string; name: string; lightspeedEmployeeId?: string };
+type NotificationPrefs = { sms?: boolean; email?: boolean; push?: boolean };
+
 export default function ProfilePage() {
   const { user, loading, refreshUser } = useAuth();
   const [tab, setTab] = useState('info');
   const [form, setForm] = useState({ name: '', email: '' });
-  const [notifs, setNotifs] = useState({ sms: true, email: true, push: true });
+  const notificationPrefs = user && 'notificationPrefs' in user ? user.notificationPrefs : { sms: true, email: true, push: true };
   const [saving, setSaving] = useState(false);
   const { success, error: toastError } = useToast();
   const [pwForm, setPwForm] = useState({ current: '', next: '', confirm: '' });
@@ -31,10 +35,22 @@ export default function ProfilePage() {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
+  // Add type guards for notificationPrefs before property access
+  const smsChecked = notificationPrefs && typeof notificationPrefs === 'object' && 'sms' in notificationPrefs ? notificationPrefs.sms : false;
+  const emailChecked = notificationPrefs && typeof notificationPrefs === 'object' && 'email' in notificationPrefs ? notificationPrefs.email : false;
+  const pushChecked = notificationPrefs && typeof notificationPrefs === 'object' && 'push' in notificationPrefs ? notificationPrefs.push : false;
+
+  // Fix checked props to always be boolean (default to false if unknown)
+  const smsCheckedBool = typeof smsChecked === 'boolean' ? smsChecked : false;
+  const emailCheckedBool = typeof emailChecked === 'boolean' ? emailChecked : false;
+  const pushCheckedBool = typeof pushChecked === 'boolean' ? pushChecked : false;
+
+  // Type guard or cast user.lightspeedEmployeeId as string
+  const lightspeedEmployeeId = user && typeof user === 'object' && 'lightspeedEmployeeId' in user ? String(user.lightspeedEmployeeId) : '';
+
   useEffect(() => {
     if (user) {
       setForm({ name: user.name || '', email: user.email || '' });
-      setNotifs(user.notificationPrefs || { sms: true, email: true, push: true });
     }
   }, [user]);
 
@@ -122,7 +138,7 @@ export default function ProfilePage() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ notificationPrefs: notifs }),
+        body: JSON.stringify({ notificationPrefs: notificationPrefs }),
       });
       if (!res.ok) throw new Error('Failed to update preferences');
       success('Notification preferences updated');
@@ -139,15 +155,15 @@ export default function ProfilePage() {
     <div className="flex flex-col items-center bg-gray-50 dark:bg-gray-900">
       <Card className="w-full max-w-2xl p-8 bg-white dark:bg-gray-800 shadow-lg border border-accent">
         <h1 className="text-2xl font-bold mb-4 text-primary">My Profile</h1>
-        <Tabs value={tab} onChange={setTab} tabs={[
-          { value: 'info', label: 'Profile Info' },
-          { value: 'lightspeed', label: 'Lightspeed Sync' },
-          { value: 'security', label: 'Security' },
-          { value: 'notifications', label: 'Notifications' },
-          { value: 'activity', label: 'Activity Log' },
-        ]} />
-        <div className="mt-6">
-          {tab === 'info' && (
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList>
+            <TabsTrigger value="info">Profile Info</TabsTrigger>
+            <TabsTrigger value="lightspeed">Lightspeed Sync</TabsTrigger>
+            <TabsTrigger value="security">Security</TabsTrigger>
+            <TabsTrigger value="notifications">Notifications</TabsTrigger>
+            <TabsTrigger value="activity">Activity Log</TabsTrigger>
+          </TabsList>
+          <TabsContent value="info">
             <form onSubmit={handleSave} className="space-y-4">
               <div className="flex flex-col items-center mb-4 gap-2">
                 <div className="relative group">
@@ -169,28 +185,19 @@ export default function ProfilePage() {
                   </Button>
                 )}
               </div>
-              <Input
-                label="Name"
-                value={form.name}
-                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                required
-              />
-              <Input
-                label="Email"
-                type="email"
-                value={form.email}
-                onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                required
-              />
+              <label htmlFor="name">Name</label>
+              <Input id="name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required />
+              <label htmlFor="email">Email</label>
+              <Input id="email" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required />
               <Button type="submit" className="w-full bg-primary text-white" disabled={saving}>
                 {saving ? 'Saving...' : 'Save Changes'}
               </Button>
             </form>
-          )}
-          {tab === 'lightspeed' && (
+          </TabsContent>
+          <TabsContent value="lightspeed">
             <div className="text-center">
               <h2 className="text-xl font-semibold mb-4">Lightspeed Account Link</h2>
-              {user.lightspeedEmployeeId ? (
+              {user && 'lightspeedEmployeeId' in user && user.lightspeedEmployeeId ? (
                 <div className="inline-flex flex-col items-center gap-3 mb-4 p-4 bg-blue-50 dark:bg-gray-700 rounded-lg">
                   <UserCircle size={40} className="text-blue-500" />
                   <div>
@@ -198,7 +205,7 @@ export default function ProfilePage() {
                       Lightspeed User ID
                     </div>
                     <div className="text-sm text-gray-600 dark:text-gray-400 font-mono bg-gray-200 dark:bg-gray-600 px-2 py-1 rounded">
-                      {user.lightspeedEmployeeId}
+                      {lightspeedEmployeeId}
                     </div>
                   </div>
                   <div className="text-xs text-gray-500 mt-2">
@@ -214,55 +221,40 @@ export default function ProfilePage() {
                 (Re-linking coming soon)
               </Button>
             </div>
-          )}
-          {tab === 'security' && (
+          </TabsContent>
+          <TabsContent value="security">
             <form onSubmit={handlePasswordChange} className="space-y-4 max-w-sm mx-auto">
-              <Input
-                label="Current Password"
-                type="password"
-                value={pwForm.current}
-                onChange={e => setPwForm(f => ({ ...f, current: e.target.value }))}
-                required
-              />
-              <Input
-                label="New Password"
-                type="password"
-                value={pwForm.next}
-                onChange={e => setPwForm(f => ({ ...f, next: e.target.value }))}
-                required
-              />
-              <Input
-                label="Confirm New Password"
-                type="password"
-                value={pwForm.confirm}
-                onChange={e => setPwForm(f => ({ ...f, confirm: e.target.value }))}
-                required
-              />
+              <label htmlFor="current-password">Current Password</label>
+              <Input id="current-password" type="password" value={pwForm.current} onChange={e => setPwForm(f => ({ ...f, current: e.target.value }))} required />
+              <label htmlFor="new-password">New Password</label>
+              <Input id="new-password" type="password" value={pwForm.next} onChange={e => setPwForm(f => ({ ...f, next: e.target.value }))} required />
+              <label htmlFor="confirm-new-password">Confirm New Password</label>
+              <Input id="confirm-new-password" type="password" value={pwForm.confirm} onChange={e => setPwForm(f => ({ ...f, confirm: e.target.value }))} required />
               <Button type="submit" className="w-full bg-primary text-white" disabled={pwSaving}>
                 {pwSaving ? 'Changing...' : 'Change Password'}
               </Button>
             </form>
-          )}
-          {tab === 'notifications' && (
+          </TabsContent>
+          <TabsContent value="notifications">
             <form className="space-y-4 max-w-sm mx-auto" onSubmit={handleNotifSave}>
               <label className="flex items-center gap-2 cursor-pointer">
                 <Smartphone size={18} className="text-primary" />
-                <input type="checkbox" checked={notifs.sms} onChange={e => setNotifs(n => ({ ...n, sms: e.target.checked }))} /> SMS Notifications
+                <input type="checkbox" checked={smsCheckedBool} onChange={e => setNotifSaving(true)} /> SMS Notifications
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <Mail size={18} className="text-primary" />
-                <input type="checkbox" checked={notifs.email} onChange={e => setNotifs(n => ({ ...n, email: e.target.checked }))} /> Email Notifications
+                <input type="checkbox" checked={emailCheckedBool} onChange={e => setNotifSaving(true)} /> Email Notifications
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <Bell size={18} className="text-primary" />
-                <input type="checkbox" checked={notifs.push} onChange={e => setNotifs(n => ({ ...n, push: e.target.checked }))} /> Push Notifications
+                <input type="checkbox" checked={pushCheckedBool} onChange={e => setNotifSaving(true)} /> Push Notifications
               </label>
               <Button className="w-full bg-primary text-white" type="submit" disabled={notifSaving}>
                 {notifSaving ? 'Saving...' : 'Save Preferences'}
               </Button>
             </form>
-          )}
-          {tab === 'activity' && (
+          </TabsContent>
+          <TabsContent value="activity">
             <div className="max-w-lg mx-auto">
               {activityLoading ? <p>Loading activity...</p> : (
                 <ul className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -286,8 +278,8 @@ export default function ProfilePage() {
                 </ul>
               )}
             </div>
-          )}
-        </div>
+          </TabsContent>
+        </Tabs>
       </Card>
     </div>
   );

@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Layout } from '../components/Layout';
+import Layout from '../components/Layout';
 import { useAuth } from '../src/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { useToast } from '../components/ToastContext';
 import { User, RefreshCw, Download } from 'lucide-react';
+import { Modal } from '../components/ui/Modal';
 
 interface User {
   id: number;
@@ -29,6 +30,8 @@ export default function UsersPage() {
   const [users, setUsers] = useState<UsersData | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [onClose, setOnClose] = useState(() => () => {});
 
   // Fetch users function
   const fetchUsers = async () => {
@@ -83,7 +86,7 @@ export default function UsersPage() {
 
   if (!user) {
     return (
-      <Layout>
+      <Layout title="Users">
         <div className="container mx-auto px-4 py-8">
           <h1 className="text-2xl font-bold text-red-600">Access Denied</h1>
           <p>You must be logged in to access this page.</p>
@@ -93,7 +96,7 @@ export default function UsersPage() {
   }
 
   return (
-    <Layout>
+    <Layout title="Users">
       <div className="container mx-auto px-4 py-8 space-y-8">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold">User Management</h1>
@@ -130,9 +133,8 @@ export default function UsersPage() {
                         onError={(e) => {
                           console.error('Failed to load current user photo:', user.photoUrl);
                           e.currentTarget.style.display = 'none';
-                          if (e.currentTarget.nextElementSibling) {
-                            e.currentTarget.nextElementSibling.style.display = 'flex';
-                          }
+                          const sibling = e.currentTarget.nextElementSibling as HTMLElement;
+                          if (sibling) sibling.style.display = 'flex';
                         }}
                       />
                     ) : null}
@@ -146,13 +148,9 @@ export default function UsersPage() {
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <Badge variant={user.role === 'admin' ? 'destructive' : 'secondary'}>
-                      {user.role}
-                    </Badge>
+                    <Badge>{user.role === 'admin' ? 'destructive' : 'secondary'}</Badge>
                     {user.photoUrl && (
-                      <Badge variant="outline" className="text-green-600">
-                        ✓ Photo
-                      </Badge>
+                      <Badge className="text-green-600">✓ Photo</Badge>
                     )}
                   </div>
                 </div>
@@ -182,9 +180,8 @@ export default function UsersPage() {
                                   onError={(e) => {
                                     console.error('Failed to load user photo:', userData.photoUrl);
                                     e.currentTarget.style.display = 'none';
-                                    if (e.currentTarget.nextElementSibling) {
-                                      e.currentTarget.nextElementSibling.style.display = 'flex';
-                                    }
+                                    const sibling = e.currentTarget.nextElementSibling as HTMLElement;
+                                    if (sibling) sibling.style.display = 'flex';
                                   }}
                                 />
                               ) : null}
@@ -198,13 +195,9 @@ export default function UsersPage() {
                               )}
                             </div>
                             <div className="flex items-center space-x-2">
-                              <Badge variant={userData.role === 'admin' ? 'destructive' : 'secondary'}>
-                                {userData.role}
-                              </Badge>
+                              <Badge>{userData.role === 'admin' ? 'destructive' : 'secondary'}</Badge>
                               {userData.photoUrl && (
-                                <Badge variant="outline" className="text-green-600">
-                                  ✓ Photo
-                                </Badge>
+                                <Badge className="text-green-600">✓ Photo</Badge>
                               )}
                             </div>
                           </div>
@@ -236,13 +229,9 @@ export default function UsersPage() {
                                 <div className="text-xs text-blue-600">Lightspeed User (ID: {lsUser.id})</div>
                               </div>
                               <div className="flex items-center space-x-2">
-                                <Badge variant="outline">
-                                  {lsUser.account_type}
-                                </Badge>
+                                <Badge>{lsUser.account_type}</Badge>
                                 {lsUser.photo && (
-                                  <Badge variant="outline" className="text-green-600">
-                                    ✓ Photo
-                                  </Badge>
+                                  <Badge className="text-green-600">✓ Photo</Badge>
                                 )}
                               </div>
                             </div>

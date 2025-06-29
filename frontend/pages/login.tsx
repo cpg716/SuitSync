@@ -31,9 +31,9 @@ export default function LoginPage() {
       setShowSwitchUser(true);
       setLoadingUsers(true);
       axios.get('/api/users')
-        .then(res => setAllUsers(res.data))
+        .then(res => setAllUsers(Array.isArray(res.data) ? res.data : []))
         .catch(() => setAllUsers([]))
-        .finally(() => setLoadingUsers(false));
+        .then(() => setLoadingUsers(false));
     }
   }, [authLoading, user]);
 
@@ -86,6 +86,11 @@ export default function LoginPage() {
     window.location.href = '/api/auth/start-lightspeed';
   };
 
+  const handleUserSelect = (selectedUser) => {
+    // Implement Lightspeed OAuth for the selected user
+    console.log('Selected user:', selectedUser);
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-[linear-gradient(to_bottom_right,_#dbeafe_0%,_#fff_50%,_#bfdbfe_100%)] dark:bg-[var(--bg-dark)] transition-colors">
       <Card className="w-full max-w-md p-8 bg-white shadow-2xl border border-accent">
@@ -134,17 +139,7 @@ export default function LoginPage() {
           </p>
         </div>
       </Card>
-      {showSwitchUser && (
-        <SwitchUserModal
-          allUsers={allUsers}
-          loadingUsers={loadingUsers}
-          onUserSelect={(selectedUser) => {
-            // Implement Lightspeed OAuth for the selected user
-            console.log('Selected user:', selectedUser);
-          }}
-          onClose={() => setShowSwitchUser(false)}
-        />
-      )}
+      <SwitchUserModal open={showSwitchUser} onClose={() => setShowSwitchUser(false)} allUsers={allUsers} onUserSelect={handleUserSelect} />
     </div>
   );
 }

@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import useSWR from 'swr';
 import dynamic from 'next/dynamic';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { Calendar as CalendarIcon, List as ListIcon, Plus, GripVertical, Clock, User, Scissors } from 'lucide-react';
@@ -61,7 +61,7 @@ export default function AlterationsPage() {
   const pageSize = 10;
 
   // Get unique tailors from data
-  const tailorOptions = Array.from(new Set(jobs.map(j => j.tailor?.name).filter(Boolean)));
+  const tailorOptions: string[] = Array.isArray(jobs.map(j => j.tailor?.name).filter(Boolean)) ? jobs.map(j => j.tailor?.name).filter(Boolean) : [];
 
   // Tailor time tracking for today
   const today = new Date();
@@ -215,8 +215,6 @@ export default function AlterationsPage() {
       setDeleteLoading(false);
     }
   };
-
-  AlterationsPage.title = 'Alterations';
 
   if (isLoading) return <Skeleton className="h-screen w-full" />;
   if (error) return <div>Error loading jobs. Please try again later.</div>;
@@ -528,7 +526,7 @@ export default function AlterationsPage() {
       {/* Modals */}
       {printJob && (
         <Modal open={!!printJob} onClose={() => setPrintJob(null)}>
-          <TagPreview job={printJob} onPrint={() => window.print()} />
+          <TagPreview job={printJob} />
         </Modal>
       )}
       {selectedJob && (
@@ -554,13 +552,7 @@ export default function AlterationsPage() {
         title="Delete Alteration"
         message="Are you sure you want to delete this alteration? This cannot be undone."
       />
-      <AlterationJobModal
-        isOpen={createJobOpen}
-        onClose={() => setCreateJobOpen(false)}
-        onSubmit={handleCreateJobSubmit}
-        customers={Array.isArray(customers) ? customers : []}
-        parties={parties}
-      />
+      <AlterationJobModal open={createJobOpen} onClose={() => setCreateJobOpen(false)} onSubmit={handleCreateJobSubmit} customers={Array.isArray(customers) ? customers : []} parties={parties} />
 
     </div>
   );
@@ -606,9 +598,7 @@ function ExpandableAlterationCard({ job, setPrintJob, setEditJob, setDeleteJob }
                 <div>
                   <span className="font-bold">Measurements:</span>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-1">
-                    {Object.entries(job.measurements).map(([k, v]) => (
-                      v ? <div key={k}><span className="capitalize text-gray-500">{k.replace(/([A-Z])/g, ' $1')}</span>: <span className="font-mono ml-2">{v}{/in|length|waist|chest|hips|shoulder|overarm|neck|inseam|outseam|collar|sleeve/.test(k) ? '"' : ''}</span></div> : null
-                    ))}
+                    {Object.entries(job.measurements).map(([k, v]) => v ? <div key={k}><span className="capitalize text-gray-500">{k.replace(/([A-Z])/g, ' $1')}</span>: <span className="font-mono ml-2">{String(v)}{/in|length|waist|chest|hips|shoulder|overarm|neck|inseam|outseam|collar|sleeve/.test(k) ? '"' : ''}</span></div> : null)}
                   </div>
                 </div>
               )}

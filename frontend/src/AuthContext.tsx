@@ -47,18 +47,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLightspeedConnected, setIsLightspeedConnected] = useState(false);
   const { success: toastSuccess, error: toastError } = useToast();
 
+  const fetcher = (url: string): Promise<User | null> => Promise.resolve(api.get(url)).then(res => res.data as User | null);
+
   const { data: user, mutate, isLoading } = useSWR<User | null>('/auth/session', fetcher, {
     shouldRetryOnError: false,
     onError: (err) => {
-      if (err.response?.status !== 401) {
-        setAuthError('Backend unavailable');
-      } else {
-        setAuthError(null);
+      if (err && typeof err === 'object' && 'response' in err && err.response && typeof err.response === 'object' && 'status' in err.response) {
+        if (err.response.status !== 401) {
+          setAuthError('Backend unavailable');
+        } else {
+          setAuthError(null);
+        }
       }
     },
     onSuccess: (data) => {
-      if (data) {
-        console.log('Auth Context - User data from SWR:', data);
+      if (data && typeof data === 'object' && 'photoUrl' in data) {
         console.log('Auth Context - User photo URL:', data.photoUrl);
       }
     }
@@ -71,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   });
 
-  const lastSync = syncStatus?.lastSync ? new Date(syncStatus.lastSync) : null;
+  const lastSync = syncStatus && typeof syncStatus === 'object' && 'lastSync' in syncStatus ? new Date(syncStatus.lastSync as string) : null;
 
   useEffect(() => {
     if (user?.lightspeed) {
@@ -114,8 +117,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function connectLightspeed() {
     try {
       const res = await api.get('/auth/start-lightspeed');
-      if (res.data.url) {
-        window.location.href = res.data.url;
+      if (res.data && typeof res.data === 'object' && 'url' in res.data && res.data.url) {
+        window.location.href = res.data.url as string;
       }
     } catch (err) {
       toastError('Failed to start Lightspeed connection');

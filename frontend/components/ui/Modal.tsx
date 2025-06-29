@@ -1,22 +1,23 @@
 import React from 'react';
 
 interface ModalProps extends React.HTMLAttributes<HTMLDivElement> {
-  isOpen: boolean;
+  open: boolean;
   onClose: () => void;
   children: React.ReactNode;
   className?: string;
   size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
+  title?: string;
 }
 
 export const Modal: React.FC<ModalProps> = ({ 
-  isOpen, 
+  open, 
   onClose, 
   children, 
   className = '',
   size = 'md',
   ...props 
 }) => {
-  if (!isOpen) return null;
+  if (!open) return null;
 
   const sizeClasses = {
     sm: 'max-w-md',

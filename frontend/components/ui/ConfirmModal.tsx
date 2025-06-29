@@ -1,5 +1,5 @@
 import React from 'react';
-import Card from './Card';
+import { Card } from './Card';
 import { Button } from './Button';
 
 export const ConfirmModal = ({ open, onClose, onConfirm, loading, title, message }) => {

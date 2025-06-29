@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AppointmentStatus, AppointmentType } from '../../src/types/appointments';
-import { Button } from '@/components/ui/Button';
+import { Button } from './Button';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
@@ -40,7 +40,7 @@ export default function AppointmentModal({ open, onClose, onSubmit, appointment,
 
   useEffect(() => {
     if (open) {
-      api.get('/parties').then(res => setParties(res.data || [])).catch(err => setError("Failed to load parties."));
+      api.get('/parties').then(res => setParties(Array.isArray(res.data) ? res.data : [])).catch(err => setError("Failed to load parties."));
     }
   }, [open]);
 
@@ -48,7 +48,7 @@ export default function AppointmentModal({ open, onClose, onSubmit, appointment,
     if (partyId) {
       setMembers([]); // Clear previous members
       api.get(`/parties/${partyId}/members`).then(res => {
-          setMembers(res.data || []);
+          setMembers(Array.isArray(res.data) ? res.data : []);
       }).catch(err => {
         // setError("Failed to load party members.");
       });

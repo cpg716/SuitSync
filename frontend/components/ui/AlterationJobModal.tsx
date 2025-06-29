@@ -12,20 +12,13 @@ import { Separator } from './separator';
 import { Plus, Trash2, User, Calendar, Clock, AlertTriangle } from 'lucide-react';
 import { useToast } from '../ToastContext';
 import { format } from 'date-fns';
+import type { Party } from '../../src/types/parties';
 
 interface Customer {
   id: number;
   name: string;
   phone?: string;
   email?: string;
-}
-
-interface Party {
-  id: number;
-  name: string;
-  eventDate: string;
-  customer: Customer;
-  members: PartyMember[];
 }
 
 interface PartyMember {
@@ -51,7 +44,7 @@ interface AlterationJobPart {
 }
 
 interface AlterationJobModalProps {
-  isOpen: boolean;
+  open: boolean;
   onClose: () => void;
   onSubmit: (jobData: any) => Promise<void>;
   customers: Customer[];
@@ -117,7 +110,7 @@ const COMMON_TASKS = {
 };
 
 export function AlterationJobModal({
-  isOpen,
+  open,
   onClose,
   onSubmit,
   customers,
@@ -155,7 +148,7 @@ export function AlterationJobModal({
 
   // Reset form when modal opens/closes
   useEffect(() => {
-    if (isOpen) {
+    if (open) {
       setFormData({
         customerId: preselectedCustomerId || '',
         partyId: preselectedPartyId || '',
@@ -174,7 +167,7 @@ export function AlterationJobModal({
         tasks: []
       }]);
     }
-  }, [isOpen, preselectedCustomerId, preselectedPartyId, preselectedPartyMemberId]);
+  }, [open, preselectedCustomerId, preselectedPartyId, preselectedPartyMemberId]);
 
   const selectedParty = parties.find(p => p.id === parseInt(formData.partyId as string));
   const selectedCustomer = safeCustomers.find(c => c.id === parseInt(formData.customerId as string)) || selectedParty?.customer;
@@ -300,7 +293,7 @@ export function AlterationJobModal({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

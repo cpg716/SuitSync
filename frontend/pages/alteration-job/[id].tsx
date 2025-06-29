@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import GarmentAlterationTag from '@/components/ui/GarmentAlterationTag';
 import QRScanner from '@/components/ui/QRScanner';
 import { useToast } from '@/components/ToastContext';
@@ -172,7 +171,6 @@ export default function AlterationJobDetail({ job: initialJob }: AlterationJobDe
   const router = useRouter();
   const { success: toastSuccess, error: toastError } = useToast();
   const [job, setJob] = useState<AlterationJob>(initialJob);
-  const [activeTab, setActiveTab] = useState('overview');
   const [scannerOpen, setScannerOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [autoAssigning, setAutoAssigning] = useState(false);
@@ -292,7 +290,7 @@ export default function AlterationJobDetail({ job: initialJob }: AlterationJobDe
   };
 
   return (
-    <Layout>
+    <Layout title="Alteration Job">
       <div className="p-6 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -338,13 +336,6 @@ export default function AlterationJobDetail({ job: initialJob }: AlterationJobDe
             </Button>
             <Button
               variant="outline"
-              onClick={() => setActiveTab('tag')}
-            >
-              <Printer className="w-4 h-4 mr-2" />
-              View Tag
-            </Button>
-            <Button
-              variant="outline"
               onClick={() => router.push(`/alteration-job/${job.id}/edit`)}
             >
               <Edit className="w-4 h-4 mr-2" />
@@ -379,7 +370,7 @@ export default function AlterationJobDetail({ job: initialJob }: AlterationJobDe
                   <span className="font-medium">Phone:</span> {customerInfo.phone}
                 </div>
               )}
-              {customerInfo?.email && (
+              {customerInfo && typeof customerInfo === 'object' && 'email' in customerInfo && typeof customerInfo.email === 'string' && (
                 <div>
                   <span className="font-medium">Email:</span> {customerInfo.email}
                 </div>
@@ -458,260 +449,274 @@ export default function AlterationJobDetail({ job: initialJob }: AlterationJobDe
           </Card>
         </div>
 
-        {/* Main Content Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="parts">Parts & Tasks</TabsTrigger>
-            <TabsTrigger value="workflow">Workflow</TabsTrigger>
-            <TabsTrigger value="history">History</TabsTrigger>
-            <TabsTrigger value="tag">Print Tag</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="overview" className="space-y-6">
-            {/* Job Notes */}
-            {job.notes && (
+        {/* Main Content Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+          {/* Overview Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Overview</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {/* Job Notes */}
+              {job.notes && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Job Notes</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm bg-yellow-50 p-3 rounded border">{job.notes}</p>
+                  </CardContent>
+                </Card>
+              )}
+              {/* Parts Overview */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Job Notes</CardTitle>
+                  <CardTitle>Garment Parts Overview</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm bg-yellow-50 p-3 rounded border">{job.notes}</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {job.jobParts.map(part => (
+                      <Card key={part.id} className="border-2">
+                        <CardHeader className="pb-2">
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-base">{part.partName}</CardTitle>
+                            <Badge className={getPriorityBadgeClass(part.priority)}>
+                              {part.priority}
+                            </Badge>
+                          </div>
+                          <Badge className={getStatusBadgeClass(part.status)}>
+                            {part.status.replace('_', ' ')}
+                          </Badge>
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                          {part.assignedUser && (
+                            <div className="text-sm">
+                              <User className="w-3 h-3 inline mr-1" />
+                              {part.assignedUser.name}
+                            </div>
+                          )}
+                          {part.estimatedTime && (
+                            <div className="text-sm">
+                              <Clock className="w-3 h-3 inline mr-1" />
+                              {part.estimatedTime} min
+                            </div>
+                          )}
+                          <div className="text-sm">
+                            <span className="font-medium">Tasks:</span> {part.tasks.length}
+                          </div>
+                          <div className="text-sm">
+                            <span className="font-medium">Complete:</span> {part.tasks.filter(t => t.status === 'COMPLETE').length}/{part.tasks.length}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
                 </CardContent>
               </Card>
-            )}
-
-            {/* Parts Overview */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Garment Parts Overview</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {job.jobParts.map(part => (
-                    <Card key={part.id} className="border-2">
-                      <CardHeader className="pb-2">
-                        <div className="flex items-center justify-between">
-                          <CardTitle className="text-base">{part.partName}</CardTitle>
+            </CardContent>
+          </Card>
+          {/* Parts & Tasks Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Parts & Tasks</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {job.jobParts.map(part => (
+                <Card key={part.id} className="border-2">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="flex items-center gap-3">
+                          {part.partName}
                           <Badge className={getPriorityBadgeClass(part.priority)}>
                             {part.priority}
                           </Badge>
+                        </CardTitle>
+                        <div className="flex items-center gap-4 mt-2">
+                          <Badge className={getStatusBadgeClass(part.status)}>
+                            {part.status.replace('_', ' ')}
+                          </Badge>
+                          {part.assignedUser && (
+                            <span className="text-sm text-gray-600">
+                              <User className="w-4 h-4 inline mr-1" />
+                              {part.assignedUser.name}
+                            </span>
+                          )}
+                          {part.estimatedTime && (
+                            <span className="text-sm text-gray-600">
+                              <Clock className="w-4 h-4 inline mr-1" />
+                              {part.estimatedTime} min
+                            </span>
+                          )}
                         </div>
-                        <Badge className={getStatusBadgeClass(part.status)}>
-                          {part.status.replace('_', ' ')}
-                        </Badge>
-                      </CardHeader>
-                      <CardContent className="space-y-2">
-                        {part.assignedUser && (
-                          <div className="text-sm">
-                            <User className="w-3 h-3 inline mr-1" />
-                            {part.assignedUser.name}
-                          </div>
-                        )}
-                        {part.estimatedTime && (
-                          <div className="text-sm">
-                            <Clock className="w-3 h-3 inline mr-1" />
-                            {part.estimatedTime} min
-                          </div>
-                        )}
-                        <div className="text-sm">
-                          <span className="font-medium">Tasks:</span> {part.tasks.length}
+                      </div>
+                      <div className="text-center">
+                        <div className="text-xs font-mono bg-gray-100 px-2 py-1 rounded">
+                          {part.qrCode.slice(-8)}
                         </div>
-                        <div className="text-sm">
-                          <span className="font-medium">Complete:</span> {part.tasks.filter(t => t.status === 'COMPLETE').length}/{part.tasks.length}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="parts" className="space-y-6">
-            {job.jobParts.map(part => (
-              <Card key={part.id} className="border-2">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="flex items-center gap-3">
-                        {part.partName}
-                        <Badge className={getPriorityBadgeClass(part.priority)}>
-                          {part.priority}
-                        </Badge>
-                      </CardTitle>
-                      <div className="flex items-center gap-4 mt-2">
-                        <Badge className={getStatusBadgeClass(part.status)}>
-                          {part.status.replace('_', ' ')}
-                        </Badge>
-                        {part.assignedUser && (
-                          <span className="text-sm text-gray-600">
-                            <User className="w-4 h-4 inline mr-1" />
-                            {part.assignedUser.name}
-                          </span>
-                        )}
-                        {part.estimatedTime && (
-                          <span className="text-sm text-gray-600">
-                            <Clock className="w-4 h-4 inline mr-1" />
-                            {part.estimatedTime} min
-                          </span>
-                        )}
                       </div>
                     </div>
-                    <div className="text-center">
-                      <div className="text-xs font-mono bg-gray-100 px-2 py-1 rounded">
-                        {part.qrCode.slice(-8)}
-                      </div>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {/* Tasks */}
-                  {part.tasks.length > 0 && (
-                    <div className="space-y-3">
-                      <h4 className="font-semibold">Tasks:</h4>
-                      {part.tasks.map(task => (
-                        <div key={task.id} className="border rounded-lg p-3">
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium">{task.taskName}</span>
-                              <Badge className={getStatusBadgeClass(task.status)}>
-                                {task.status.replace('_', ' ')}
-                              </Badge>
+                  </CardHeader>
+                  <CardContent>
+                    {/* Tasks */}
+                    {part.tasks.length > 0 && (
+                      <div className="space-y-3">
+                        <h4 className="font-semibold">Tasks:</h4>
+                        {part.tasks.map(task => (
+                          <div key={task.id} className="border rounded-lg p-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{task.taskName}</span>
+                                <Badge className={getStatusBadgeClass(task.status)}>
+                                  {task.status.replace('_', ' ')}
+                                </Badge>
+                              </div>
+                              {task.assignedUser && (
+                                <span className="text-sm text-gray-600">
+                                  {task.assignedUser.name}
+                                </span>
+                              )}
                             </div>
-                            {task.assignedUser && (
-                              <span className="text-sm text-gray-600">
-                                {task.assignedUser.name}
-                              </span>
+                            
+                            {task.measurements && (
+                              <div className="text-sm mb-1">
+                                <span className="font-medium">Measurements:</span> {task.measurements}
+                              </div>
+                            )}
+                            
+                            {task.notes && (
+                              <div className="text-sm mb-2">
+                                <span className="font-medium">Notes:</span> {task.notes}
+                              </div>
+                            )}
+                            
+                            {(task.startTime || task.finishTime) && (
+                              <div className="text-xs text-gray-500 space-y-1">
+                                {task.startTime && (
+                                  <div>Started: {formatDateTime(task.startTime)}</div>
+                                )}
+                                {task.finishTime && (
+                                  <div>Finished: {formatDateTime(task.finishTime)}</div>
+                                )}
+                              </div>
                             )}
                           </div>
-                          
-                          {task.measurements && (
-                            <div className="text-sm mb-1">
-                              <span className="font-medium">Measurements:</span> {task.measurements}
+                        ))}
+                      </div>
+                    )}
+                    
+                    {part.notes && (
+                      <div className="mt-4">
+                        <span className="font-medium">Part Notes:</span>
+                        <p className="text-sm bg-gray-50 p-2 rounded mt-1">{part.notes}</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </CardContent>
+          </Card>
+          {/* Workflow Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Workflow</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Workflow Steps</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {job.workflowSteps.map(step => (
+                      <div key={step.id} className="flex items-center justify-between p-3 border rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <Checkbox
+                            checked={step.completed}
+                            onCheckedChange={(checked) => handleWorkflowStepToggle(step.id, checked as boolean)}
+                            disabled={loading}
+                          />
+                          <div>
+                            <div className={`font-medium ${step.completed ? 'line-through text-gray-500' : ''}`}>
+                              {step.stepName}
                             </div>
-                          )}
-                          
-                          {task.notes && (
-                            <div className="text-sm mb-2">
-                              <span className="font-medium">Notes:</span> {task.notes}
-                            </div>
-                          )}
-                          
-                          {(task.startTime || task.finishTime) && (
-                            <div className="text-xs text-gray-500 space-y-1">
-                              {task.startTime && (
-                                <div>Started: {formatDateTime(task.startTime)}</div>
-                              )}
-                              {task.finishTime && (
-                                <div>Finished: {formatDateTime(task.finishTime)}</div>
-                              )}
-                            </div>
-                          )}
+                            {step.completed && step.completedAt && (
+                              <div className="text-xs text-gray-500">
+                                Completed {formatDistanceToNow(new Date(step.completedAt))} ago
+                                {step.completedByUser && ` by ${step.completedByUser.name}`}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                  
-                  {part.notes && (
-                    <div className="mt-4">
-                      <span className="font-medium">Part Notes:</span>
-                      <p className="text-sm bg-gray-50 p-2 rounded mt-1">{part.notes}</p>
-                    </div>
-                  )}
+                        <Badge className={step.completed ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
+                          {step.completed ? 'Complete' : 'Pending'}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
                 </CardContent>
               </Card>
-            ))}
-          </TabsContent>
-
-          <TabsContent value="workflow" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Workflow Steps</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {job.workflowSteps.map(step => (
-                    <div key={step.id} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <Checkbox
-                          checked={step.completed}
-                          onCheckedChange={(checked) => handleWorkflowStepToggle(step.id, checked as boolean)}
-                          disabled={loading}
-                        />
+            </CardContent>
+          </Card>
+          {/* History Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>History</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Card>
+                <CardHeader>
+                  <CardTitle>QR Scan History</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {job.jobParts.flatMap(part => 
+                      part.scanLogs.map(log => ({ ...log, partName: part.partName }))
+                    ).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map(log => (
+                      <div key={log.id} className="flex items-center justify-between p-3 border rounded-lg">
                         <div>
-                          <div className={`font-medium ${step.completed ? 'line-through text-gray-500' : ''}`}>
-                            {step.stepName}
+                          <div className="font-medium">
+                            {log.scanType.replace('_', ' ')} - {(log as any).partName}
                           </div>
-                          {step.completed && step.completedAt && (
+                          <div className="text-sm text-gray-600">
+                            by {log.user.name} • {formatDateTime(log.timestamp)}
+                          </div>
+                          {log.location && (
                             <div className="text-xs text-gray-500">
-                              Completed {formatDistanceToNow(new Date(step.completedAt))} ago
-                              {step.completedByUser && ` by ${step.completedByUser.name}`}
+                              Location: {log.location}
                             </div>
                           )}
                         </div>
+                        <Badge className="bg-blue-100 text-blue-800">
+                          {log.result || 'Success'}
+                        </Badge>
                       </div>
-                      <Badge className={step.completed ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
-                        {step.completed ? 'Complete' : 'Pending'}
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="history" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>QR Scan History</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {job.jobParts.flatMap(part => 
-                    part.scanLogs.map(log => ({ ...log, partName: part.partName }))
-                  ).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map(log => (
-                    <div key={log.id} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div>
-                        <div className="font-medium">
-                          {log.scanType.replace('_', ' ')} - {(log as any).partName}
-                        </div>
-                        <div className="text-sm text-gray-600">
-                          by {log.user.name} • {formatDateTime(log.timestamp)}
-                        </div>
-                        {log.location && (
-                          <div className="text-xs text-gray-500">
-                            Location: {log.location}
-                          </div>
-                        )}
-                      </div>
-                      <Badge className="bg-blue-100 text-blue-800">
-                        {log.result || 'Success'}
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="tag" className="space-y-6">
-            <GarmentAlterationTag 
-              job={job}
-              showWorkflow={true}
-            />
-          </TabsContent>
-        </Tabs>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </CardContent>
+          </Card>
+          {/* Tag Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Tag</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <GarmentAlterationTag job={job} showWorkflow={true} />
+            </CardContent>
+          </Card>
+        </div>
 
         {/* QR Scanner Modal */}
         <QRScanner
-          isOpen={scannerOpen}
+          open={scannerOpen}
           onClose={() => setScannerOpen(false)}
           onScanSuccess={handleScanSuccess}
         />
 
         {/* Auto-Assign Preview Modal */}
-        <Modal isOpen={showAutoAssignModal} onClose={() => setShowAutoAssignModal(false)} size="lg">
+        <Modal open={showAutoAssignModal} onClose={() => setShowAutoAssignModal(false)} size="lg">
           <div className="p-2">
             <h2 className="text-xl font-bold mb-4">Auto-Assignment Preview</h2>
             {autoAssignError && <div className="text-red-600 mb-2">{autoAssignError}</div>}
@@ -782,7 +787,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
   const { id } = context.params!;
   
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/alterations/jobs/${id}`);
+    const response = await fetch(`/api/alterations/jobs/${id}`);
     
     if (!response.ok) {
       return {

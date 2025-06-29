@@ -20,7 +20,7 @@ interface SyncStatusData {
   errorMessage: string | null;
 }
 
-interface LightspeedHealth {
+export interface LightspeedHealth {
   lightspeedConnection: 'OK' | 'ERROR';
   lightspeedApiError: string | null;
   syncStatuses: SyncStatusData[];

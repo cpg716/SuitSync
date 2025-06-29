@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { Card } from '../../components/ui/Card';
+import { Button } from '../../components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ToastContext';
-import { Modal } from '@/components/ui/Modal';
+import { Modal } from '../../components/ui/Modal';
 import { Input } from '@/components/ui/Input';
-import { Pagination } from '@/components/ui/Pagination';
+import { Pagination } from '../../components/ui/Pagination';
 import { format, addMonths, differenceInMonths, differenceInDays } from 'date-fns';
 import useSWR from 'swr';
-import { api, fetcher } from '@/lib/apiClient';
+import { api } from '@/lib/apiClient';
+import { useRouter } from 'next/router';
 
 const PHASES = [
   { name: 'Suit Selection', color: 'bg-blue-500', monthsFrom: 6, monthsTo: 3 },
@@ -57,7 +58,7 @@ function PartyModal({ open, onClose, onSubmit, initial, customers }) {
   const [form, setForm] = useState(initial || { name: '', eventDate: '', notes: '', customerId: '' });
   const [saving, setSaving] = useState(false);
   return (
-    <Modal isOpen={open}>
+    <Modal open={open} onClose={onClose}>
       <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
         <div className="bg-white dark:bg-neutral-900 p-6 rounded shadow-lg w-96">
           <h2 className="text-xl font-bold mb-4">{initial ? 'Edit Party' : 'Add Party'}</h2>
@@ -82,12 +83,18 @@ function PartyModal({ open, onClose, onSubmit, initial, customers }) {
   );
 }
 
+// If Party is not defined, define:
+type Party = { id: string; name: string; [key: string]: any };
+
+const fetcher = (url: string): Promise<{ parties: Party[] }> => Promise.resolve(api.get(url)).then(res => res.data as { parties: Party[] });
+
 export default function PartiesList() {
   const { data: partiesData, error, isLoading, mutate } = useSWR('/parties', fetcher);
   const { data: customersData } = useSWR('/customers', fetcher);
+  const router = useRouter();
 
-  const parties = partiesData?.parties || [];
-  const customers = customersData?.customers || [];
+  const parties = partiesData && typeof partiesData === 'object' && 'parties' in partiesData ? partiesData.parties : [];
+  const customers = customersData && typeof customersData === 'object' && 'customers' in customersData ? customersData.customers : [];
 
   const [search, setSearch] = useState('');
   const { success, error: toastError } = useToast();
@@ -112,13 +119,18 @@ export default function PartiesList() {
         success('Party updated successfully');
       } else {
         const response = await api.post('/parties', formData);
-        setNewParty(response.data.party);
+        if (response.data && typeof response.data === 'object' && 'party' in response.data) {
+          setNewParty(response.data.party);
+        }
         success('Party created successfully!');
         setShowSalesFlow(true);
       }
       mutate(); // Revalidate the parties list
       setModalOpen(false);
       setEditParty(null);
+      if (newParty && typeof newParty === 'object' && 'id' in newParty) {
+        router.push(`/parties/${newParty.id}`);
+      }
     } catch (err) {
       toastError(err.response?.data?.error || 'Failed to save party');
     }
@@ -331,7 +343,7 @@ export default function PartiesList() {
       />
       {/* Sales Flow Modal after party creation */}
       {showSalesFlow && newParty && (
-        <Modal isOpen={showSalesFlow} onClose={() => setShowSalesFlow(false)}>
+        <Modal open={showSalesFlow} onClose={() => setShowSalesFlow(false)}>
           <div className="w-full max-w-lg p-6">
             <h2 className="text-xl font-bold mb-2">Sales Flow for {newParty.name}</h2>
             <ProgressBar phase={getPhase(newParty.eventDate, new Date())} />

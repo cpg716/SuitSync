@@ -116,7 +116,7 @@ function TaskTypesAdmin() {
   const [deleteId, setDeleteId] = useState(null);
 
   useEffect(() => {
-    fetch('/api/admin/settings/task-types').then(r => r.json()).then(setTypes).finally(() => setLoading(false));
+    fetch('/api/admin/settings/task-types').then(r => r.json()).then(setTypes).catch(() => {}).then(() => setLoading(false));
   }, []);
 
   const handleEdit = t => { setEditing(t.id); setForm({ name: t.name, defaultDuration: t.defaultDuration }); };
@@ -419,7 +419,7 @@ function UsersAdminCard() {
           )}
         </>
       )}
-      <Modal isOpen={!!profileUserId} onClose={() => setProfileUserId(null)}>
+      <Modal open={!!profileUserId} onClose={() => setProfileUserId(null)}>
         {profileUserId && <UserSettings userId={profileUserId} adminView />}
       </Modal>
     </Card>
@@ -538,25 +538,25 @@ export default function AdminSettings() {
                 <TabsContent value="general">
                   <form onSubmit={handleSave} className="space-y-8">
                     {/* API Keys & Integration */}
-                    <Card title={<span className="flex items-center gap-2"><KeyRound size={20} /> API Keys & Integration</span>}>
+                    <Card title="API Keys & Integration">
                       <div className="mb-4">
-                        <label className="block font-semibold mb-1 flex items-center gap-1">Podium SMS API Key <Info size={16} className="text-gray-400" title="Used for SMS reminders." /></label>
+                        <label className="block font-semibold mb-1 flex items-center gap-1">Podium SMS API Key <Info size={16} className="text-gray-400" /></label>
                         <Input name="podiumApiKey" value={settings?.podiumApiKey || ''} onChange={handleChange} className="w-full border rounded px-3 py-2" />
                       </div>
                       <div className="mb-4">
-                        <label className="block font-semibold mb-1 flex items-center gap-1">SendGrid API Key <Info size={16} className="text-gray-400" title="Used for email reminders." /></label>
+                        <label className="block font-semibold mb-1 flex items-center gap-1">SendGrid API Key <Info size={16} className="text-gray-400" /></label>
                         <Input name="sendgridApiKey" value={settings?.sendgridApiKey || ''} onChange={handleChange} className="w-full border rounded px-3 py-2" />
                       </div>
                       <div className="mb-4">
-                        <label className="block font-semibold mb-1 flex items-center gap-1">SendGrid From Email <Info size={16} className="text-gray-400" title="Sender email for reminders." /></label>
+                        <label className="block font-semibold mb-1 flex items-center gap-1">SendGrid From Email <Info size={16} className="text-gray-400" /></label>
                         <Input name="sendgridFrom" value={settings?.sendgridFrom || ''} onChange={handleChange} className="w-full border rounded px-3 py-2" type="email" />
                       </div>
                       <div className="mb-4">
-                        <label className="block font-semibold mb-1 flex items-center gap-1">API Base URL <Info size={16} className="text-gray-400" title="Base URL for API calls." /></label>
+                        <label className="block font-semibold mb-1 flex items-center gap-1">API Base URL <Info size={16} className="text-gray-400" /></label>
                         <Input name="apiBaseUrl" value={settings?.apiBaseUrl || ''} onChange={handleChange} className="w-full border rounded px-3 py-2" type="url" />
                       </div>
                       <div className="mb-2">
-                        <label className="block font-semibold mb-1 flex items-center gap-1">Sync Frequency (minutes) <Info size={16} className="text-gray-400" title="How often to sync with Lightspeed." /></label>
+                        <label className="block font-semibold mb-1 flex items-center gap-1">Sync Frequency (minutes) <Info size={16} className="text-gray-400" /></label>
                         <Input name="syncFrequency" value={settings?.syncFrequency || ''} onChange={handleChange} className="w-full border rounded px-3 py-2" type="number" min={1} max={120} />
                       </div>
                     </Card>

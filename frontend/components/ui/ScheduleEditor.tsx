@@ -170,7 +170,7 @@ export default function ScheduleEditor({
                     <span>{d}</span>
                     <Button
                       variant={value[i]?.isOff ? 'destructive' : 'outline'}
-                      size="xs"
+                      size="sm"
                       className="mt-1"
                       onClick={() => handleOffToggle(i)}
                       disabled={readOnly}
@@ -207,7 +207,7 @@ export default function ScheduleEditor({
                       onMouseEnter={() => handleDragEnter(dayIdx, slotIdx)}
                       onMouseUp={handleDragEnd}
                     >
-                      {conflict && <AlertTriangle className="w-4 h-4 inline text-red-600 dark:text-red-200" title={conflict.type} />}
+                      {conflict && <AlertTriangle className="w-4 h-4 inline text-red-600 dark:text-red-200" />}
                     </td>
                   );
                 })}

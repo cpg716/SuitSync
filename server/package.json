@@ -25,11 +25,12 @@
     "prisma": "^6.9.0"
   },
   "prisma": {
-    "schema": "../prisma/schema.prisma"
+    "schema": "prisma/schema.prisma"
   },
   "scripts": {
     "postinstall": "prisma generate",
     "dev": "nodemon index.js",
-    "prestart": "prisma generate"
+    "prestart": "prisma generate",
+    "demo": "node index.js"
   }
 }

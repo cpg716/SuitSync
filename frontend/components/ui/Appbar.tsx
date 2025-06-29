@@ -4,8 +4,6 @@ import { Bell, UserCircle, RefreshCw, Home, Percent, Settings, User, LogOut, Dow
 import { useRouter } from 'next/router';
 import { useAuth } from '../../src/AuthContext';
 import { usePWAInstall } from 'react-use-pwa-install';
-import { CommandMenu } from './CommandMenu';
-import { UserNav } from './UserNav';
 import { LightspeedStatus } from '../LightspeedStatus';
 import { Button } from './Button';
 import { ResourceSyncStatus } from '../ResourceSyncStatus';
@@ -50,11 +48,15 @@ export const Appbar: React.FC = () => {
     if (showSwitchUser && allUsers.length === 0) {
       setLoadingUsers(true);
       axios.get('/api/users')
-        .then(res => setAllUsers(res.data))
+        .then(res => setAllUsers(Array.isArray(res.data) ? res.data : []))
         .catch(() => setAllUsers([]))
-        .finally(() => setLoadingUsers(false));
+        .then(() => setLoadingUsers(false));
     }
   }, [showSwitchUser, allUsers.length]);
+
+  const handleUserSelect = (user) => {
+    // Handle user selection
+  };
 
   return (
     <header className="bg-white dark:bg-gray-950 text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-800 h-12 px-4 flex items-center fixed top-0 left-0 w-full z-50 shadow-sm dark:shadow-lg relative">
@@ -92,9 +94,8 @@ export const Appbar: React.FC = () => {
                       console.error('Failed to load user photo:', user.photoUrl);
                       // Fallback to user icon if image fails to load
                       e.currentTarget.style.display = 'none';
-                      if (e.currentTarget.nextElementSibling) {
-                        e.currentTarget.nextElementSibling.style.display = 'block';
-                      }
+                      const sibling = e.currentTarget.nextElementSibling as HTMLElement;
+                      if (sibling) sibling.style.display = 'block';
                     }}
                     onLoad={() => {
                       console.log('Successfully loaded user photo:', user.photoUrl);
@@ -152,7 +153,7 @@ export const Appbar: React.FC = () => {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <SwitchUserModal isOpen={showSwitchUser} onClose={() => setShowSwitchUser(false)} allUsers={allUsers} loading={loadingUsers} />
+      <SwitchUserModal open={showSwitchUser} onClose={() => setShowSwitchUser(false)} allUsers={allUsers} onUserSelect={handleUserSelect} />
     </header>
   );
 };

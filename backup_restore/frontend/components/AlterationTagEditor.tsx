@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import Button from './ui/Button';
+import { Button } from './ui/Button';
 import { useToast } from './ToastContext';
 
 // Dummy data for parties and customers (replace with real API calls in production)

@@ -64,8 +64,8 @@ export const AdminSettingsProvider = ({ children }: { children: ReactNode }) => 
         try {
             setLoading(true);
             const res = await api.get('/admin/settings');
-            setSettings({ ...defaultSettings, ...res.data });
-            setOriginal({ ...defaultSettings, ...res.data });
+            setSettings({ ...defaultSettings, ...(typeof res.data === 'object' && res.data !== null ? res.data : {}) });
+            setOriginal({ ...defaultSettings, ...(typeof res.data === 'object' && res.data !== null ? res.data : {}) });
         } catch (err) {
             error(err.response?.data?.error || 'Failed to fetch settings');
         } finally {
@@ -87,8 +87,8 @@ export const AdminSettingsProvider = ({ children }: { children: ReactNode }) => 
         try {
             setLoading(true);
             const res = await api.post('/admin/settings', settings);
-            setSettings({ ...defaultSettings, ...res.data });
-            setOriginal({ ...defaultSettings, ...res.data });
+            setSettings({ ...defaultSettings, ...(typeof res.data === 'object' && res.data !== null ? res.data : {}) });
+            setOriginal({ ...defaultSettings, ...(typeof res.data === 'object' && res.data !== null ? res.data : {}) });
             success('Settings saved!');
         } catch (err) {
             error(err.response?.data?.error || 'Failed to save settings');

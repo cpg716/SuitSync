@@ -122,10 +122,10 @@ export default function Dashboard() {
     <div className="w-full space-y-6">
       {/* Stats Cards Grid - Responsive */}
       <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title="Total Parties" value={metrics ? metrics.parties.length : null} link="/parties" />
-          <StatCard title="Upcoming Appointments" value={metrics ? metrics.appts.length : null} link="/appointments" />
-          <StatCard title="Pending Alterations" value={metrics ? alterationsArr.filter(a => a.status === 'pending').length : null} link="/alterations" />
-          <StatCard title="Top Commission" value={metrics ? `$${Math.max(0, ...salesBar.map(c => c.sales || 0)).toFixed(2)}` : null} link="/sales" />
+          <StatCard title="Total Parties" value={metrics ? metrics.parties.length : null} link="/parties" icon={<span />} />
+          <StatCard title="Upcoming Appointments" value={metrics ? metrics.appts.length : null} link="/appointments" icon={<span />} />
+          <StatCard title="Pending Alterations" value={metrics ? alterationsArr.filter(a => a.status === 'pending').length : null} link="/alterations" icon={<span />} />
+          <StatCard title="Top Commission" value={metrics ? `$${Math.max(0, ...salesBar.map(c => c.sales || 0)).toFixed(2)}` : null} link="/sales" icon={<span />} />
       </div>
       
       {/* Today's Activities Grid - Responsive */}
@@ -144,7 +144,7 @@ export default function Dashboard() {
                        <p className="text-sm font-medium leading-none truncate">{a.party?.name || '—'}</p>
                        <p className="text-sm text-muted-foreground">{a.dateTime ? new Date(a.dateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</p>
                      </div>
-                     <Badge variant="outline" className="flex-shrink-0">{a.type}</Badge>
+                     <Badge className="flex-shrink-0">{a.type}</Badge>
                   </div>
                 ))}
                 {todaysAppts.length > 5 && (
@@ -172,7 +172,7 @@ export default function Dashboard() {
                            <p className="text-sm font-medium leading-none truncate">{a.party?.name || '—'}</p>
                            <p className="text-sm text-muted-foreground truncate">{a.tailor?.name || 'Unassigned'}</p>
                          </div>
-                         <Badge variant={a.status === 'complete' ? 'default' : 'secondary'} className="flex-shrink-0">{a.status}</Badge>
+                         <Badge className="flex-shrink-0">{a.status}</Badge>
                       </div>
                     ))}
                     {todaysAlts.length > 5 && (

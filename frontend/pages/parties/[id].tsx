@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
-import Pagination from '../../components/ui/Pagination';
+import { Pagination } from '../../components/ui/Pagination';
+import { Button } from '../../components/ui/Button';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/Tabs';
 import { format, addMonths, differenceInMonths, differenceInDays } from 'date-fns';
-import Button from '../../components/ui/Button';
 import AppointmentModal from '../../components/ui/AppointmentModal';
 import TagPreview from '../../components/ui/TagPreview';
 import { AlterationModal } from '../../components/ui/AlterationModal';
-import Tabs from '../../components/ui/Tabs';
 import { useToast } from '../../components/ToastContext';
 import React from 'react';
+import { Modal } from '../../components/ui/Modal';
 
 const PHASES = [
   { name: 'Suit Selection', color: 'bg-blue-500', monthsFrom: 6, monthsTo: 3 },
@@ -78,10 +79,13 @@ function MemberStepper({ status }) {
   );
 }
 
+// If Party is not defined, define:
+type Party = { id: string; name: string; [key: string]: any };
+
 export default function PartyDetail() {
   const router = useRouter();
   const { id } = router.query;
-  const [party, setParty] = useState(null);
+  const [party, setParty] = useState<Party | null>(null);
   const [members, setMembers] = useState([]);
   const [showAdd, setShowAdd] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
@@ -244,14 +248,13 @@ export default function PartyDetail() {
         <div className="lg:w-2/3">
           <h1 className="text-3xl font-bold mb-2">{party.name}</h1>
           <p className="text-gray-600 dark:text-gray-400 mb-6">{party.notes}</p>
-          <Tabs
-            tabs={[{ label: 'Members', value: 'members' }, { label: 'Timeline', value: 'timeline' }, { label: 'Communications', value: 'communications' }]}
-            value={tab}
-            onChange={setTab}
-            className="mb-4"
-          />
-          {tab === 'members' && (
-            <>
+          <Tabs value={tab} onValueChange={setTab} className="mb-4">
+            <TabsList>
+              <TabsTrigger value="members">Members</TabsTrigger>
+              <TabsTrigger value="timeline">Timeline</TabsTrigger>
+              <TabsTrigger value="communications">Communications</TabsTrigger>
+            </TabsList>
+            <TabsContent value="members">
               <h2 className="text-2xl font-semibold mb-2">Party Members</h2>
               <button className="mb-4 px-4 py-2 bg-blue-600 text-white rounded" onClick={() => setShowAdd(true)}>Add Member</button>
               <table className="w-full border-2 rounded text-black dark:text-white bg-white dark:bg-gray-dark border-gray-400 dark:border-gray-700">
@@ -327,10 +330,6 @@ export default function PartyDetail() {
                   </div>
                 </div>
               )}
-              {/* Appointment Modal for contextual scheduling */}
-              {showAppt && (
-                <AppointmentModal open={showAppt} onClose={() => setShowAppt(false)} partyId={party.id} />
-              )}
               {/* Alteration Modal for member */}
               {showAlterationModal && (
                 <AlterationModal
@@ -355,7 +354,7 @@ export default function PartyDetail() {
               )}
               {/* Tag Preview/Print Modal */}
               {printJob && (
-                <Modal isOpen={!!printJob} onClose={() => setPrintJob(null)}>
+                <Modal open={!!printJob} onClose={() => setPrintJob(null)}>
                   <div className="flex flex-col items-center">
                     <TagPreview job={printJob} />
                     <Button className="mt-4 bg-blue-600 text-white" onClick={() => window.print()}>Print Tag</Button>
@@ -363,116 +362,116 @@ export default function PartyDetail() {
                   </div>
                 </Modal>
               )}
-            </>
-          )}
-          {tab === 'timeline' && timeline && (
-            <div className="bg-white dark:bg-gray-800 rounded shadow p-4 border border-blue-200">
-              <h2 className="text-xl font-bold mb-2 flex items-center">Party Workflow Timeline
-                <button className="ml-auto px-4 py-2 bg-blue-600 text-white rounded flex items-center gap-2" onClick={handleTriggerBulkOrder} title="Trigger bulk suit order">
-                  <span role="img" aria-label="bulk order">📦</span> Bulk Order
-                </button>
-              </h2>
-              <div className="flex gap-2 mb-4">
-                <button className="px-3 py-2 bg-green-600 text-white rounded flex items-center gap-2 text-sm" onClick={handleAdvanceAll} title="Advance all members to next status">
-                  <span role="img" aria-label="advance">⏩</span> Advance All
-                </button>
-                <button className="px-3 py-2 bg-orange-500 text-white rounded flex items-center gap-2 text-sm" onClick={handleRemindAll} title="Send reminder to all members">
-                  <span role="img" aria-label="remind">📲</span> Remind All
-                </button>
+            </TabsContent>
+            <TabsContent value="timeline">
+              <div className="bg-white dark:bg-gray-800 rounded shadow p-4 border border-blue-200">
+                <h2 className="text-xl font-bold mb-2 flex items-center">Party Workflow Timeline
+                  <button className="ml-auto px-4 py-2 bg-blue-600 text-white rounded flex items-center gap-2" onClick={handleTriggerBulkOrder} title="Trigger bulk suit order">
+                    <span role="img" aria-label="bulk order">📦</span> Bulk Order
+                  </button>
+                </h2>
+                <div className="flex gap-2 mb-4">
+                  <button className="px-3 py-2 bg-green-600 text-white rounded flex items-center gap-2 text-sm" onClick={handleAdvanceAll} title="Advance all members to next status">
+                    <span role="img" aria-label="advance">⏩</span> Advance All
+                  </button>
+                  <button className="px-3 py-2 bg-orange-500 text-white rounded flex items-center gap-2 text-sm" onClick={handleRemindAll} title="Send reminder to all members">
+                    <span role="img" aria-label="remind">📲</span> Remind All
+                  </button>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm min-w-[700px]">
+                    <thead>
+                      <tr>
+                        <th>Member</th>
+                        <th>Role</th>
+                        <th>Status</th>
+                        <th>Stepper</th>
+                        <th>Appointments</th>
+                        <th>Alteration Jobs</th>
+                        <th>Latest Comm</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {timeline.timeline.map(row => (
+                        <tr key={row.memberId} className="border-b border-blue-100">
+                          <td className="py-2 px-1 font-semibold">{row.name}</td>
+                          <td className="py-2 px-1">{row.role}</td>
+                          <td className="py-2 px-1">
+                            <span className={`inline-block px-2 py-1 rounded text-xs font-bold ${STATUS_COLORS[row.status] || 'bg-gray-200 text-gray-800'}`}>{row.status}</span>
+                          </td>
+                          <td className="py-2 px-1"><MemberStepper status={row.status} /></td>
+                          <td className="py-2 px-1">
+                            {row.appointments.map(a => (
+                              <div key={a.id} className="mb-1">{a.type} - {a.status} <span className="text-xs text-gray-500">({new Date(a.dateTime).toLocaleDateString()})</span></div>
+                            ))}
+                          </td>
+                          <td className="py-2 px-1">
+                            {row.alterationJobs.map(j => (
+                              <div key={j.id} className="mb-1">Job #{j.id} - {j.status}</div>
+                            ))}
+                          </td>
+                          <td className="py-2 px-1">
+                            {(() => {
+                              const comm = getLatestCommForMember(row);
+                              return comm ? (
+                                <div className="text-xs text-gray-700 dark:text-gray-200">
+                                  <span className="font-bold">{comm.type}</span> <span className="text-gray-500">{new Date(comm.sentAt).toLocaleDateString()}</span>
+                                  <div className="truncate max-w-[180px]" title={comm.content}>{comm.content.slice(0, 60)}{comm.content.length > 60 ? '…' : ''}</div>
+                                </div>
+                              ) : <span className="text-xs text-gray-400">No comms</span>;
+                            })()}
+                          </td>
+                          <td className="py-2 px-1 flex flex-col gap-1 min-w-[180px]">
+                            <div className="flex items-center gap-2 mb-1">
+                              <select className="border rounded p-1 text-xs" defaultValue={row.status} onChange={e => handleAdvanceStatus(row.memberId, e.target.value)} title="Change status">
+                                {WORKFLOW_STATUSES.map(s => (
+                                  <option key={s} value={s}>{s}</option>
+                                ))}
+                              </select>
+                              <button className="px-2 py-1 bg-green-600 text-white rounded flex items-center gap-1 text-xs" onClick={() => handleAdvanceStatus(row.memberId, row.status)} title="Advance status">
+                                <span role="img" aria-label="advance">⏩</span> Advance
+                              </button>
+                            </div>
+                            <button className="px-2 py-1 bg-orange-500 text-white rounded flex items-center gap-1 text-xs" onClick={() => handleNotifyPickup(row.memberId)} title="Notify pickup">
+                              <span role="img" aria-label="notify">📲</span> Notify Pickup
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm min-w-[700px]">
+            </TabsContent>
+            <TabsContent value="communications">
+              <div className="bg-white dark:bg-gray-800 rounded shadow p-4">
+                <h2 className="text-xl font-bold mb-2">Communication Log</h2>
+                <table className="w-full text-sm">
                   <thead>
                     <tr>
-                      <th>Member</th>
-                      <th>Role</th>
+                      <th>Type</th>
+                      <th>Direction</th>
+                      <th>Content</th>
+                      <th>Sent At</th>
                       <th>Status</th>
-                      <th>Stepper</th>
-                      <th>Appointments</th>
-                      <th>Alteration Jobs</th>
-                      <th>Latest Comm</th>
-                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {timeline.timeline.map(row => (
-                      <tr key={row.memberId} className="border-b border-blue-100">
-                        <td className="py-2 px-1 font-semibold">{row.name}</td>
-                        <td className="py-2 px-1">{row.role}</td>
-                        <td className="py-2 px-1">
-                          <span className={`inline-block px-2 py-1 rounded text-xs font-bold ${STATUS_COLORS[row.status] || 'bg-gray-200 text-gray-800'}`}>{row.status}</span>
-                        </td>
-                        <td className="py-2 px-1"><MemberStepper status={row.status} /></td>
-                        <td className="py-2 px-1">
-                          {row.appointments.map(a => (
-                            <div key={a.id} className="mb-1">{a.type} - {a.status} <span className="text-xs text-gray-500">({new Date(a.dateTime).toLocaleDateString()})</span></div>
-                          ))}
-                        </td>
-                        <td className="py-2 px-1">
-                          {row.alterationJobs.map(j => (
-                            <div key={j.id} className="mb-1">Job #{j.id} - {j.status}</div>
-                          ))}
-                        </td>
-                        <td className="py-2 px-1">
-                          {(() => {
-                            const comm = getLatestCommForMember(row);
-                            return comm ? (
-                              <div className="text-xs text-gray-700 dark:text-gray-200">
-                                <span className="font-bold">{comm.type}</span> <span className="text-gray-500">{new Date(comm.sentAt).toLocaleDateString()}</span>
-                                <div className="truncate max-w-[180px]" title={comm.content}>{comm.content.slice(0, 60)}{comm.content.length > 60 ? '…' : ''}</div>
-                              </div>
-                            ) : <span className="text-xs text-gray-400">No comms</span>;
-                          })()}
-                        </td>
-                        <td className="py-2 px-1 flex flex-col gap-1 min-w-[180px]">
-                          <div className="flex items-center gap-2 mb-1">
-                            <select className="border rounded p-1 text-xs" defaultValue={row.status} onChange={e => handleAdvanceStatus(row.memberId, e.target.value)} title="Change status">
-                              {WORKFLOW_STATUSES.map(s => (
-                                <option key={s} value={s}>{s}</option>
-                              ))}
-                            </select>
-                            <button className="px-2 py-1 bg-green-600 text-white rounded flex items-center gap-1 text-xs" onClick={() => handleAdvanceStatus(row.memberId, row.status)} title="Advance status">
-                              <span role="img" aria-label="advance">⏩</span> Advance
-                            </button>
-                          </div>
-                          <button className="px-2 py-1 bg-orange-500 text-white rounded flex items-center gap-1 text-xs" onClick={() => handleNotifyPickup(row.memberId)} title="Notify pickup">
-                            <span role="img" aria-label="notify">📲</span> Notify Pickup
-                          </button>
-                        </td>
+                    {communications.map(log => (
+                      <tr key={log.id}>
+                        <td>{log.type}</td>
+                        <td>{log.direction}</td>
+                        <td className="max-w-xs truncate" title={log.content}>{log.content}</td>
+                        <td>{new Date(log.sentAt).toLocaleString()}</td>
+                        <td>{log.status}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            </div>
-          )}
-          {tab === 'communications' && (
-            <div className="bg-white dark:bg-gray-800 rounded shadow p-4">
-              <h2 className="text-xl font-bold mb-2">Communication Log</h2>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr>
-                    <th>Type</th>
-                    <th>Direction</th>
-                    <th>Content</th>
-                    <th>Sent At</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {communications.map(log => (
-                    <tr key={log.id}>
-                      <td>{log.type}</td>
-                      <td>{log.direction}</td>
-                      <td className="max-w-xs truncate" title={log.content}>{log.content}</td>
-                      <td>{new Date(log.sentAt).toLocaleString()}</td>
-                      <td>{log.status}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
     </div>
@@ -504,9 +503,7 @@ function ExpandableAlterationCard({ job }) {
             <div>
               <span className="font-bold">Measurements:</span>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-1">
-                {Object.entries(job.measurements).map(([k, v]) => (
-                  v ? <div key={k}><span className="capitalize">{k.replace(/([A-Z])/g, ' $1')}</span>: <span className="font-mono">{v}{/in|length|waist|chest|hips|shoulder|overarm|neck|inseam|outseam|collar|sleeve/.test(k) ? 'in' : ''}</span></div> : null
-                ))}
+                {Object.entries(job.measurements).map(([k, v]) => v ? <div key={k}><span className="capitalize">{k.replace(/([A-Z])/g, ' $1')}</span>: <span className="font-mono">{String(v)}{/in|length|waist|chest|hips|shoulder|overarm|neck|inseam|outseam|collar|sleeve/.test(k) ? 'in' : ''}</span></div> : null)}
               </div>
             </div>
           )}

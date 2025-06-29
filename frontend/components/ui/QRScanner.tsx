@@ -12,9 +12,9 @@ import { useToast } from '../ToastContext';
 import { format } from 'date-fns';
 
 interface QRScannerProps {
-  isOpen: boolean;
+  open: boolean;
   onClose: () => void;
-  onScanSuccess: (result: any) => void;
+  onScanSuccess: (scanResult: any) => Promise<void>;
 }
 
 interface ScanResult {
@@ -65,7 +65,7 @@ const STATUS_COLORS = {
   ON_HOLD: 'bg-yellow-100 text-yellow-800',
 };
 
-export function QRScanner({ isOpen, onClose, onScanSuccess }: QRScannerProps) {
+export function QRScanner({ open, onClose, onScanSuccess }: QRScannerProps) {
   const { success: toastSuccess, error: toastError } = useToast();
   const [isScanning, setIsScanning] = useState(false);
   const [manualQR, setManualQR] = useState('');
@@ -79,13 +79,13 @@ export function QRScanner({ isOpen, onClose, onScanSuccess }: QRScannerProps) {
 
   // Start camera when component mounts and scanning is enabled
   useEffect(() => {
-    if (isOpen && isScanning) {
+    if (open && isScanning) {
       startCamera();
     }
     return () => {
       stopCamera();
     };
-  }, [isOpen, isScanning]);
+  }, [open, isScanning]);
 
   const startCamera = async () => {
     try {
@@ -153,7 +153,7 @@ export function QRScanner({ isOpen, onClose, onScanSuccess }: QRScannerProps) {
       
       if (result.success) {
         toastSuccess(`Scan successful: ${result.result}`);
-        onScanSuccess(result);
+        await onScanSuccess(result);
         
         // Clear form for next scan
         setManualQR('');
@@ -191,7 +191,7 @@ export function QRScanner({ isOpen, onClose, onScanSuccess }: QRScannerProps) {
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

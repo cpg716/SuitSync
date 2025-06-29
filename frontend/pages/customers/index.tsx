@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/router';
 import useSWR from 'swr';
 import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { Button } from '../../components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '../../components/ToastContext';
@@ -38,9 +38,11 @@ export default function CustomersPage() {
   const { success, error: toastError } = useToast();
   const { user } = useAuth();
 
+  const fetcher = (url: string): Promise<{ customers: Customer[]; pagination: PaginationData; }> => Promise.resolve(api.get(url)).then(res => res.data as { customers: Customer[]; pagination: PaginationData; });
+
   const { data, error, mutate, isLoading } = useSWR<{ customers: Customer[], pagination: PaginationData }>(
     `/customers?search=${search}&page=${page}&limit=10`,
-    (url) => api.get(url).then(res => res.data)
+    fetcher
   );
 
   const customers = data?.customers || [];
@@ -65,7 +67,9 @@ export default function CustomersPage() {
       setAddForm({ name: '', email: '', phone: '', address: '' });
       mutate();
       success('Customer created successfully');
-      router.push(`/customers/${newCustomer.id}`);
+      if (newCustomer && typeof newCustomer === 'object' && 'id' in newCustomer) {
+        router.push(`/customers/${newCustomer.id}`);
+      }
     } catch (err) {
       toastError(err.response?.data?.message || 'Could not create customer');
     } finally {
@@ -284,7 +288,7 @@ export default function CustomersPage() {
             </div>
           </Card>
 
-          <Modal isOpen={addModalOpen} onClose={() => setAddModalOpen(false)}>
+          <Modal open={addModalOpen} onClose={() => setAddModalOpen(false)}>
             <form onSubmit={handleAddCustomer} className="space-y-4">
               <h2 className="text-xl font-bold mb-4">Add New Customer</h2>
               <div>

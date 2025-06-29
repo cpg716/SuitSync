@@ -1,4 +1,5 @@
 import axios from 'axios';
+import type { LightspeedHealth } from '../components/LightspeedStatus';
 
 const api = axios.create({
   baseURL: '/api',
@@ -59,9 +60,9 @@ export const resetSyncStatus = () => {
   return api.post('/sync/reset-status');
 };
 
-export const getLightspeedHealth = async () => {
+export const getLightspeedHealth = async (): Promise<LightspeedHealth> => {
   const { data } = await api.get('/lightspeed/health');
-  return data;
+  return data as LightspeedHealth;
 };
 
 export { api };

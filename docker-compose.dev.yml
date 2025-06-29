@@ -1,0 +1,35 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: suitsync
+      POSTGRES_PASSWORD: supersecret
+      POSTGRES_DB: suitsync
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "suitsync"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: npm run dev
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    environment:
+      DATABASE_URL: "postgresql://suitsync:supersecret@postgres:5432/suitsync?schema=public"
+      NODE_ENV: development
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  db_data: 

@@ -1,0 +1,58 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: suitsync-db
+    restart: always
+    environment:
+      POSTGRES_DB: suitsync_prod
+      POSTGRES_USER: suitsync_prod
+      POSTGRES_PASSWORD: suitsync_prod_pw_ChangeMe123
+    ports:
+      - '5432:5432'
+    volumes:
+      - suitsync_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U suitsync_prod"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: suitsync-backend
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://suitsync_prod:suitsync_prod_pw_ChangeMe123@db:5432/suitsync_prod
+      SESSION_SECRET: super_secret_session_key_1234567890
+      FRONTEND_URL: http://localhost:3001
+    ports:
+      - '3000:3000'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # volumes:
+    #   - ./backend:/app
+
+  frontend:
+    build: ./frontend
+    container_name: suitsync-frontend
+    restart: always
+    environment:
+      NEXT_PUBLIC_API_URL: http://backend:3000/api
+    ports:
+      - '3001:3000'
+    depends_on:
+      - backend
+
+volumes:
+  suitsync_db_data:
+
+networks:
+  suitsync-net:
+    driver: bridge 

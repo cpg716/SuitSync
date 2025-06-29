@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from './Button';
+import { Card } from './Card';
 import { Input } from './Input';
 import { Modal } from './Modal';
 import { api } from '../../lib/apiClient';
 import { format } from 'date-fns';
+import type { Party } from '../../src/types/parties';
 
 // TypeScript interfaces
 interface Alteration {
@@ -19,11 +21,6 @@ interface Alteration {
   tailorId: string;
   saleLineItemId?: string;
   itemDescription?: string;
-}
-
-interface Party {
-  id: string;
-  name: string;
 }
 
 interface Customer {
@@ -84,9 +81,9 @@ export const AlterationModal = function({ open, onClose, onSubmit, alteration, l
           api.get('/users?role=tailor')
         ]);
 
-        setParties(partiesRes.data || []);
+        setParties(Array.isArray(partiesRes.data) ? partiesRes.data : []);
         setCustomers(Array.isArray(customersRes.data) ? customersRes.data : []);
-        setTailors(tailorsRes.data || []);
+        setTailors(Array.isArray(tailorsRes.data) ? tailorsRes.data : []);
         setDataLoading(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load data');
@@ -103,7 +100,7 @@ export const AlterationModal = function({ open, onClose, onSubmit, alteration, l
     // Mock fetching sale line items
     if (searchTerm) {
       api.get(`/sales/line_items?search=${searchTerm}`).then(res => {
-        setSaleLineItems(res.data);
+        setSaleLineItems(Array.isArray(res.data) ? res.data : []);
       });
     } else {
       setSaleLineItems([]);
@@ -134,11 +131,7 @@ export const AlterationModal = function({ open, onClose, onSubmit, alteration, l
   if (!open) return null;
 
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title={alteration ? 'Edit Alteration' : 'New Alteration'}
-    >
+    <Modal open={open} onClose={onClose} title={alteration ? 'Edit Alteration' : 'New Alteration'}>
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
           <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-3 rounded">

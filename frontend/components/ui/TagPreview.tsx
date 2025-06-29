@@ -1,7 +1,7 @@
 import React from 'react';
 import QRCode from 'react-qr-code';
 import { Printer } from 'lucide-react';
-import Button from './Button';
+import { Button } from './Button';
 import { Checkbox } from './checkbox';
 
 export default function TagPreview({ job }: { job: any }) {

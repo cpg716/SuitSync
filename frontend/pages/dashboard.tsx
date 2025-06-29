@@ -4,7 +4,7 @@ import Layout from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/Tabs';
 import { Skeleton } from '@/components/ui/Skeleton';
 import QRScanner from '@/components/ui/QRScanner';
 import AlterationJobModal from '@/components/ui/AlterationJobModal';
@@ -151,7 +151,7 @@ export default function Dashboard() {
   })) || [];
 
   return (
-    <Layout>
+    <Layout title="Dashboard">
       <div className="p-6 space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -386,16 +386,16 @@ export default function Dashboard() {
 
         {/* Modals */}
         <QRScanner
-          isOpen={scannerOpen}
+          open={scannerOpen}
           onClose={() => setScannerOpen(false)}
-          onScanSuccess={handleScanSuccess}
+          onScanSuccess={async (result) => { handleScanSuccess(result); }}
         />
         
         <AlterationJobModal
-          isOpen={createJobOpen}
+          open={createJobOpen}
           onClose={() => setCreateJobOpen(false)}
           onSubmit={handleCreateJobSubmit}
-          customers={Array.isArray(customers) ? customers : []}
+          customers={customers}
           parties={parties}
         />
       </div>

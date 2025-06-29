@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
-import Button from '../../components/ui/Button';
-import { useToast } from '../../components/ToastContext';
 
 const defaultMeasurements = {
   chest: '', waistJacket: '', hips: '', shoulderWidth: '', sleeveLength: '', jacketLength: '', overarm: '', neck: '',
@@ -9,10 +7,11 @@ const defaultMeasurements = {
   outOfTown: false,
 };
 
+type Measurement = { [key: string]: number | string };
+
 export default function CustomerMeasurements() {
   const router = useRouter();
   const { id } = router.query;
-  const { success, error: toastError } = useToast();
   const [measurements, setMeasurements] = useState(defaultMeasurements);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -20,29 +19,35 @@ export default function CustomerMeasurements() {
   useEffect(() => {
     if (id) {
       setLoading(true);
-      fetch(`/customers/${id}/measurements`)
-        .then(res => res.json())
-        .then(data => {
-          if (data?.measurements) setMeasurements({ ...defaultMeasurements, ...data.measurements });
-          setLoading(false);
-        });
+      const fetcher = (url: string): Promise<any[]> => fetch(url).then(res => res.json());
+      fetcher(`/customers/${id}/measurements`).then(data => {
+        if (Array.isArray(data) && data.length > 0) setMeasurements({ ...defaultMeasurements, ...data[0] });
+        else if (typeof data === 'object' && data !== null) setMeasurements({ ...defaultMeasurements, ...data });
+        setLoading(false);
+      });
     }
   }, [id]);
 
-  const handleSave = async (data: MeasurementData) => {
+  const handleSave = async (data: Measurement) => {
     try {
       const res = await fetch(`/customers/${id}/measurements`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ measurements }),
       });
-      if (res.ok) success('Measurements saved');
-      else toastError('Failed to save measurements');
+      if (res.ok) console.log('Measurements saved');
+      else console.error('Failed to save measurements');
     } catch (error) {
       console.error('Error saving measurements:', error);
-      toastError('Failed to save measurements');
+      console.error('Failed to save measurements');
     }
     setSaving(false);
+  };
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const safeMeasurements = { ...measurements, outOfTown: String(measurements.outOfTown) };
+    handleSave(safeMeasurements);
   };
 
   if (loading) return <div className="p-6">Loading…</div>;
@@ -50,7 +55,7 @@ export default function CustomerMeasurements() {
   return (
     <div className="max-w-2xl mx-auto p-6 bg-white dark:bg-gray-dark rounded shadow">
       <h1 className="text-2xl font-bold mb-4">Customer Measurements</h1>
-      <form onSubmit={handleSave} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-6">
         <div className="flex items-center mb-2">
           <label className="mr-2 font-semibold">Out of Town?</label>
           <input type="checkbox" checked={!!measurements.outOfTown} onChange={e => setMeasurements(m => ({ ...m, outOfTown: e.target.checked }))} />
@@ -117,7 +122,7 @@ export default function CustomerMeasurements() {
           </div>
         </div>
         <div className="mt-6">
-          <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save Measurements'}</Button>
+          <button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save Measurements'}</button>
         </div>
       </form>
     </div>

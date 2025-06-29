@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import useSWR from 'swr';
-import Button from '../components/ui/Button';
-import Input from '../components/ui/Input';
-import Card from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
+import { Card } from '../components/ui/Card';
 import { useToast } from '../components/ToastContext';
 import { AppointmentStatus, AppointmentType } from '../src/types/appointments';
 
 const fetcher = () =>
-  fetch('http://localhost:3000/api/parties').then(res => res.json());
+  fetch('/api/parties').then(res => res.json());
 
 export default function CreateAppointment() {
   const { data: parties } = useSWR('partyList', fetcher);
@@ -27,7 +27,7 @@ export default function CreateAppointment() {
     setPartyId(e.target.value);
     setMemberId('');
     if (e.target.value) {
-      const res = await fetch(`http://localhost:3000/api/parties/${e.target.value}/members`);
+      const res = await fetch(`/api/parties/${e.target.value}/members`);
       setMembers(await res.json());
     } else {
       setMembers([]);

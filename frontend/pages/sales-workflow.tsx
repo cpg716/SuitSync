@@ -3,11 +3,10 @@ import Layout from '../components/Layout';
 import useSWR from 'swr';
 import { fetcher } from '../lib/apiClient';
 import { format, addMonths, differenceInMonths, differenceInDays, isBefore, isAfter, addDays } from 'date-fns';
-import { Party } from '../src/types/parties';
+import type { Party } from '../src/types/parties';
 import { Button } from '../components/ui/Button';
 import { CalendarClock, Users, PartyPopper, Ruler, Shirt, ArrowRight, Bell } from 'lucide-react';
-import Modal from '../components/ui/Modal';
-import AppointmentModal from '../components/ui/AppointmentModal';
+import { Modal } from '../components/ui/Modal';
 
 // Helper: phase calculation
 const PHASES = [
@@ -59,12 +58,11 @@ function ProgressBar({ phase }: { phase: number }) {
 }
 
 function PartyDetailModal({ open, onClose, party }: any) {
-  const [showAppt, setShowAppt] = useState(false);
   if (!party) return null;
   const members = party.members || [];
   const completedPhases = getPhase(new Date(party.eventDate), new Date());
   return (
-    <Modal isOpen={open} onClose={onClose}>
+    <Modal open={open} onClose={onClose}>
       <div className="w-full max-w-lg">
         <h2 className="text-2xl font-bold mb-2 flex items-center gap-2"><Users className="w-5 h-5" /> {party.name}</h2>
         <div className="mb-2 text-gray-600 dark:text-gray-300 flex items-center gap-2"><PartyPopper className="w-4 h-4" /> Event: {format(new Date(party.eventDate), 'PPP')}</div>
@@ -83,9 +81,7 @@ function PartyDetailModal({ open, onClose, party }: any) {
         <div className="mt-4 flex items-center gap-2">
           <span className="text-sm">{Math.round(((completedPhases+1)/PHASES.length)*100)}% Complete</span>
           <div className="flex-1" />
-          <Button className="bg-primary text-white" onClick={() => setShowAppt(true)}><CalendarClock className="w-4 h-4 mr-1" /> Schedule Appointment</Button>
         </div>
-        {showAppt && <AppointmentModal isOpen={showAppt} onClose={() => setShowAppt(false)} partyId={party.id} />}
       </div>
     </Modal>
   );
@@ -98,7 +94,8 @@ export default function SalesWorkflowPage() {
 
   // Timeline range: today to max eventDate
   const minDate = now;
-  const maxDate = parties.length ? new Date(Math.max(...parties.map((p: any) => new Date(p.eventDate).getTime()))) : addMonths(now, 6);
+  const safeParties = Array.isArray(parties) ? parties : [];
+  const maxDate = safeParties.length ? new Date(Math.max(...safeParties.map((p: any) => new Date(p.eventDate).getTime()))) : addMonths(now, 6);
   const daysSpan = differenceInDays(maxDate, minDate) || 1;
 
   // Position cards by eventDate
@@ -108,17 +105,17 @@ export default function SalesWorkflowPage() {
   }
 
   return (
-    <Layout>
+    <Layout title="Sales Workflow">
       <div className="max-w-6xl mx-auto p-6 space-y-6">
         <div className="mb-6 flex items-center gap-4 p-4 bg-primary-light dark:bg-gray-800 rounded-lg">
           <ArrowRight className="w-5 h-5 text-primary" />
-          <span className="font-medium text-lg">{getNextAction(parties, now)}</span>
+          <span className="font-medium text-lg">{getNextAction(safeParties, now)}</span>
         </div>
         <div className="relative w-full h-56 bg-gray-100 dark:bg-gray-900 rounded-lg overflow-x-auto border border-gray-300 dark:border-gray-700">
           {/* Timeline axis */}
           <div className="absolute left-0 top-1/2 w-full h-1 bg-gray-300 dark:bg-gray-700" style={{ zIndex: 1 }} />
           {/* Cards */}
-          {parties.map((party: any) => {
+          {safeParties.map((party: any) => {
             const left = getCardPosition(party.eventDate);
             const phase = getPhase(new Date(party.eventDate), now);
             return (

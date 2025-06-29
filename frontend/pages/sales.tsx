@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useAuth } from '../src/AuthContext';
-import Button from '../components/ui/Button';
+import { Button } from '../components/ui/Button';
 
 const ITEMS_PER_PAGE = 10;
 

@@ -236,8 +236,10 @@ export default function UserSettings({ userId, adminView }: { userId?: number, a
         </div>
         {/* Profile Info */}
         <form onSubmit={handleProfileSave} className="space-y-4 mb-8">
-          <Input label="Name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required />
-          <Input label="Email" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required />
+          <label htmlFor="name">Name</label>
+          <Input id="name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required />
+          <label htmlFor="email">Email</label>
+          <Input id="email" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required />
           <Button type="submit" className="w-full bg-primary text-white" disabled={saving}>{saving ? 'Saving...' : 'Save Changes'}</Button>
         </form>
         {/* Notification Preferences */}
@@ -261,9 +263,9 @@ export default function UserSettings({ userId, adminView }: { userId?: number, a
           <div className="mb-8">
             <div className="flex items-center gap-2 mb-2">
               <span className="block text-sm font-medium">Schedule / Availability</span>
-              <Button variant={isDefault ? 'default' : 'outline'} size="xs" onClick={handleDefaultClick}>Default</Button>
+              <Button variant={isDefault ? 'default' : 'outline'} size="sm" onClick={handleDefaultClick}>Default</Button>
               <Input type="date" value={weekStart ? weekStart.toISOString().slice(0,10) : ''} onChange={e => handleWeekChange(new Date(e.target.value))} className="w-36" />
-              {!isDefault && <Button size="xs" onClick={handleConfirmWeek}>Confirm Week</Button>}
+              {!isDefault && <Button size="sm" onClick={handleConfirmWeek}>Confirm Week</Button>}
             </div>
             <ScheduleEditor
               value={schedule || Array(7).fill({ isOff: true, blocks: [] })}

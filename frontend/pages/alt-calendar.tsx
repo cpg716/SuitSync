@@ -2,11 +2,12 @@
 import React, { useMemo, useState } from 'react';
 import { Calendar, dateFnsLocalizer, View } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay, addMinutes, isValid } from 'date-fns';
-import { enUS } from 'date-fns/locale/en-US';
+import enUS from 'date-fns/locale/en-US';
 import useSWR from 'swr';
 import { fetcher, api } from '../lib/apiClient';
-import Button from '../components/ui/Button';
-import Card from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
+import { Card } from '../components/ui/Card';
+import { Input } from '../components/ui/Input';
 import { AlterationModal } from '../components/ui/AlterationModal';
 import { useToast } from '../components/ToastContext';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
@@ -208,7 +209,7 @@ export default function AlterationsCalendarPage() {
             endAccessor="end"
             style={{ height: '100%' }}
             view={view}
-            onView={setView}
+            onView={view => setView(view as CalendarView)}
             date={date}
             onNavigate={handleNavigate}
             onSelectEvent={handleSelectEvent}

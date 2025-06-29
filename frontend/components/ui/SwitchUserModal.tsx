@@ -15,20 +15,21 @@ interface UserInfo {
 }
 
 interface SwitchUserModalProps {
-  isOpen: boolean;
+  open: boolean;
   onClose: () => void;
   allUsers: UserInfo[];
   loading?: boolean;
+  onUserSelect: (selectedUser: UserInfo) => void;
 }
 
-export const SwitchUserModal: React.FC<SwitchUserModalProps> = ({ isOpen, onClose, allUsers, loading }) => {
+export const SwitchUserModal: React.FC<SwitchUserModalProps> = ({ open, onClose, allUsers, loading }) => {
   const [search, setSearch] = useState('');
   const [recentUsers, setRecentUsers] = useState<UserInfo[]>([]);
   const [switching, setSwitching] = useState(false);
   const [switchMessage, setSwitchMessage] = useState('');
 
   useEffect(() => {
-    if (isOpen) {
+    if (open) {
       // Load recent users from localStorage
       const stored = localStorage.getItem('recentUsers');
       if (stored) {
@@ -43,7 +44,7 @@ export const SwitchUserModal: React.FC<SwitchUserModalProps> = ({ isOpen, onClos
       setSwitching(false);
       setSwitchMessage('');
     }
-  }, [isOpen]);
+  }, [open]);
 
   const filteredAllUsers = allUsers.filter(u =>
     u.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -83,7 +84,7 @@ export const SwitchUserModal: React.FC<SwitchUserModalProps> = ({ isOpen, onClos
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="md">
+    <Modal open={open} onClose={onClose} size="md">
       <div className="mb-4">
         <h2 className="text-xl font-bold mb-2">Switch to a different user</h2>
         <Input

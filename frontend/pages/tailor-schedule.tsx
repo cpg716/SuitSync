@@ -4,9 +4,9 @@ import useSWR from 'swr';
 import { fetcher } from '../lib/apiClient';
 import { Calendar, dateFnsLocalizer, Views } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay, isToday } from 'date-fns';
-import { enUS } from 'date-fns/locale/en-US';
+import enUS from 'date-fns/locale/en-US';
 import { Button } from '../components/ui/Button';
-import Modal from '../components/ui/Modal';
+import { Modal } from '../components/ui/Modal';
 import { Users, Scissors, Timer, ArrowRight, AlertTriangle } from 'lucide-react';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { Card } from '../components/ui/Card';
@@ -49,7 +49,7 @@ function TimeTrackingModal({ open, onClose, job, onSave }) {
   const [timeSpent, setTimeSpent] = useState(job?.timeSpentMinutes || 0);
   const [notes, setNotes] = useState(job?.notes || '');
   return (
-    <Modal isOpen={open} onClose={onClose}>
+    <Modal open={open} onClose={onClose}>
       <div className="w-full max-w-md">
         <h2 className="text-xl font-bold mb-2 flex items-center gap-2"><Timer className="w-5 h-5" /> Log Time for {job?.partyName}</h2>
         <div className="mb-2">Member: <span className="font-semibold">{job?.memberName}</span></div>
@@ -77,22 +77,26 @@ function TimeTrackingModal({ open, onClose, job, onSave }) {
 
 export default function TailorSchedulePage() {
   const { data: jobs = [], mutate } = useSWR('/api/alterations', fetcher, { refreshInterval: 60_000 });
-  const { data: tailors = [] } = useSWR('/api/users?role=tailor', fetcher, { credentials: 'include' });
+  const { data: tailors = [] } = useSWR('/api/users?role=tailor', fetcher);
   const [selectedJob, setSelectedJob] = useState(null);
   const [showTimeModal, setShowTimeModal] = useState(false);
+  const [view, setView] = useState(Views.DAY);
+
+  const safeTailors = Array.isArray(tailors) ? tailors : [];
+  const safeJobs = Array.isArray(jobs) ? jobs : [];
 
   // Map jobs to calendar events
-  const events = useMemo(() => jobs.map(job => ({
+  const events = useMemo(() => safeJobs.map(job => ({
     id: job.id,
     title: `${job.partyName || job.party?.name || 'Party'} - ${job.memberName || job.member?.name || ''}`,
     start: new Date(job.dueDate || job.scheduledDateTime || job.createdAt),
     end: new Date(job.dueDate || job.scheduledDateTime || job.createdAt),
     resource: job,
     tailorId: job.tailorId,
-  })), [jobs]);
+  })), [safeJobs]);
 
   // Custom resource accessors for tailor rows
-  const resources = tailors.map(t => ({ resourceId: t.id, resourceTitle: t.name }));
+  const resources = safeTailors.map(t => ({ resourceId: t.id, resourceTitle: t.name }));
 
   // Drag-and-drop assignment
   const onEventDrop = useCallback(async ({ event, resourceId }) => {
@@ -125,15 +129,15 @@ export default function TailorSchedulePage() {
   const eventsToday = events.filter(e => e.start >= start && e.end <= end);
 
   return (
-    <Layout>
+    <Layout title="Tailor Schedule">
       <div className="max-w-6xl mx-auto p-6 space-y-6">
         <Card className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            {tailors.map(tailor => (
+            {safeTailors.map(tailor => (
               <div key={tailor.id} className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
                 <div className="flex items-center gap-2 mb-2"><Users className="w-4 h-4" /> <span className="font-semibold">{tailor.name}</span></div>
-                <CapacityBar jobs={jobs} tailor={tailor} limit={POINT_LIMITS['Jacket']} />
-                <div className="text-xs text-gray-500">Capacity: {getTailorCapacity(jobs, tailor.id)} / {POINT_LIMITS['Jacket']} pts</div>
+                <CapacityBar jobs={safeJobs} tailor={tailor} limit={POINT_LIMITS['Jacket']} />
+                <div className="text-xs text-gray-500">Capacity: {getTailorCapacity(safeJobs, tailor.id)} / {POINT_LIMITS['Jacket']} pts</div>
               </div>
             ))}
           </div>
@@ -150,9 +154,7 @@ export default function TailorSchedulePage() {
               defaultView={Views.DAY}
               views={{ day: true }}
               onSelectEvent={onSelectEvent}
-              draggableAccessor={() => true}
-              onEventDrop={onEventDrop}
-              resizable={false}
+              onView={() => setView('day')}
             />
           </div>
           {showTimeModal && selectedJob && (

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/router';
-import Button from '../components/ui/Button';
-import Card from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
+import { Card } from '../components/ui/Card';
 import { useToast } from '../components/ToastContext';
 
 export default function CreatePartyPage() {

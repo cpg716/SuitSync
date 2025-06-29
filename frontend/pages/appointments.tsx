@@ -7,13 +7,13 @@ import { AppointmentStatus, AppointmentType } from '../src/types/appointments';
 import AppointmentModal from '../components/ui/AppointmentModal';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { toast } from 'react-hot-toast';
-import Pagination from '../components/ui/Pagination';
+import { Pagination } from '../components/ui/Pagination';
 import useSWR from 'swr';
 import { api } from '../lib/apiClient';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { Calendar, dateFnsLocalizer, View } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay, addMinutes, isValid } from 'date-fns';
-import { enUS } from 'date-fns/locale/en-US/index.js';
+import enUS from 'date-fns/locale/en-US';
 import { useAuth } from '@/src/AuthContext';
 import { ListIcon, CalendarIcon, Plus } from 'lucide-react';
 
@@ -544,7 +544,7 @@ export default function AppointmentsPage() {
                   style={{ height: '100%' }}
                   onSelectEvent={handleSelectEvent}
                   onNavigate={handleNavigate}
-                  onView={setView}
+                  onView={view => setView(view as CalendarView)}
                   view={view}
                   views={AVAILABLE_VIEWS}
                   date={date}
@@ -563,23 +563,23 @@ export default function AppointmentsPage() {
 
       {/* Modals */}
       <AppointmentModal
-        isOpen={modalOpen}
+        open={modalOpen}
         onClose={() => {
           setModalOpen(false);
           setEditAppt(null);
         }}
-        onSave={handleSave}
+        onSubmit={handleSave}
         appointment={editAppt}
-        isLoading={actionLoading}
+        loading={actionLoading}
       />
 
       <ConfirmModal
-        isOpen={!!deleteAppt}
+        open={!!deleteAppt}
         onClose={() => setDeleteAppt(null)}
         onConfirm={handleDelete}
+        loading={actionLoading}
         title="Delete Appointment"
-        description="Are you sure you want to delete this appointment? This action cannot be undone."
-        isLoading={actionLoading}
+        message="Are you sure you want to delete this appointment? This action cannot be undone."
       />
     </div>
   );
