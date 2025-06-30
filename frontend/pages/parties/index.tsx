@@ -86,14 +86,15 @@ function PartyModal({ open, onClose, onSubmit, initial, customers }) {
 // If Party is not defined, define:
 type Party = { id: string; name: string; [key: string]: any };
 
-const fetcher = (url: string): Promise<{ parties: Party[] }> => Promise.resolve(api.get(url)).then(res => res.data as { parties: Party[] });
+const fetcher = (url: string): Promise<{ parties: Party[], lightspeedGroups?: any[] }> => Promise.resolve(api.get(url)).then(res => res.data as { parties: Party[], lightspeedGroups?: any[] });
 
 export default function PartiesList() {
-  const { data: partiesData, error, isLoading, mutate } = useSWR('/parties', fetcher);
-  const { data: customersData } = useSWR('/customers', fetcher);
+  const { data: partiesData, error, isLoading, mutate } = useSWR('/api/parties', fetcher);
+  const { data: customersData } = useSWR('/api/customers', fetcher);
   const router = useRouter();
 
   const parties = partiesData && typeof partiesData === 'object' && 'parties' in partiesData ? partiesData.parties : [];
+  const lightspeedGroups = partiesData && typeof partiesData === 'object' && 'lightspeedGroups' in partiesData ? partiesData.lightspeedGroups : [];
   const customers = customersData && typeof customersData === 'object' && 'customers' in customersData ? customersData.customers : [];
 
   const [search, setSearch] = useState('');

@@ -2,12 +2,15 @@ import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { withAccelerate } from '@prisma/extension-accelerate';
 import bcrypt from 'bcryptjs';
+import { createLightspeedClient } from '../lightspeedClient';
+import logger from '../utils/logger';
 
 const prisma = new PrismaClient().$extends(withAccelerate());
 
 export const getUsers = async (req: Request, res: Response) => {
   try {
-    const users = await prisma.user.findMany({
+    // Fetch local users for reference/matching
+    const localUsers = await prisma.user.findMany({
       select: {
         id: true,
         name: true,
@@ -19,8 +22,32 @@ export const getUsers = async (req: Request, res: Response) => {
         updatedAt: true
       }
     });
-    res.json(users);
+
+    // Fetch Lightspeed users (employees/staff) if Lightspeed connection is available
+    let lightspeedUsers: any[] = [];
+    if (req.session?.lsAccessToken) {
+      try {
+        const lightspeedClient = createLightspeedClient(req);
+        lightspeedUsers = await lightspeedClient.fetchAllWithPagination('/users');
+        logger.info(`[UsersController] Fetched ${lightspeedUsers.length} users from Lightspeed`);
+      } catch (error: any) {
+        logger.warn('[UsersController] Failed to fetch Lightspeed users:', {
+          message: error.message,
+          status: error.response?.status
+        });
+        // Don't fail the entire request if Lightspeed is unavailable
+        // Just return empty lightspeedUsers array
+      }
+    } else {
+      logger.info('[UsersController] No Lightspeed access token available, returning only local users');
+    }
+
+    res.json({
+      localUsers,
+      lightspeedUsers
+    });
   } catch (err) {
+    logger.error('[UsersController] Failed to fetch users:', err);
     res.status(500).json({ error: 'Failed to fetch users' });
   }
 };

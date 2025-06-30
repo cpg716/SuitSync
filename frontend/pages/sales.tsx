@@ -3,6 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recha
 import { useAuth } from '../src/AuthContext';
 import { Button } from '../components/ui/Button';
 import { Skeleton } from '../components/ui/Skeleton';
+import { apiFetch } from '../lib/apiClient';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -30,7 +31,7 @@ export default function SalesWorkspace() {
     const fetchData = async () => {
       try {
         // Fetch leaderboard data
-        const leaderboardRes = await fetch('/api/commissions/leaderboard', { credentials: 'include' });
+        const leaderboardRes = await apiFetch('/api/commissions/leaderboard');
         if (leaderboardRes.status === 401) {
           // User not authenticated, redirect to login
           window.location.href = '/login';
@@ -48,7 +49,7 @@ export default function SalesWorkspace() {
 
         // Fetch commission data based on user role
         if (user.role === 'admin') {
-          const commissionsRes = await fetch(`/api/commissions/all?month=${month}`, { credentials: 'include' });
+          const commissionsRes = await apiFetch(`/api/commissions/all?month=${month}`);
           if (commissionsRes.status === 404) {
             setAllCommissions([]);
           } else if (!commissionsRes.ok) {
@@ -58,7 +59,7 @@ export default function SalesWorkspace() {
             setAllCommissions(commissionsData);
           }
         } else {
-          const myCommissionsRes = await fetch(`/api/commissions/mine?month=${month}`, { credentials: 'include' });
+          const myCommissionsRes = await apiFetch(`/api/commissions/mine?month=${month}`);
           if (myCommissionsRes.status === 404) {
             setMyCommissions([]);
           } else if (!myCommissionsRes.ok) {

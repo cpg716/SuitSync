@@ -66,27 +66,42 @@ export const clearSession = async (req: Request, res: Response): Promise<void> =
 };
 
 export const getSession = async (req: Request, res: Response): Promise<void> => {
-  // Check if user is authenticated (either via session or JWT)
-  if ((req as any).user) {
-    try {
-      const dbUser = await prisma.user.findUnique({
-        where: { id: (req as any).user.id },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true,
-          photoUrl: true,
-          lightspeedEmployeeId: true,
-          createdAt: true,
-          updatedAt: true
-        }
-      });
+  try {
+    // Check for session-based authentication (same logic as auth middleware)
+    const activeUserId = req.session?.activeUserId || req.session?.userId;
 
-      if (!dbUser) {
-        res.status(401).json({ error: 'User not found' });
-        return;
+    if (!activeUserId || typeof activeUserId !== 'number') {
+      // No valid session
+      res.status(401).json({
+        error: 'Authentication required. Please sign in with Lightspeed.',
+        errorCode: 'AUTH_REQUIRED',
+        redirectTo: '/login'
+      });
+      return;
+    }
+
+    const dbUser = await prisma.user.findUnique({
+      where: { id: activeUserId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        photoUrl: true,
+        lightspeedEmployeeId: true,
+        createdAt: true,
+        updatedAt: true
       }
+    });
+
+    if (!dbUser) {
+      res.status(401).json({
+        error: 'User not found',
+        errorCode: 'USER_NOT_FOUND',
+        redirectTo: '/login'
+      });
+      return;
+    }
 
       // Include Lightspeed connection status
       const lightspeedStatus = {

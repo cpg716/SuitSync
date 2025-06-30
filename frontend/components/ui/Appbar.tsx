@@ -81,7 +81,7 @@ export const Appbar: React.FC = () => {
   useEffect(() => {
     const loadSessionStatus = async () => {
       try {
-        const response = await axios.get('/api/user-switch/session-status');
+        const response = await axios.get('http://localhost:3000/api/user-switch/session-status', { withCredentials: true });
         if (response.data && (response.data as any).success) {
           setSessionStatus(response.data);
           setCachedUsersCount((response.data as any).totalCached || 0);

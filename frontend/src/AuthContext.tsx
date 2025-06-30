@@ -49,7 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetcher = (url: string): Promise<User | null> => Promise.resolve(api.get(url)).then(res => res.data as User | null);
 
-  const { data: user, mutate, isLoading } = useSWR<User | null>('/auth/session', fetcher, {
+  const { data: user, mutate, isLoading } = useSWR<User | null>('/api/auth/session', fetcher, {
     shouldRetryOnError: false,
     refreshInterval: 0, // Don't auto-refresh session endpoint
     revalidateOnFocus: false,
@@ -75,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   const { data: syncStatus, mutate: mutateSyncStatus } = useSWR(
-    user ? '/sync/status' : null, // Only fetch sync status if user is authenticated
+    user ? '/api/sync/status' : null, // Only fetch sync status if user is authenticated
     fetcher,
     {
       refreshInterval: user ? 5000 : 0, // Only refresh if authenticated

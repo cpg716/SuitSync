@@ -10,6 +10,7 @@ const prisma = new PrismaClient().$extends(withAccelerate());
 
 export const listParties = async (req: Request, res: Response): Promise<void> => {
   try {
+    // Fetch local parties
     const parties = await prisma.party.findMany({
       include: {
         members: true,
@@ -19,9 +20,32 @@ export const listParties = async (req: Request, res: Response): Promise<void> =>
       },
       orderBy: { eventDate: 'desc' },
     });
-    res.json(parties);
+
+    // Optionally sync with Lightspeed Customer Groups if authenticated
+    let lightspeedGroups: any[] = [];
+    if (req.session?.lsAccessToken) {
+      try {
+        const lightspeedClient = createLightspeedClient(req);
+        const response = await lightspeedClient.fetchAllWithPagination('/customer_groups');
+        lightspeedGroups = response || [];
+        logger.info(`[PartiesController] Fetched ${lightspeedGroups.length} customer groups from Lightspeed`);
+      } catch (error: any) {
+        logger.warn('[PartiesController] Failed to fetch Lightspeed customer groups:', {
+          message: error.message,
+          status: error.response?.status
+        });
+        // Don't fail the entire request if Lightspeed is unavailable
+      }
+    }
+
+    res.json({
+      parties,
+      lightspeedGroups: lightspeedGroups.filter(group =>
+        group.name?.includes('SuitSync Party') || parties.some(p => p.lightspeedGroupId === String(group.id))
+      )
+    });
   } catch (err: any) {
-    console.error('Error in listParties:', err.message);
+    logger.error('Error in listParties:', err);
     res.status(500).json({ error: 'Failed to retrieve parties.' });
   }
 };

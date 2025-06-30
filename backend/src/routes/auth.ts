@@ -6,8 +6,8 @@ import { asyncHandler } from '../utils/asyncHandler';
 
 const router = express.Router();
 
-// Session management
-router.get('/session', authMiddleware, asyncHandler(getSession));
+// Session management - NOTE: /session should NOT require auth middleware (circular dependency)
+router.get('/session', asyncHandler(getSession));
 router.post('/logout', asyncHandler(logout));
 router.post('/clear-session', asyncHandler(clearSession));
 

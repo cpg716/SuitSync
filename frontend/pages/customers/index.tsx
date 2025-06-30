@@ -286,6 +286,36 @@ export default function CustomersPage() {
                 )}
               </div>
             </div>
+
+            {/* Pagination Controls */}
+            {pagination && pagination.pages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 dark:border-gray-700">
+                <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
+                  Showing {((pagination.current - 1) * pagination.limit) + 1} to {Math.min(pagination.current * pagination.limit, pagination.total)} of {pagination.total} customers
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setPage(page - 1)}
+                    disabled={page <= 1}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    Page {pagination.current} of {pagination.pages}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setPage(page + 1)}
+                    disabled={page >= pagination.pages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
           </Card>
 
           <Modal open={addModalOpen} onClose={() => setAddModalOpen(false)}>

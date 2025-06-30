@@ -1,8 +1,20 @@
 import axios from 'axios';
 import type { LightspeedHealth } from '../components/LightspeedStatus';
 
+// Get backend URL from environment or default to localhost
+const getBackendUrl = () => {
+  if (typeof window !== 'undefined') {
+    // Client-side: use environment variable or default
+    return process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3000';
+  }
+  // Server-side: use environment variable or default
+  return process.env.BACKEND_URL || 'http://localhost:3000';
+};
+
+const BACKEND_URL = getBackendUrl();
+
 const api = axios.create({
-  baseURL: 'http://localhost:3000',
+  baseURL: BACKEND_URL,
   withCredentials: true,
 });
 
@@ -113,6 +125,24 @@ export const resetSyncStatus = () => {
 export const getLightspeedHealth = async (): Promise<LightspeedHealth> => {
   const { data } = await api.get('/api/lightspeed/health');
   return data as LightspeedHealth;
+};
+
+// Helper function for fetch calls that need to use the same base URL
+export const getApiUrl = (path: string): string => {
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  return `${BACKEND_URL}${cleanPath}`;
+};
+
+// Helper function for fetch calls with proper credentials
+export const apiFetch = (path: string, options: RequestInit = {}): Promise<Response> => {
+  return fetch(getApiUrl(path), {
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+    ...options,
+  });
 };
 
 export { api };

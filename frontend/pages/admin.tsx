@@ -10,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/Tabs'
 import { Modal } from '../components/ui/Modal';
 import UserSettings from './UserSettings';
 import { useAuth } from '../src/AuthContext';
+import { apiFetch, getApiUrl } from '../lib/apiClient';
 
 const defaultConfig = {
   podiumApiKey: '',
@@ -25,8 +26,8 @@ function SyncStatusCard() {
   const [lastSync, setLastSync] = useState('');
   const [errors, setErrors] = useState([]);
   useEffect(() => {
-    fetch('/api/webhooks/sync-status').then(r => r.json()).then(d => { setStatus(d.status); setLastSync(d.lastSync); });
-    fetch('/api/sync/errors').then(r => r.json()).then(d => setErrors(d));
+    fetch('http://localhost:3000/api/webhooks/sync-status', { credentials: 'include' }).then(r => r.json()).then(d => { setStatus(d.status); setLastSync(d.lastSync); });
+    fetch('http://localhost:3000/api/sync/errors', { credentials: 'include' }).then(r => r.json()).then(d => setErrors(d));
   }, []);
   return (
     <div className="bg-white dark:bg-gray-dark rounded shadow p-4 mb-6">
@@ -54,7 +55,7 @@ function ReminderSettingsCard() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   useEffect(() => {
-    fetch('/api/admin/settings').then(r => r.json()).then(s => {
+    fetch('http://localhost:3000/api/admin/settings', { credentials: 'include' }).then(r => r.json()).then(s => {
       setIntervals(s.reminderIntervals.split(',').map(n => parseInt(n.trim(), 10)).filter(n => !isNaN(n)));
       setEmailSubject(s.emailSubject);
       setEmailBody(s.emailBody);
@@ -64,9 +65,10 @@ function ReminderSettingsCard() {
   const handleSave = async e => {
     e.preventDefault();
     setSaving(true);
-    await fetch('/api/admin/settings', {
+    await fetch('http://localhost:3000/api/admin/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({
         reminderIntervals: intervals.join(','),
         emailSubject,
@@ -119,7 +121,7 @@ function TaskTypesAdmin() {
   const [deleteId, setDeleteId] = useState(null);
 
   useEffect(() => {
-    fetch('/api/admin/settings/task-types').then(r => r.json()).then(setTypes).catch(() => {}).then(() => setLoading(false));
+    fetch('http://localhost:3000/api/admin/settings/task-types', { credentials: 'include' }).then(r => r.json()).then(setTypes).catch(() => {}).then(() => setLoading(false));
   }, []);
 
   const handleEdit = t => { setEditing(t.id); setForm({ name: t.name, defaultDuration: t.defaultDuration }); };
@@ -128,10 +130,11 @@ function TaskTypesAdmin() {
   const handleSave = async e => {
     e.preventDefault();
     const method = editing ? 'PUT' : 'POST';
-    const url = editing ? `/api/admin/settings/task-types/${editing}` : '/api/admin/settings/task-types';
+    const url = editing ? `http://localhost:3000/api/admin/settings/task-types/${editing}` : 'http://localhost:3000/api/admin/settings/task-types';
     const res = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ ...form, defaultDuration: Number(form.defaultDuration) }),
     });
     if (res.ok) {
@@ -142,7 +145,7 @@ function TaskTypesAdmin() {
   };
   const handleDelete = id => { setDeleteId(id); setShowConfirm(true); };
   const confirmDelete = async () => {
-    await fetch(`/api/admin/settings/task-types/${deleteId}`, { method: 'DELETE' });
+    await fetch(`http://localhost:3000/api/admin/settings/task-types/${deleteId}`, { method: 'DELETE', credentials: 'include' });
     setTypes(ts => ts.filter(t => t.id !== deleteId));
     setShowConfirm(false); setDeleteId(null);
   };
@@ -192,7 +195,7 @@ function TailorAbilitiesAdmin() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/admin/settings/tailor-abilities', { credentials: 'include' }).then(r => r.json()),
+      fetch('http://localhost:3000/api/admin/settings/tailor-abilities', { credentials: 'include' }).then(r => r.json()),
       fetch('/api/users', { credentials: 'include' }).then(async r => {
         if (!r.ok) {
           if (r.status === 401) {
@@ -209,7 +212,7 @@ function TailorAbilitiesAdmin() {
         }
         return r.json();
       }),
-      fetch('/api/admin/settings/task-types', { credentials: 'include' }).then(r => r.json()),
+      fetch('http://localhost:3000/api/admin/settings/task-types', { credentials: 'include' }).then(r => r.json()),
     ]).then(([a, u, t]) => {
       setAbilities(a);
       const userArr = Array.isArray(u) ? u : (Array.isArray(u?.localUsers) ? u.localUsers : []);
@@ -224,7 +227,7 @@ function TailorAbilitiesAdmin() {
   const handleSave = async e => {
     e.preventDefault();
     const method = editing ? 'PUT' : 'POST';
-    const url = editing ? `/api/admin/settings/tailor-abilities/${editing}` : '/api/admin/settings/tailor-abilities';
+    const url = editing ? `http://localhost:3000/api/admin/settings/tailor-abilities/${editing}` : 'http://localhost:3000/api/admin/settings/tailor-abilities';
     const res = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
@@ -239,7 +242,7 @@ function TailorAbilitiesAdmin() {
   };
   const handleDelete = id => { setDeleteId(id); setShowConfirm(true); };
   const confirmDelete = async () => {
-    await fetch(`/api/admin/settings/tailor-abilities/${deleteId}`, { method: 'DELETE' });
+    await fetch(`http://localhost:3000/api/admin/settings/tailor-abilities/${deleteId}`, { method: 'DELETE', credentials: 'include' });
     setAbilities(abs => abs.filter(a => a.id !== deleteId));
     setShowConfirm(false); setDeleteId(null);
   };
@@ -296,8 +299,8 @@ function TailorSchedulesAdmin() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/admin/settings/tailor-schedules', { credentials: 'include' }).then(r => r.json()),
-      fetch('/api/users', { credentials: 'include' }).then(async r => {
+      fetch('http://localhost:3000/api/admin/settings/tailor-schedules', { credentials: 'include' }).then(r => r.json()),
+      fetch('http://localhost:3000/api/users', { credentials: 'include' }).then(async r => {
         if (!r.ok) {
           if (r.status === 401) {
             toast.error('You must be logged in to view users.');
@@ -326,10 +329,11 @@ function TailorSchedulesAdmin() {
   const handleSave = async e => {
     e.preventDefault();
     const method = editing ? 'PUT' : 'POST';
-    const url = editing ? `/api/admin/settings/tailor-schedules/${editing}` : '/api/admin/settings/tailor-schedules';
+    const url = editing ? `http://localhost:3000/api/admin/settings/tailor-schedules/${editing}` : 'http://localhost:3000/api/admin/settings/tailor-schedules';
     const res = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ ...form, tailorId: Number(form.tailorId), dayOfWeek: Number(form.dayOfWeek) }),
     });
     if (res.ok) {
@@ -340,7 +344,7 @@ function TailorSchedulesAdmin() {
   };
   const handleDelete = id => { setDeleteId(id); setShowConfirm(true); };
   const confirmDelete = async () => {
-    await fetch(`/api/admin/settings/tailor-schedules/${deleteId}`, { method: 'DELETE' });
+    await fetch(`http://localhost:3000/api/admin/settings/tailor-schedules/${deleteId}`, { method: 'DELETE', credentials: 'include' });
     setSchedules(ss => ss.filter(s => s.id !== deleteId));
     setShowConfirm(false); setDeleteId(null);
   };
@@ -395,7 +399,7 @@ function UsersAdminCard() {
   const USERS_PER_ROW = 5;
   const USERS_PER_PAGE = 15;
   useEffect(() => {
-    fetch('/api/users').then(async r => {
+    apiFetch('/api/users').then(async r => {
       if (!r.ok) {
         if (r.status === 401) {
           toast.error('You must be logged in to view users.');
@@ -501,7 +505,7 @@ export default function AdminSettings() {
 
   useEffect(() => {
     setLoading(true);
-    fetch('/api/admin/settings', { credentials: 'include' })
+    fetch('http://localhost:3000/api/admin/settings', { credentials: 'include' })
       .then(r => r.json())
       .then(s => {
         setSettings(s);
@@ -523,7 +527,7 @@ export default function AdminSettings() {
     setSaving(true);
     setError('');
     try {
-      const res = await fetch('/api/admin/settings', {
+      const res = await fetch('http://localhost:3000/api/admin/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings),
