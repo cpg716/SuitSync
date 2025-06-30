@@ -31,9 +31,18 @@ export function LightspeedStatus() {
   const { user } = useAuth();
   const { success: toastSuccess, error: toastError } = useToast();
 
-  const { data, error, mutate } = useSWR<LightspeedHealth>('/api/lightspeed/health', getLightspeedHealth, {
-    refreshInterval: 15000, // Poll every 15 seconds
-  });
+  // Don't show sync status if user is not authenticated or not an admin
+  const shouldFetch = user && user.role === 'admin';
+
+  const { data, error, mutate } = useSWR<LightspeedHealth>(
+    shouldFetch ? '/api/lightspeed/health' : null,
+    getLightspeedHealth,
+    {
+      refreshInterval: 15000,
+      revalidateOnFocus: false,
+      shouldRetryOnError: false,
+    }
+  );
 
   const handleSync = async (resource: string) => {
     try {
@@ -55,6 +64,11 @@ export function LightspeedStatus() {
       toastError('Failed to perform health check');
     }
   };
+
+  // Don't show sync status if user is not authenticated or not an admin
+  if (!shouldFetch) {
+    return null; // Hide the component entirely for non-admin users
+  }
 
   if (error) {
     return (

@@ -127,4 +127,42 @@ export const createUser = async (req: Request, res: Response) => {
 
 export const updateUserPhoto = async (req: Request, res: Response) => {
   // Implementation of updateUserPhoto method
-}; 
+};
+
+export const getUserActivity = async (req: Request, res: Response) => {
+  try {
+    const userId = Number(req.params.id);
+    if (isNaN(userId)) {
+      return res.status(400).json({ error: 'Invalid user ID' });
+    }
+
+    // Check if user exists
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Get user's audit log entries (activity)
+    const activity = await prisma.auditLog.findMany({
+      where: { userId: userId },
+      orderBy: { createdAt: 'desc' },
+      take: 50, // Limit to last 50 activities
+      select: {
+        id: true,
+        action: true,
+        entity: true,
+        createdAt: true,
+        details: true
+      }
+    });
+
+    res.json(activity);
+  } catch (err) {
+    console.error('Error fetching user activity:', err);
+    res.status(500).json({ error: 'Failed to fetch user activity' });
+  }
+};

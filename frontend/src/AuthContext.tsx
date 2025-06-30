@@ -51,28 +51,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const { data: user, mutate, isLoading } = useSWR<User | null>('/auth/session', fetcher, {
     shouldRetryOnError: false,
+    refreshInterval: 0, // Don't auto-refresh session endpoint
+    revalidateOnFocus: false,
     onError: (err) => {
       if (err && typeof err === 'object' && 'response' in err && err.response && typeof err.response === 'object' && 'status' in err.response) {
-        if (err.response.status !== 401) {
+        if (err.response.status === 401) {
+          // 401 is expected when not authenticated, clear any auth errors
+          setAuthError(null);
+        } else if (err.response.status >= 500) {
           setAuthError('Backend unavailable');
         } else {
           setAuthError(null);
         }
+      } else {
+        // Network error or other issue
+        setAuthError('Backend unavailable');
       }
     },
     onSuccess: (data) => {
-      if (data && typeof data === 'object' && 'photoUrl' in data) {
-        console.log('Auth Context - User photo URL:', data.photoUrl);
-      }
+      // User data loaded successfully, clear any auth errors
+      setAuthError(null);
     }
   });
 
-  const { data: syncStatus, mutate: mutateSyncStatus } = useSWR('/sync/status', fetcher, {
-    refreshInterval: 5000,
-    onError: (err) => {
-      console.error("SWR sync status error:", err);
+  const { data: syncStatus, mutate: mutateSyncStatus } = useSWR(
+    user ? '/sync/status' : null, // Only fetch sync status if user is authenticated
+    fetcher,
+    {
+      refreshInterval: user ? 5000 : 0, // Only refresh if authenticated
+      shouldRetryOnError: false,
+      onError: (err) => {
+        // Only log sync status errors if they're not 401 (authentication required)
+        if (err?.response?.status !== 401) {
+          console.error("SWR sync status error:", err);
+        }
+      }
     }
-  });
+  );
 
   const lastSync = syncStatus && typeof syncStatus === 'object' && 'lastSync' in syncStatus ? new Date(syncStatus.lastSync as string) : null;
 
@@ -106,7 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const syncCustomers = useCallback(async () => {
     toastSuccess('Starting manual sync...');
     try {
-      await api.post('/sync/customers');
+      await api.post('/api/sync/customers');
       toastSuccess('Sync in progress. Data will update shortly.');
       mutateSyncStatus();
     } catch (err) {
@@ -116,7 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function connectLightspeed() {
     try {
-      const res = await api.get('/auth/start-lightspeed');
+      const res = await api.get('/api/auth/start-lightspeed');
       if (res.data && typeof res.data === 'object' && 'url' in res.data && res.data.url) {
         window.location.href = res.data.url as string;
       }

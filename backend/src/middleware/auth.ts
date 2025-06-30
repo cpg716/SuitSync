@@ -2,13 +2,59 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
 import { withAccelerate } from '@prisma/extension-accelerate';
+import { MultiUserSessionService } from '../services/multiUserSessionService';
 
 const prisma = new PrismaClient().$extends(withAccelerate());
 const DEMO = process.env.DEMO === 'true';
 
 export async function authMiddleware(req: Request, res: Response, next: NextFunction) {
   try {
-    // Check for session-based authentication (Lightspeed OAuth)
+    // Check for session-based authentication (both legacy and multi-user)
+    const activeUserId = req.session?.activeUserId || req.session?.userId;
+
+    if (activeUserId && typeof activeUserId === 'number') {
+      const user = await prisma.user.findUnique({
+        where: { id: activeUserId },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          lightspeedEmployeeId: true
+        }
+      });
+
+      if (!user) {
+        return res.status(401).json({ error: 'User not found' });
+      }
+
+      (req as any).user = user;
+
+      // Ensure session tokens are available for multi-user session
+      if (req.session?.activeUserId && req.session?.userSessions) {
+        const userSession = req.session.userSessions[activeUserId];
+        if (userSession) {
+          // Update legacy session properties for backward compatibility
+          req.session.lsAccessToken = userSession.lsAccessToken;
+          req.session.lsRefreshToken = userSession.lsRefreshToken;
+          req.session.lsDomainPrefix = userSession.lsDomainPrefix;
+        }
+      }
+
+      // Check if Lightspeed connection is required and available
+      const requiresLightspeed = ['/api/customers', '/api/sales', '/api/sync'].some(p => req.originalUrl.startsWith(p));
+      if (requiresLightspeed && !req.session?.lsAccessToken) {
+        return res.status(401).json({
+          error: 'Lightspeed connection required for this action.',
+          errorCode: 'LS_AUTH_REQUIRED',
+          redirectTo: '/auth/start-lightspeed'
+        });
+      }
+
+      return next();
+    }
+
+    // Legacy session check for backward compatibility
     if (req.session?.userId && typeof req.session.userId === 'number') {
       const userId: number = req.session.userId;
       const user = await prisma.user.findUnique({

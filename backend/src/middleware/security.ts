@@ -125,7 +125,7 @@ export const securityHeaders = helmet({
 export const requestSizeLimit = (maxSize: number = 10 * 1024 * 1024) => { // 10MB default
   return (req: Request, res: Response, next: NextFunction) => {
     const contentLength = parseInt(req.get('content-length') || '0', 10);
-    
+
     if (contentLength > maxSize) {
       logger.warn('Request size limit exceeded', {
         ip: req.ip,
@@ -133,13 +133,123 @@ export const requestSizeLimit = (maxSize: number = 10 * 1024 * 1024) => { // 10M
         maxSize,
         path: req.path,
       });
-      
+
       return res.status(413).json({
         error: 'Request entity too large',
         maxSize: `${Math.round(maxSize / 1024 / 1024)}MB`,
       });
     }
-    
+
+    next();
+  };
+};
+
+// Session size limiting middleware to prevent 431 errors
+export const sessionSizeLimit = (maxSessionSize: number = 4 * 1024) => { // 4KB default (safe for most browsers)
+  return (req: Request, res: Response, next: NextFunction) => {
+    // Check if session exists and estimate its size
+    if (req.session && Object.keys(req.session).length > 0) {
+      try {
+        const sessionData = JSON.stringify(req.session);
+        const sessionSize = Buffer.byteLength(sessionData, 'utf8');
+
+        if (sessionSize > maxSessionSize) {
+          logger.warn('Session size limit exceeded', {
+            ip: req.ip,
+            sessionSize,
+            maxSessionSize,
+            path: req.path,
+            sessionKeys: Object.keys(req.session),
+          });
+
+          // Clean up large session data to prevent 431 errors
+          if (req.session.userSessions) {
+            const userSessions = Object.entries(req.session.userSessions);
+            if (userSessions.length > 3) {
+              // Keep only the 3 most recently active sessions
+              userSessions.sort(([, a], [, b]) => b.lastActive.getTime() - a.lastActive.getTime());
+              const sessionsToKeep = userSessions.slice(0, 3);
+              req.session.userSessions = Object.fromEntries(sessionsToKeep);
+
+              logger.info('Cleaned up session data to prevent header size issues', {
+                ip: req.ip,
+                originalSessionCount: userSessions.length,
+                keptSessionCount: sessionsToKeep.length,
+              });
+            }
+          }
+
+          // If still too large, clear non-essential session data
+          const newSessionData = JSON.stringify(req.session);
+          const newSessionSize = Buffer.byteLength(newSessionData, 'utf8');
+          if (newSessionSize > maxSessionSize) {
+            // Keep only essential session data
+            const essentialData = {
+              activeUserId: req.session.activeUserId,
+              userId: req.session.userId,
+              lsAccessToken: req.session.lsAccessToken,
+              lsRefreshToken: req.session.lsRefreshToken,
+              lsDomainPrefix: req.session.lsDomainPrefix,
+            };
+
+            // Clear all session data and restore only essential data
+            Object.keys(req.session).forEach(key => {
+              if (key !== 'id' && key !== 'cookie') {
+                delete (req.session as any)[key];
+              }
+            });
+
+            Object.assign(req.session, essentialData);
+
+            logger.warn('Performed aggressive session cleanup due to size limit', {
+              ip: req.ip,
+              originalSize: sessionSize,
+              newSize: Buffer.byteLength(JSON.stringify(req.session), 'utf8'),
+            });
+          }
+        }
+      } catch (error) {
+        logger.error('Error checking session size:', error);
+      }
+    }
+
+    next();
+  };
+};
+
+// Header size monitoring middleware to prevent 431 errors
+export const headerSizeMonitor = (maxHeaderSize: number = 8 * 1024) => { // 8KB default
+  return (req: Request, res: Response, next: NextFunction) => {
+    try {
+      // Calculate total header size
+      const headerString = Object.entries(req.headers)
+        .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : value}`)
+        .join('\r\n');
+
+      const headerSize = Buffer.byteLength(headerString, 'utf8');
+
+      if (headerSize > maxHeaderSize) {
+        logger.warn('Large request headers detected', {
+          ip: req.ip,
+          headerSize,
+          maxHeaderSize,
+          path: req.path,
+          userAgent: req.get('User-Agent')?.substring(0, 100),
+        });
+
+        // Return 431 with helpful message
+        return res.status(431).json({
+          error: 'Request header fields too large',
+          message: 'Your session data has grown too large. Please clear your session and try again.',
+          headerSize,
+          maxHeaderSize,
+          clearSessionUrl: '/api/auth/clear-session'
+        });
+      }
+    } catch (error) {
+      logger.error('Error checking header size:', error);
+    }
+
     next();
   };
 };

@@ -7,6 +7,7 @@ import { withAccelerate } from '@prisma/extension-accelerate';
 import { createLightspeedClient } from '../lightspeedClient'; // TODO: migrate this as well
 import logger from '../utils/logger'; // TODO: migrate this as well
 import querystring from 'querystring';
+import { MultiUserSessionService } from '../services/multiUserSessionService';
 
 const prisma = new PrismaClient().$extends(withAccelerate());
 const LS_CLIENT_ID = process.env.LS_CLIENT_ID || '';
@@ -54,7 +55,7 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
     res.redirect(`${FRONTEND_URL}/login?error=domain_mismatch`);
     return;
   }
-  req.session.lsAuthState = null;
+  req.session.lsAuthState = undefined;
   try {
     logger.info('Exchanging authorization code for tokens...');
     const tokenResponse = await axios.post(
@@ -163,8 +164,15 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
         },
       });
     }
-    // Set user session
-    req.session.userId = user.id;
+    // Add user to multi-user session cache
+    await MultiUserSessionService.addUserSession(req, user.id, {
+      lsAccessToken: access_token,
+      lsRefreshToken: refresh_token,
+      lsDomainPrefix: domain_prefix,
+      expiresAt: expiresAt,
+    });
+
+    logger.info(`User ${user.id} (${user.email}) successfully authenticated and added to session cache`);
     res.redirect(`${FRONTEND_URL}/`);
     return;
   } catch (error: unknown) {

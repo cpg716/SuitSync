@@ -11,6 +11,7 @@ import { useRouter } from 'next/router';
 import { SWRConfig } from 'swr';
 import { swrConfig } from '../lib/apiClient';
 import { AdminSettingsProvider } from '../src/AdminSettingsContext';
+import ErrorBoundary from '../components/ErrorBoundary';
 
 function InnerApp({ Component, pageProps }: AppProps) {
   // Support per-page layout: if a page exports getLayout, use it; otherwise, wrap in Layout
@@ -19,11 +20,8 @@ function InnerApp({ Component, pageProps }: AppProps) {
   if (router.pathname === '/login') {
     // Force minimal layout for login page
     getLayout = (page: React.ReactNode) => page;
-    // Debug log
-    if (typeof window !== 'undefined') console.log('Using minimal layout for /login');
   } else {
     getLayout = (Component as any).getLayout || ((page: React.ReactNode, props: any) => <Layout title={props.title || (Component as any).title}>{page}</Layout>);
-    if (typeof window !== 'undefined') console.log('Using default layout for', router.pathname);
   }
 
   const [showSplash, setShowSplash] = useState(true);
@@ -50,9 +48,13 @@ function InnerApp({ Component, pageProps }: AppProps) {
   }, []);
 
   useEffect(() => {
-    // If not loading, not on /login, and not authenticated, redirect to /login
-    if (!loading && !user && router.pathname !== '/login') {
-      router.replace('/login');
+    // If not loading, not on /login or /status, and not authenticated, redirect to /login
+    if (!loading && !user && !['/login', '/status'].includes(router.pathname)) {
+      // Use a timeout to prevent race conditions with route changes
+      const timeoutId = setTimeout(() => {
+        router.replace('/login?reason=auth_required');
+      }, 100);
+      return () => clearTimeout(timeoutId);
     }
   }, [user, loading, router]);
 
@@ -71,7 +73,7 @@ function InnerApp({ Component, pageProps }: AppProps) {
       <PWAInstallPrompt />
       {health && health.status !== 'ok' && (
         <div className="bg-yellow-500 text-black text-center py-2 z-50 fixed top-0 left-0 w-full">
-          Backend health: {health.status} | DB: {health?.db} | Session: {health?.session}
+          Backend health: {health.status} | DB: {typeof health?.db === 'object' ? JSON.stringify(health.db) : health?.db} | Session: {typeof health?.session === 'object' ? JSON.stringify(health.session) : health?.session}
         </div>
       )}
       {authError && (
@@ -88,14 +90,16 @@ function InnerApp({ Component, pageProps }: AppProps) {
 
 export default function App(props: AppProps) {
   return (
-    <AuthProvider>
-      <ToastProvider>
-        <AdminSettingsProvider>
-          <SWRConfig value={swrConfig}>
-            <InnerApp {...props} />
-          </SWRConfig>
-        </AdminSettingsProvider>
-      </ToastProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <ToastProvider>
+          <AdminSettingsProvider>
+            <SWRConfig value={swrConfig}>
+              <InnerApp {...props} />
+            </SWRConfig>
+          </AdminSettingsProvider>
+        </ToastProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }

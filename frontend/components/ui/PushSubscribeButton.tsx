@@ -14,7 +14,7 @@ const PushSubscribeButton: React.FC = () => {
       const permission = await Notification.requestPermission();
       if (permission !== 'granted') throw new Error('Permission denied');
       // Get VAPID public key from server
-      const vapidRes = await fetch('/api/push/vapidPublicKey');
+      const vapidRes = await fetch('/api/push/vapidPublicKey', { credentials: 'include' });
       const vapidPublicKey = await vapidRes.text();
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
@@ -25,6 +25,7 @@ const PushSubscribeButton: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(sub),
+        credentials: 'include',
       });
       if (!res.ok) throw new Error('Failed to subscribe');
       setStatus('success');

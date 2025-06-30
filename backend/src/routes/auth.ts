@@ -1,5 +1,5 @@
 import express from 'express';
-import { login, logout, getSession } from '../controllers/authController';
+import { login, logout, getSession, clearSession } from '../controllers/authController';
 import { authMiddleware } from '../middleware/auth';
 import { redirectToLightspeed, handleCallback } from '../controllers/lightspeedAuthController';
 import { asyncHandler } from '../utils/asyncHandler';
@@ -9,6 +9,9 @@ const router = express.Router();
 // Session management
 router.get('/session', authMiddleware, asyncHandler(getSession));
 router.post('/logout', asyncHandler(logout));
+router.post('/clear-session', asyncHandler(clearSession));
+
+
 
 // Lightspeed OAuth (primary authentication method)
 router.get('/start-lightspeed', asyncHandler(redirectToLightspeed));

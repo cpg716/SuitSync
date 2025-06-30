@@ -13,6 +13,7 @@ export default function CreateAlterationPage() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
+            credentials: 'include',
           });
           router.push('/alterations');
         }}

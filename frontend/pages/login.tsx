@@ -60,8 +60,15 @@ export default function LoginPage() {
     const urlParams = new URLSearchParams(window.location.search);
     const errorParam = urlParams.get('error');
     const detailsParam = urlParams.get('details');
-    
-    if (errorParam) {
+    const reasonParam = urlParams.get('reason');
+    const sessionExpired = urlParams.get('sessionExpired');
+
+    if (sessionExpired === 'true') {
+      setError('Your session has expired. Please sign in again.');
+      toastError('Session expired. Please sign in again.');
+    } else if (reasonParam === 'auth_required') {
+      setError('Authentication required. Please sign in with your Lightspeed account to continue.');
+    } else if (errorParam) {
       let errorMessage = 'Authentication failed';
       if (errorParam === 'auth_failed') {
         errorMessage = 'Lightspeed authentication failed';
@@ -104,6 +111,8 @@ export default function LoginPage() {
     const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
     window.location.href = `${backendUrl}/auth/start-lightspeed`;
   };
+
+
 
   const handleUserSelect = (selectedUser) => {
     // Implement Lightspeed OAuth for the selected user
@@ -148,6 +157,8 @@ export default function LoginPage() {
             </>
           )}
         </Button>
+
+
         
         <div className="mt-6 text-xs text-gray-500 text-center space-y-2">
           <p>
@@ -155,6 +166,11 @@ export default function LoginPage() {
           </p>
           <p>
             Permissions and roles are automatically synced from your Lightspeed account.
+          </p>
+          <p>
+            <a href="/status" className="text-blue-600 hover:text-blue-800 underline">
+              Check system status
+            </a>
           </p>
         </div>
       </Card>

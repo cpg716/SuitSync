@@ -76,6 +76,21 @@ The project is organized as a monorepo to streamline development and deployment.
 
 ---
 
+## 🔐 Authentication
+
+SuitSync uses **Lightspeed X-Series OAuth 2.0** for secure authentication. Users must have a valid Lightspeed account to access the system.
+
+**Key Features:**
+- OAuth 2.0 integration with Lightspeed X-Series
+- Session-based authentication with secure cookies
+- Role-based access control synced from Lightspeed
+- Automatic token refresh and session management
+- Development mode with demo users for testing
+
+**📖 For detailed authentication setup and troubleshooting, see [Authentication Setup Guide](docs/AUTHENTICATION_SETUP.md)**
+
+---
+
 ## Local Development Setup
 
 ### 1. Prerequisites

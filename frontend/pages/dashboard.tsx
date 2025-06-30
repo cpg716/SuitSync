@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import useSWR from 'swr';
+import { useRouter } from 'next/router';
 import Layout from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -52,6 +53,7 @@ const STATUS_COLORS = {
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
 
 export default function Dashboard() {
+  const router = useRouter();
   const { success: toastSuccess, error: toastError } = useToast();
   const [scannerOpen, setScannerOpen] = useState(false);
   const [createJobOpen, setCreateJobOpen] = useState(false);
@@ -339,42 +341,42 @@ export default function Dashboard() {
                 <CardTitle>Quick Actions</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="w-full justify-start"
-                  onClick={() => window.location.href = '/customers'}
+                  onClick={() => router.push('/customers')}
                 >
                   <Users className="w-4 h-4 mr-2" />
                   Manage Customers
                 </Button>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="w-full justify-start"
-                  onClick={() => window.location.href = '/parties'}
+                  onClick={() => router.push('/parties')}
                 >
                   <Calendar className="w-4 h-4 mr-2" />
                   View Parties
                 </Button>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="w-full justify-start"
-                  onClick={() => window.location.href = '/alterations'}
+                  onClick={() => router.push('/alterations')}
                 >
                   <Scissors className="w-4 h-4 mr-2" />
                   All Alterations
                 </Button>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="w-full justify-start"
-                  onClick={() => window.location.href = '/appointments'}
+                  onClick={() => router.push('/appointments')}
                 >
                   <Clock className="w-4 h-4 mr-2" />
                   Appointments
                 </Button>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="w-full justify-start"
-                  onClick={() => window.location.href = '/tag'}
+                  onClick={() => router.push('/tag')}
                 >
                   <QrCode className="w-4 h-4 mr-2" />
                   Print Tags

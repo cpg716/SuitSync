@@ -1,7 +1,7 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/router';
 import useSWR from 'swr';
-import { api } from '@/lib/apiClient';
+import { api, fetcher } from '@/lib/apiClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -180,13 +180,13 @@ export default function CustomerProfilePage() {
   const { id } = router.query;
   const { success, error: toastError } = useToast();
   
-  const { data: customer, error: customerError, mutate } = useSWR<Customer>(id ? `/customers/${id}` : null, fetcher);
+  const { data: customer, error: customerError, mutate } = useSWR<Customer>(id ? `/api/customers/${id}` : null, fetcher);
 
   const [isEditModalOpen, setEditModalOpen] = useState(false);
 
   const handleSaveCustomer = async (formData) => {
     try {
-      await api.put(`/customers/${id}`, formData);
+      await api.put(`/api/customers/${id}`, formData);
       mutate(); // Re-fetch data
       success('Customer updated successfully.');
     } catch (err) {
@@ -196,7 +196,7 @@ export default function CustomerProfilePage() {
 
   const handleSaveMeasurements = async (measurementsData) => {
     try {
-      await api.put(`/customers/${id}/measurements`, measurementsData);
+      await api.put(`/api/customers/${id}/measurements`, measurementsData);
       mutate();
       success('Measurements saved.');
     } catch (err) {
@@ -240,5 +240,4 @@ export default function CustomerProfilePage() {
   );
 }
 
-// Replace fetcher with fetch and correct signature
-const fetcher = (url: string): Promise<any> => fetch(url).then(res => res.json()); 
+// Using imported fetcher from apiClient

@@ -112,25 +112,25 @@ export default function PartyDetail() {
   };
 
   const fetchMembers = () => {
-    fetch(`/api/parties/${id}/members`)
+    fetch(`/api/parties/${id}/members`, { credentials: 'include' })
       .then(res => res.json())
       .then(setMembers);
   };
 
   useEffect(() => {
     if (!id) return;
-    fetch(`/api/parties/${id}`)
+    fetch(`/api/parties/${id}`, { credentials: 'include' })
       .then(res => res.json())
       .then(setParty);
     fetchMembers();
-    fetch(`/api/parties/${id}/timeline`).then(res => res.json()).then(setTimeline);
-    fetch(`/api/parties/${id}/communications`).then(res => res.json()).then(setCommunications);
+    fetch(`/api/parties/${id}/timeline`, { credentials: 'include' }).then(res => res.json()).then(setTimeline);
+    fetch(`/api/parties/${id}/communications`, { credentials: 'include' }).then(res => res.json()).then(setCommunications);
   }, [id]);
 
   useEffect(() => {
     if (!members.length) return;
     members.forEach(member => {
-      fetch(`/api/alterations/member/${member.id}`)
+      fetch(`/api/alterations/member/${member.id}`, { credentials: 'include' })
         .then(res => res.json())
         .then(jobs => setMemberAlterations(prev => ({ ...prev, [member.id]: jobs })));
     });
@@ -140,7 +140,8 @@ export default function PartyDetail() {
     await fetch(`/api/parties/${id}/members`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form)
+      body: JSON.stringify(form),
+      credentials: 'include',
     });
     setShowAdd(false);
     setForm({ role: '', measurements: '', status: 'Selected', notes: '' });
@@ -151,7 +152,8 @@ export default function PartyDetail() {
     await fetch(`/api/parties/${id}/members/${editMember.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form)
+      body: JSON.stringify(form),
+      credentials: 'include',
     });
     setShowEdit(false);
     setEditMember(null);
@@ -160,7 +162,7 @@ export default function PartyDetail() {
   };
 
   const handleRemove = async (memberId) => {
-    await fetch(`/api/parties/${id}/members/${memberId}`, { method: 'DELETE' });
+    await fetch(`/api/parties/${id}/members/${memberId}`, { method: 'DELETE', credentials: 'include' });
     fetchMembers();
   };
 
@@ -169,21 +171,22 @@ export default function PartyDetail() {
     await fetch(`/api/parties/${id}/members/${memberId}/advance-status`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ newStatus })
+      body: JSON.stringify({ newStatus }),
+      credentials: 'include',
     }).then(res => {
       if (res.ok) {
         showToast('Status updated', 'success');
-        fetch(`/api/parties/${id}/timeline`).then(res => res.json()).then(setTimeline);
+        fetch(`/api/parties/${id}/timeline`, { credentials: 'include' }).then(res => res.json()).then(setTimeline);
       } else {
         showToast('Failed to update status', 'error');
       }
     });
   };
   const handleTriggerBulkOrder = async () => {
-    await fetch(`/api/parties/${id}/trigger-bulk-order`, { method: 'POST' }).then(res => {
+    await fetch(`/api/parties/${id}/trigger-bulk-order`, { method: 'POST', credentials: 'include' }).then(res => {
       if (res.ok) {
         showToast('Bulk order triggered', 'success');
-        fetch(`/api/parties/${id}/timeline`).then(res => res.json()).then(setTimeline);
+        fetch(`/api/parties/${id}/timeline`, { credentials: 'include' }).then(res => res.json()).then(setTimeline);
       } else {
         showToast('Failed to trigger bulk order', 'error');
       }
@@ -195,7 +198,8 @@ export default function PartyDetail() {
     await fetch(`/api/parties/${id}/members/${memberId}/notify-pickup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pickupDate })
+      body: JSON.stringify({ pickupDate }),
+      credentials: 'include',
     }).then(res => {
       if (res.ok) {
         showToast('Pickup notification sent', 'success');
@@ -214,12 +218,13 @@ export default function PartyDetail() {
         await fetch(`/api/parties/${id}/members/${row.memberId}/advance-status`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ newStatus: WORKFLOW_STATUSES[idx+1] })
+          body: JSON.stringify({ newStatus: WORKFLOW_STATUSES[idx+1] }),
+          credentials: 'include',
         });
       }
     }
     showToast('Advanced all members to next status', 'success');
-    fetch(`/api/parties/${id}/timeline`).then(res => res.json()).then(setTimeline);
+    fetch(`/api/parties/${id}/timeline`, { credentials: 'include' }).then(res => res.json()).then(setTimeline);
   };
   const handleRemindAll = async () => {
     if (!timeline) return;
@@ -341,12 +346,13 @@ export default function PartyDetail() {
                     const res = await fetch('/api/alterations', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ ...formData, partyMemberId: alterationMemberId, partyId: party.id })
+                      body: JSON.stringify({ ...formData, partyMemberId: alterationMemberId, partyId: party.id }),
+                      credentials: 'include',
                     });
                     setShowAlterationModal(false);
                     setEditAlteration(null);
                     // Refresh alterations for this member
-                    fetch(`/api/alterations/member/${alterationMemberId}`)
+                    fetch(`/api/alterations/member/${alterationMemberId}`, { credentials: 'include' })
                       .then(res => res.json())
                       .then(jobs => setMemberAlterations(prev => ({ ...prev, [alterationMemberId]: jobs })));
                   }}

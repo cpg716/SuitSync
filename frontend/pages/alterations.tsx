@@ -19,11 +19,10 @@ import { ConfirmModal } from '@/components/ui/ConfirmModal';
 
 import { Pagination } from '@/components/ui/Pagination';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
+import { fetcher } from '@/lib/apiClient';
 
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
-
-const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then(r => r.json());
 
 const statusCols = [
   { key: 'pending', label: 'Pending' },
@@ -41,7 +40,6 @@ export default function AlterationsPage() {
   const { data: parties = [] } = useSWR('/api/parties', fetcher);
   const [selectedJob, setSelectedJob] = useState(null);
   const [alterations, setAlterations] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const { success, error: toastError } = useToast();
   const [printJob, setPrintJob] = useState<any | null>(null);
@@ -113,6 +111,7 @@ export default function AlterationsPage() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
+        credentials: 'include',
       });
       success('Status updated');
       mutate();
@@ -130,6 +129,7 @@ export default function AlterationsPage() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ timeSpentMinutes: newTime }),
+        credentials: 'include',
       });
       success('Time updated');
       mutate();
@@ -148,6 +148,7 @@ export default function AlterationsPage() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
+        credentials: 'include',
       });
       if (!res.ok) throw new Error('Failed to update');
       success('Alteration updated');
@@ -168,6 +169,7 @@ export default function AlterationsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
+        credentials: 'include',
       });
       if (!res.ok) throw new Error('Failed to create');
       success('Alteration created');
@@ -187,6 +189,7 @@ export default function AlterationsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(jobData),
+        credentials: 'include',
       });
       if (!res.ok) throw new Error('Failed to create job');
       success('Alteration job created successfully');
@@ -203,7 +206,8 @@ export default function AlterationsPage() {
     setDeleteLoading(true);
     try {
       const res = await fetch(`/api/alterations/${deleteJob.id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        credentials: 'include',
       });
       if (!res.ok) throw new Error('Failed to delete');
       success('Alteration deleted');

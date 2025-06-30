@@ -24,12 +24,4 @@ const withPWA = require('next-pwa')({
 /** @type {import('next').NextConfig} */
 module.exports = withPWA({
   reactStrictMode: true,
-  async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: `${process.env.NEXT_PUBLIC_API_URL}/api/:path*`,
-      },
-    ];
-  },
 });

@@ -7,7 +7,7 @@ import morgan from 'morgan';
 import { config } from './utils/config'; // Zod-validated config
 import { PrismaClient } from '@prisma/client';
 import { withAccelerate } from '@prisma/extension-accelerate';
-import { securityHeaders, rateLimits, speedLimiter, requestSizeLimit } from './middleware/security';
+import { securityHeaders, rateLimits, speedLimiter, requestSizeLimit, sessionSizeLimit, headerSizeMonitor } from './middleware/security';
 
 // Load environment variables and validate
 // (dotenv/config is loaded in config.ts)
@@ -20,6 +20,7 @@ const prisma = new PrismaClient().$extends(withAccelerate());
 
 // Security middleware
 app.use(securityHeaders);
+app.use(headerSizeMonitor()); // Check header size early to prevent 431 errors
 app.use(rateLimits.general);
 app.use(speedLimiter);
 app.use(requestSizeLimit());
@@ -61,10 +62,14 @@ app.use(
     cookie: {
       secure: process.env.NODE_ENV === 'production',
       httpOnly: true,
+      sameSite: 'lax',
       maxAge: 1000 * 60 * 60 * 24 * 7, // 1 week
     },
   })
 );
+
+// Add session size limiting to prevent 431 errors
+app.use(sessionSizeLimit());
 
 // Register all API routes
 import { initRoutes } from './routes/initRoutes';

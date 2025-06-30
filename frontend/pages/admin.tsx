@@ -192,8 +192,8 @@ function TailorAbilitiesAdmin() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/admin/settings/tailor-abilities').then(r => r.json()),
-      fetch('/api/users').then(async r => {
+      fetch('/api/admin/settings/tailor-abilities', { credentials: 'include' }).then(r => r.json()),
+      fetch('/api/users', { credentials: 'include' }).then(async r => {
         if (!r.ok) {
           if (r.status === 401) {
             toast.error('You must be logged in to view users.');
@@ -209,7 +209,7 @@ function TailorAbilitiesAdmin() {
         }
         return r.json();
       }),
-      fetch('/api/admin/settings/task-types').then(r => r.json()),
+      fetch('/api/admin/settings/task-types', { credentials: 'include' }).then(r => r.json()),
     ]).then(([a, u, t]) => {
       setAbilities(a);
       const userArr = Array.isArray(u) ? u : (Array.isArray(u?.localUsers) ? u.localUsers : []);
@@ -228,6 +228,7 @@ function TailorAbilitiesAdmin() {
     const res = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ ...form, tailorId: Number(form.tailorId), taskTypeId: Number(form.taskTypeId), proficiency: Number(form.proficiency) }),
     });
     if (res.ok) {
@@ -295,8 +296,8 @@ function TailorSchedulesAdmin() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/admin/settings/tailor-schedules').then(r => r.json()),
-      fetch('/api/users').then(async r => {
+      fetch('/api/admin/settings/tailor-schedules', { credentials: 'include' }).then(r => r.json()),
+      fetch('/api/users', { credentials: 'include' }).then(async r => {
         if (!r.ok) {
           if (r.status === 401) {
             toast.error('You must be logged in to view users.');
@@ -500,7 +501,7 @@ export default function AdminSettings() {
 
   useEffect(() => {
     setLoading(true);
-    fetch('/api/admin/settings')
+    fetch('/api/admin/settings', { credentials: 'include' })
       .then(r => r.json())
       .then(s => {
         setSettings(s);
@@ -526,6 +527,7 @@ export default function AdminSettings() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings),
+        credentials: 'include',
       });
       if (!res.ok) throw new Error('Failed to save');
       setSaved(true);

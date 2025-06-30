@@ -88,7 +88,7 @@ function PartyDetailModal({ open, onClose, party }: any) {
 }
 
 export default function SalesWorkflowPage() {
-  const { data: parties = [], error } = useSWR('/api/parties?status=active', fetcher, { refreshInterval: 60_000, credentials: 'include' });
+  const { data: parties = [], error } = useSWR('/api/parties?status=active', fetcher, { refreshInterval: 60_000 });
   const [selectedParty, setSelectedParty] = useState<any>(null);
   const now = new Date();
 

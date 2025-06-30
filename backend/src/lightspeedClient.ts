@@ -1,5 +1,6 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import querystring from 'querystring';
+import { MultiUserSessionService } from './services/multiUserSessionService';
 
 // Rate limiting helper
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -54,8 +55,24 @@ async function refreshAccessToken(req: any) {
     }),
     { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
   );
+
+  // Update both legacy session and multi-user session cache
   req.session.lsAccessToken = response.data.access_token;
   req.session.lsRefreshToken = response.data.refresh_token;
+
+  // Update multi-user session if available
+  const activeUserId = req.session.activeUserId || req.session.userId;
+  if (activeUserId) {
+    const expiresAt = new Date(Date.now() + (response.data.expires_in * 1000));
+    await MultiUserSessionService.updateUserTokens(
+      req,
+      activeUserId,
+      response.data.access_token,
+      response.data.refresh_token,
+      expiresAt
+    );
+  }
+
   return response.data.access_token;
 }
 

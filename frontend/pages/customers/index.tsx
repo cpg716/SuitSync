@@ -41,7 +41,7 @@ export default function CustomersPage() {
   const fetcher = (url: string): Promise<{ customers: Customer[]; pagination: PaginationData; }> => Promise.resolve(api.get(url)).then(res => res.data as { customers: Customer[]; pagination: PaginationData; });
 
   const { data, error, mutate, isLoading } = useSWR<{ customers: Customer[], pagination: PaginationData }>(
-    `/customers?search=${search}&page=${page}&limit=10`,
+    `/api/customers?search=${search}&page=${page}&limit=10`,
     fetcher
   );
 
@@ -62,7 +62,7 @@ export default function CustomersPage() {
 
     setSaving(true);
     try {
-      const { data: newCustomer } = await api.post('/customers', addForm);
+      const { data: newCustomer } = await api.post('/api/customers', addForm);
       setAddModalOpen(false);
       setAddForm({ name: '', email: '', phone: '', address: '' });
       mutate();

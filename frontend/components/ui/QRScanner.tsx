@@ -141,6 +141,7 @@ export function QRScanner({ open, onClose, onScanSuccess }: QRScannerProps) {
           location: location.trim() || undefined,
           notes: notes.trim() || undefined,
         }),
+        credentials: 'include',
       });
 
       if (!response.ok) {

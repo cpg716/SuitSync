@@ -40,14 +40,14 @@ export default function AppointmentModal({ open, onClose, onSubmit, appointment,
 
   useEffect(() => {
     if (open) {
-      api.get('/parties').then(res => setParties(Array.isArray(res.data) ? res.data : [])).catch(err => setError("Failed to load parties."));
+      api.get('/api/parties').then(res => setParties(Array.isArray(res.data) ? res.data : [])).catch(err => setError("Failed to load parties."));
     }
   }, [open]);
 
   useEffect(() => {
     if (partyId) {
       setMembers([]); // Clear previous members
-      api.get(`/parties/${partyId}/members`).then(res => {
+      api.get(`/api/parties/${partyId}/members`).then(res => {
           setMembers(Array.isArray(res.data) ? res.data : []);
       }).catch(err => {
         // setError("Failed to load party members.");

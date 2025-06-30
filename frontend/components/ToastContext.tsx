@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { createContext, useContext, ReactNode } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
 
 const ToastContext = createContext({
@@ -7,7 +7,7 @@ const ToastContext = createContext({
   info: (msg: string) => {},
 });
 
-export function ToastProvider({ children }) {
+export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={{
       success: (msg: string) => toast.success(msg),

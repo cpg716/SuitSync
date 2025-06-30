@@ -1,13 +1,3 @@
 // types for express-session custom properties
-import 'express-session';
-
-declare module 'express-session' {
-  interface SessionData {
-    lsAccessToken?: string;
-    lsRefreshToken?: string;
-    lsDomainPrefix?: string;
-    lsAuthState?: string | null;
-    lastLightspeedSync?: string;
-    userId?: string | number;
-  }
-} 
+// Note: Main session types are defined in src/types/express-session/index.d.ts
+// This file is kept for backward compatibility

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useAuth } from '../src/AuthContext';
 import { Button } from '../components/ui/Button';
+import { Skeleton } from '../components/ui/Skeleton';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -10,6 +11,8 @@ export default function SalesWorkspace() {
   const [data, setData] = useState([]);
   const [myCommissions, setMyCommissions] = useState([]);
   const [allCommissions, setAllCommissions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [month, setMonth] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -19,18 +22,60 @@ export default function SalesWorkspace() {
   const [adminPage, setAdminPage] = useState(1);
 
   useEffect(() => {
-    fetch('/api/commissions/leaderboard')
-      .then(res => res.json())
-      .then(setData);
-    if (user?.role === 'admin') {
-      fetch(`/api/commissions/all?month=${month}`)
-        .then(res => res.json())
-        .then(setAllCommissions);
-    } else if (user) {
-      fetch(`/api/commissions/mine?month=${month}`)
-        .then(res => res.json())
-        .then(setMyCommissions);
-    }
+    if (!user) return;
+
+    setLoading(true);
+    setError(null);
+
+    const fetchData = async () => {
+      try {
+        // Fetch leaderboard data
+        const leaderboardRes = await fetch('/api/commissions/leaderboard', { credentials: 'include' });
+        if (leaderboardRes.status === 401) {
+          // User not authenticated, redirect to login
+          window.location.href = '/login';
+          return;
+        }
+        if (leaderboardRes.status === 404) {
+          // Endpoint not implemented, use empty data
+          setData([]);
+        } else if (!leaderboardRes.ok) {
+          throw new Error('Failed to fetch leaderboard');
+        } else {
+          const leaderboardData = await leaderboardRes.json();
+          setData(leaderboardData);
+        }
+
+        // Fetch commission data based on user role
+        if (user.role === 'admin') {
+          const commissionsRes = await fetch(`/api/commissions/all?month=${month}`, { credentials: 'include' });
+          if (commissionsRes.status === 404) {
+            setAllCommissions([]);
+          } else if (!commissionsRes.ok) {
+            throw new Error('Failed to fetch commissions');
+          } else {
+            const commissionsData = await commissionsRes.json();
+            setAllCommissions(commissionsData);
+          }
+        } else {
+          const myCommissionsRes = await fetch(`/api/commissions/mine?month=${month}`, { credentials: 'include' });
+          if (myCommissionsRes.status === 404) {
+            setMyCommissions([]);
+          } else if (!myCommissionsRes.ok) {
+            throw new Error('Failed to fetch my commissions');
+          } else {
+            const myCommissionsData = await myCommissionsRes.json();
+            setMyCommissions(myCommissionsData);
+          }
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load sales data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
   }, [user, month]);
 
   const isAdmin = user?.role === 'admin';
@@ -46,6 +91,30 @@ export default function SalesWorkspace() {
   // Set Sales title in Appbar (if using context or prop, otherwise add here)
   if (typeof window !== 'undefined') {
     document.title = 'Sales | SuitSync';
+  }
+
+  if (loading) {
+    return (
+      <div className="w-full space-y-6">
+        <Skeleton className="h-20 w-full" />
+        <Skeleton className="h-80 w-full" />
+        <Skeleton className="h-60 w-full" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="w-full flex flex-col items-center justify-center py-12">
+        <div className="text-red-600 dark:text-red-400 text-center">
+          <h3 className="text-lg font-semibold mb-2">Error Loading Sales Data</h3>
+          <p className="text-sm mb-4">{error}</p>
+          <Button onClick={() => window.location.reload()} variant="outline">
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   return (

@@ -115,10 +115,10 @@ export default function PartiesList() {
   const handleFormSubmit = async (formData) => {
     try {
       if (editParty) {
-        await api.put(`/parties/${editParty.id}`, formData);
+        await api.put(`/api/parties/${editParty.id}`, formData);
         success('Party updated successfully');
       } else {
-        const response = await api.post('/parties', formData);
+        const response = await api.post('/api/parties', formData);
         if (response.data && typeof response.data === 'object' && 'party' in response.data) {
           setNewParty(response.data.party);
         }

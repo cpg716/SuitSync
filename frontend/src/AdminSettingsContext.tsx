@@ -63,7 +63,7 @@ export const AdminSettingsProvider = ({ children }: { children: ReactNode }) => 
         }
         try {
             setLoading(true);
-            const res = await api.get('/admin/settings');
+            const res = await api.get('/api/admin/settings');
             setSettings({ ...defaultSettings, ...(typeof res.data === 'object' && res.data !== null ? res.data : {}) });
             setOriginal({ ...defaultSettings, ...(typeof res.data === 'object' && res.data !== null ? res.data : {}) });
         } catch (err) {
@@ -86,7 +86,7 @@ export const AdminSettingsProvider = ({ children }: { children: ReactNode }) => 
     const saveSettings = async () => {
         try {
             setLoading(true);
-            const res = await api.post('/admin/settings', settings);
+            const res = await api.post('/api/admin/settings', settings);
             setSettings({ ...defaultSettings, ...(typeof res.data === 'object' && res.data !== null ? res.data : {}) });
             setOriginal({ ...defaultSettings, ...(typeof res.data === 'object' && res.data !== null ? res.data : {}) });
             success('Settings saved!');

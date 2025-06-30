@@ -19,7 +19,6 @@ export default function CustomerMeasurements() {
   useEffect(() => {
     if (id) {
       setLoading(true);
-      const fetcher = (url: string): Promise<any[]> => fetch(url).then(res => res.json());
       fetcher(`/customers/${id}/measurements`).then(data => {
         if (Array.isArray(data) && data.length > 0) setMeasurements({ ...defaultMeasurements, ...data[0] });
         else if (typeof data === 'object' && data !== null) setMeasurements({ ...defaultMeasurements, ...data });

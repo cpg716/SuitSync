@@ -76,9 +76,9 @@ export const AlterationModal = function({ open, onClose, onSubmit, alteration, l
     const fetchData = async () => {
       try {
         const [partiesRes, customersRes, tailorsRes] = await Promise.all([
-          api.get('/parties'),
-          api.get('/customers'),
-          api.get('/users?role=tailor')
+          api.get('/api/parties'),
+          api.get('/api/customers'),
+          api.get('/api/users?role=tailor')
         ]);
 
         setParties(Array.isArray(partiesRes.data) ? partiesRes.data : []);
@@ -99,7 +99,7 @@ export const AlterationModal = function({ open, onClose, onSubmit, alteration, l
   useEffect(() => {
     // Mock fetching sale line items
     if (searchTerm) {
-      api.get(`/sales/line_items?search=${searchTerm}`).then(res => {
+      api.get(`/api/sales/line_items?search=${searchTerm}`).then(res => {
         setSaleLineItems(Array.isArray(res.data) ? res.data : []);
       });
     } else {

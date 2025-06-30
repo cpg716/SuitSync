@@ -30,7 +30,7 @@ export default function TagPrint() {
 
   const fetchJob = async () => {
     if (!jobId) return;
-    const res = await fetch(`/api/alterations/${jobId}`);
+    const res = await fetch(`/api/alterations/${jobId}`, { credentials: 'include' });
     const data = await res.json();
     setJob({
       ...data,
@@ -42,7 +42,8 @@ export default function TagPrint() {
       const zplRes = await fetch('/api/print/tag', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobId, format: 'zpl' })
+        body: JSON.stringify({ jobId, format: 'zpl' }),
+        credentials: 'include',
       });
       setPreview(await zplRes.text());
     } else {

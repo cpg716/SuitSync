@@ -3,7 +3,7 @@ import { GetServerSideProps } from 'next';
 import Head from 'next/head';
 import Layout from '@/components/Layout';
 import MonitoringDashboard from '@/components/MonitoringDashboard';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '../src/AuthContext';
 import { useRouter } from 'next/router';
 import { useEffect } from 'react';
 

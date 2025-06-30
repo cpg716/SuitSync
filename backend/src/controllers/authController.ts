@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { withAccelerate } from '@prisma/extension-accelerate';
+import logger from '../utils/logger';
 
 const prisma = new PrismaClient().$extends(withAccelerate());
 
@@ -12,6 +13,8 @@ export const login = async (req: Request, res: Response): Promise<void> => {
   });
 };
 
+
+
 export const logout = async (req: Request, res: Response): Promise<void> => {
   // Clear any JWT cookies (if they exist)
   res.clearCookie('token', { path: '/' });
@@ -22,6 +25,44 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
   }
 
   res.json({ message: 'Logged out successfully' });
+};
+
+export const clearSession = async (req: Request, res: Response): Promise<void> => {
+  try {
+    // Clear any JWT cookies
+    res.clearCookie('token', { path: '/' });
+
+    // Clear session data but keep the session ID
+    if (req.session) {
+      // Clear all session data
+      Object.keys(req.session).forEach(key => {
+        if (key !== 'id' && key !== 'cookie') {
+          delete (req.session as any)[key];
+        }
+      });
+
+      // Save the cleared session
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    }
+
+    logger.info('Session cleared successfully', {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+    });
+
+    res.json({
+      message: 'Session cleared successfully',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Error clearing session:', error);
+    res.status(500).json({ error: 'Failed to clear session' });
+  }
 };
 
 export const getSession = async (req: Request, res: Response): Promise<void> => {

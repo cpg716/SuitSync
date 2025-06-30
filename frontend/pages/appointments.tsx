@@ -128,7 +128,7 @@ export default function AppointmentsPage() {
   const pageSize = 10;
   const { user } = useAuth();
 
-  const { data: appointments = [], error: swrError, isLoading, mutate } = useSWR('/appointments', {
+  const { data: appointments = [], error: swrError, isLoading, mutate } = useSWR('/api/appointments', {
     revalidateOnFocus: true,
     revalidateOnReconnect: true,
     refreshInterval: 5000,
@@ -205,11 +205,11 @@ export default function AppointmentsPage() {
     try {
       if (editAppt) {
         // Update
-        await api.put(`/appointments/${editAppt.id}`, data);
+        await api.put(`/api/appointments/${editAppt.id}`, data);
         success('Appointment updated successfully');
       } else {
         // Create
-        await api.post('/appointments', data);
+        await api.post('/api/appointments', data);
         success('Appointment created successfully');
       }
       mutate();
@@ -223,7 +223,7 @@ export default function AppointmentsPage() {
   const handleDelete = async () => {
     if (!deleteAppt) return;
     try {
-      await api.delete(`/appointments/${deleteAppt.id}`);
+      await api.delete(`/api/appointments/${deleteAppt.id}`);
       success('Appointment deleted successfully');
       mutate(appointments.filter(a => a.id !== deleteAppt.id));
       setDeleteAppt(null);

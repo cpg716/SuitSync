@@ -7,7 +7,7 @@ import { useToast } from '../components/ToastContext';
 import { AppointmentStatus, AppointmentType } from '../src/types/appointments';
 
 const fetcher = () =>
-  fetch('/api/parties').then(res => res.json());
+  fetch('/api/parties', { credentials: 'include' }).then(res => res.json());
 
 export default function CreateAppointment() {
   const { data: parties } = useSWR('partyList', fetcher);

@@ -13,7 +13,7 @@ import {
   YAxis,
 } from 'recharts';
 import Link from 'next/link';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Users, Calendar, Scissors, DollarSign } from 'lucide-react';
 
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -29,37 +29,45 @@ const statusColors = {
 };
 
 // A simple card component, might need to be moved to its own file if it grows
-const StatCard = ({ title, value, link, icon: Icon }) => (
-  <Card>
-    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-      <CardTitle className="text-sm font-medium">{title}</CardTitle>
-      {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
-    </CardHeader>
-    <CardContent>
-      <div className="text-2xl font-bold">
-        {value === null || value === undefined ? <Skeleton className="h-8 w-1/2" /> : value}
-      </div>
-      {link && <Link href={link} className="text-xs text-muted-foreground hover:text-primary">View all</Link>}
-    </CardContent>
-  </Card>
-);
+const StatCard = ({ title, value, link, icon: Icon }) => {
+  const cardContent = (
+    <Card className={link ? "cursor-pointer hover:shadow-md transition-shadow" : ""}>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
+      </CardHeader>
+      <CardContent>
+        <div className="text-2xl font-bold">
+          {value === null || value === undefined ? <Skeleton className="h-8 w-1/2" /> : value}
+        </div>
+        {link && <span className="text-xs text-muted-foreground hover:text-primary">View all</span>}
+      </CardContent>
+    </Card>
+  );
+
+  if (link) {
+    return <Link href={link}>{cardContent}</Link>;
+  }
+
+  return cardContent;
+};
 
 export default function Dashboard() {
   const [metrics, setMetrics] = useState(null);
   const [sync, setSync] = useState({ status: 'syncing', last: null });
   const [apiError, setApiError] = useState<string | null>(null);
-  const { data: dashboardStats } = useSWR('/stats/dashboard', fetcher);
-  const { data: syncStatus, mutate: mutateSync } = useSWR('/sync/status', fetcher, { refreshInterval: 5000 });
-  const { data: recentSales } = useSWR('/sales/recent', fetcher);
+  const { data: dashboardStats } = useSWR('/api/stats/dashboard', fetcher);
+  const { data: syncStatus, mutate: mutateSync } = useSWR('/api/sync/status', fetcher, { refreshInterval: 5000 });
+  const { data: recentSales } = useSWR('/api/sales/recent', fetcher);
 
   useEffect(() => {
     const fetchAllMetrics = async () => {
       try {
         const [partiesRes, apptsRes, alterationsRes, commissionsRes] = await Promise.all([
-          api.get('/parties'),
-          api.get('/appointments'),
-          api.get('/alterations'),
-          api.get('/commissions/leaderboard'),
+          api.get('/api/parties'),
+          api.get('/api/appointments'),
+          api.get('/api/alterations'),
+          api.get('/api/commissions/leaderboard'),
         ]);
         setMetrics({
           parties: partiesRes.data,
@@ -122,10 +130,10 @@ export default function Dashboard() {
     <div className="w-full space-y-6">
       {/* Stats Cards Grid - Responsive */}
       <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title="Total Parties" value={metrics ? metrics.parties.length : null} link="/parties" icon={<span />} />
-          <StatCard title="Upcoming Appointments" value={metrics ? metrics.appts.length : null} link="/appointments" icon={<span />} />
-          <StatCard title="Pending Alterations" value={metrics ? alterationsArr.filter(a => a.status === 'pending').length : null} link="/alterations" icon={<span />} />
-          <StatCard title="Top Commission" value={metrics ? `$${Math.max(0, ...salesBar.map(c => c.sales || 0)).toFixed(2)}` : null} link="/sales" icon={<span />} />
+          <StatCard title="Total Parties" value={metrics ? metrics.parties.length : null} link="/parties" icon={Users} />
+          <StatCard title="Upcoming Appointments" value={metrics ? metrics.appts.length : null} link="/appointments" icon={Calendar} />
+          <StatCard title="Pending Alterations" value={metrics ? alterationsArr.filter(a => a.status === 'pending').length : null} link="/alterations" icon={Scissors} />
+          <StatCard title="Top Commission" value={metrics ? `$${Math.max(0, ...salesBar.map(c => c.sales || 0)).toFixed(2)}` : null} link="/sales" icon={DollarSign} />
       </div>
       
       {/* Today's Activities Grid - Responsive */}

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
-import { Bell, UserCircle, RefreshCw, Home, Percent, Settings, User, LogOut, Download, Users, Briefcase, Scissors, Calendar, UserCheck } from 'lucide-react';
+import Image from 'next/image';
+import { Bell, UserCircle, RefreshCw, Home, Percent, Settings, User, LogOut, Download, Users, Briefcase, Scissors, Calendar, UserCheck, Clock, X } from 'lucide-react';
 import { useRouter } from 'next/router';
 import { useAuth } from '../../src/AuthContext';
 import { usePWAInstall } from 'react-use-pwa-install';
@@ -39,6 +40,8 @@ export const Appbar: React.FC = () => {
   const [showSwitchUser, setShowSwitchUser] = useState(false);
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [sessionStatus, setSessionStatus] = useState<any>(null);
+  const [cachedUsersCount, setCachedUsersCount] = useState(0);
   const toast = useToast();
 
   useEffect(() => {
@@ -49,7 +52,7 @@ export const Appbar: React.FC = () => {
   useEffect(() => {
     if (showSwitchUser && allUsers.length === 0) {
       setLoadingUsers(true);
-      axios.get('/api/users')
+      axios.get('/api/users', { withCredentials: true })
         .then(res => {
           if (Array.isArray(res.data)) {
             setAllUsers(res.data);
@@ -74,8 +77,59 @@ export const Appbar: React.FC = () => {
     }
   }, [showSwitchUser, allUsers.length]);
 
+  // Load session status
+  useEffect(() => {
+    const loadSessionStatus = async () => {
+      try {
+        const response = await axios.get('/api/user-switch/session-status');
+        if (response.data && (response.data as any).success) {
+          setSessionStatus(response.data);
+          setCachedUsersCount((response.data as any).totalCached || 0);
+        }
+      } catch (error) {
+        // Only log non-401 errors (401 is expected when not authenticated)
+        if (error.response?.status !== 401) {
+          console.error('Error loading session status:', error);
+        }
+      }
+    };
+
+    // Only load session status if user is authenticated
+    if (user) {
+      loadSessionStatus();
+      // Refresh session status every 30 seconds
+      const interval = setInterval(loadSessionStatus, 30000);
+      return () => clearInterval(interval);
+    } else {
+      // Clear session status when not authenticated
+      setSessionStatus(null);
+      setCachedUsersCount(0);
+    }
+  }, [user]);
+
   const handleUserSelect = (user) => {
-    // Handle user selection
+    // Handle user selection - reload session status
+    setTimeout(() => {
+      window.location.reload();
+    }, 100);
+  };
+
+  const handleClearAllSessions = async () => {
+    if (confirm('Are you sure you want to clear all cached user sessions? This will log out all users.')) {
+      try {
+        await axios.delete('/api/user-switch/cached-users');
+        toast.success('All user sessions cleared');
+        setSessionStatus(null);
+        setCachedUsersCount(0);
+        // Redirect to login
+        setTimeout(() => {
+          window.location.href = '/login';
+        }, 1000);
+      } catch (error) {
+        console.error('Error clearing sessions:', error);
+        toast.error('Failed to clear sessions');
+      }
+    }
   };
 
   return (
@@ -86,7 +140,14 @@ export const Appbar: React.FC = () => {
       <div className="absolute left-1/2 top-0 h-full flex items-center justify-center -translate-x-1/2">
         <div className="flex flex-row items-center gap-2 sm:gap-3 min-h-[2.5rem]">
           <Link href="/" className="flex items-center flex-shrink-0 min-w-[1.5rem]">
-            <img src="/suitsync-logoh.png" alt="SuitSync Logo" className="h-6 sm:h-7 w-auto drop-shadow dark:drop-shadow-[0_2px_8px_rgba(255,255,255,0.7)]" />
+            <Image
+              src="/suitsync-logoh.png"
+              alt="SuitSync Logo"
+              width={120}
+              height={28}
+              className="h-6 sm:h-7 w-auto drop-shadow dark:drop-shadow-[0_2px_8px_rgba(255,255,255,0.7)]"
+              priority
+            />
           </Link>
           <span className="text-gray-400 dark:text-gray-600 text-base sm:text-lg mx-1 sm:mx-2 select-none">|</span>
           <h1 className="text-sm sm:text-base font-semibold truncate min-w-[2rem] flex-shrink max-w-[10rem] sm:max-w-xs text-center">{currentTitle}</h1>
@@ -131,8 +192,17 @@ export const Appbar: React.FC = () => {
               ) : (
                 <User size={16} className="sm:size-6" />
               )}
-              {/* Online indicator - could be used for sync status */}
-              <div className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 bg-green-400 border border-white dark:border-gray-900 rounded-full"></div>
+              {/* Session status indicator */}
+              <div className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 border border-white dark:border-gray-900 rounded-full ${
+                cachedUsersCount > 1
+                  ? 'bg-blue-400' // Multiple users cached
+                  : 'bg-green-400' // Single user
+              }`}></div>
+              {cachedUsersCount > 1 && (
+                <div className="absolute -top-1 -right-1 h-4 w-4 bg-blue-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
+                  {cachedUsersCount}
+                </div>
+              )}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-lg border border-gray-200 dark:border-gray-700">
@@ -153,6 +223,14 @@ export const Appbar: React.FC = () => {
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold truncate">{user?.name}</p>
                   <p className="text-xs text-gray-500 font-normal truncate">{user?.email}</p>
+                  {cachedUsersCount > 1 && (
+                    <div className="flex items-center gap-1 mt-1">
+                      <Clock size={10} className="text-green-600" />
+                      <span className="text-xs text-green-600 font-medium">
+                        {cachedUsersCount} users cached
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             </DropdownMenuLabel>
@@ -167,8 +245,24 @@ export const Appbar: React.FC = () => {
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setShowSwitchUser(true)}>
-              <LogOut className="mr-2 h-4 w-4" />
+              <Users className="mr-2 h-4 w-4" />
               <span>Switch User</span>
+              {cachedUsersCount > 1 && (
+                <span className="ml-auto text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded-full">
+                  {cachedUsersCount}
+                </span>
+              )}
+            </DropdownMenuItem>
+            {cachedUsersCount > 1 && (
+              <DropdownMenuItem onClick={handleClearAllSessions} className="text-red-600 hover:text-red-700">
+                <X className="mr-2 h-4 w-4" />
+                <span>Clear All Sessions</span>
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => router.push('/logout')}>
+              <LogOut className="mr-2 h-4 w-4" />
+              <span>Logout</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

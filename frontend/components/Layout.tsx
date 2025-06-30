@@ -2,9 +2,14 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { Home, Users, Calendar, Scissors, Printer, BarChart, Settings, Sun, Moon, Menu } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, ReactNode } from 'react';
 import { Appbar } from './ui/Appbar';
 import ThemeToggle from './ThemeToggle';
+
+interface LayoutProps {
+  children: ReactNode;
+  title?: string;
+}
 
 const nav = [
   { href: '/', label: 'Dashboard', icon: Home },
@@ -16,7 +21,7 @@ const nav = [
   { href: '/admin', label: 'Settings', icon: Settings },
 ];
 
-export default function Layout({ children, title }) {
+export default function Layout({ children, title }: LayoutProps) {
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);

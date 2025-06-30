@@ -17,6 +17,8 @@ import lightspeedRoutes from './lightspeed';
 import webhooksRoutes from './webhooks';
 import performanceRoutes from './performance';
 import monitoringRoutes from './monitoring';
+import salesRoutes from './sales';
+import userSwitchRoutes from './userSwitch';
 
 // Register all API routes on the app
 export function initRoutes(app: Express) {
@@ -38,4 +40,6 @@ export function initRoutes(app: Express) {
   app.use('/api/webhooks', webhooksRoutes);
   app.use('/api/performance', performanceRoutes);
   app.use('/api/monitoring', monitoringRoutes);
-} 
+  app.use('/api/sales', salesRoutes);
+  app.use('/api/user-switch', userSwitchRoutes);
+}

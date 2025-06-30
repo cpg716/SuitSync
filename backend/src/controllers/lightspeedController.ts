@@ -8,7 +8,7 @@ const { createLightspeedClient } = require('../lightspeedClient');
 const prisma = new PrismaClient().$extends(withAccelerate());
 
 export const getLightspeedHealth = async (req: Request, res: Response) => {
-  const lightspeedClient = createLightspeedClient(null);
+  const lightspeedClient = createLightspeedClient(req);
   let lightspeedConnection = 'OK';
   let lightspeedApiError = null;
   try {

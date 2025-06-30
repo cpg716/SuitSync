@@ -91,6 +91,7 @@ model User {
   assignedTasks        AlterationTask[]    @relation("TaskAssignedUser")
   assignmentLogs       AssignmentLog[]
   userSchedules        UserSchedule[]
+  userSessions         UserSession[]       @relation("UserSessions")
 
   @@index([email])
   @@index([role])
@@ -597,4 +598,24 @@ model Session {
   sid     String   @unique
   data    String
   expires DateTime
+}
+
+model UserSession {
+  id              String   @id @default(cuid())
+  userId          Int
+  user            User     @relation("UserSessions", fields: [userId], references: [id], onDelete: Cascade)
+  browserSessionId String  // Links to express session ID
+  lsAccessToken   String   @db.Text
+  lsRefreshToken  String   @db.Text
+  lsDomainPrefix  String
+  expiresAt       DateTime
+  lastActive      DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, browserSessionId])
+  @@index([browserSessionId])
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([lastActive])
 }

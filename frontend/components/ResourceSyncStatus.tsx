@@ -13,9 +13,19 @@ interface ResourceSyncStatusProps {
 export function ResourceSyncStatus({ resource }: ResourceSyncStatusProps) {
   const { user } = useAuth();
   const { success: toastSuccess, error: toastError } = useToast();
-  const { data, mutate } = useSWR('/api/lightspeed/health', getLightspeedHealth, {
-    refreshInterval: 10000, // Poll every 10 seconds
-  });
+
+  // Don't show sync status if user is not authenticated or not an admin
+  const shouldFetch = user && user.role === 'admin';
+
+  const { data, mutate } = useSWR(
+    shouldFetch ? '/api/lightspeed/health' : null,
+    getLightspeedHealth,
+    {
+      refreshInterval: 10000,
+      revalidateOnFocus: false,
+      shouldRetryOnError: false,
+    }
+  );
 
   const handleSync = async () => {
     try {
@@ -27,6 +37,11 @@ export function ResourceSyncStatus({ resource }: ResourceSyncStatusProps) {
       toastError(message);
     }
   };
+
+  // Don't show sync status if user is not authenticated or not an admin
+  if (!shouldFetch) {
+    return null; // Hide the component entirely for non-admin users
+  }
 
   const status = data?.syncStatuses?.find(s => s.resource === resource);
   const isSyncing = status?.status === 'SYNCING';

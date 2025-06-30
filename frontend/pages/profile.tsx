@@ -55,22 +55,37 @@ export default function ProfilePage() {
   }, [user]);
 
   useEffect(() => {
+    let isMounted = true;
+
     async function fetchActivity() {
       if (tab === 'activity' && user) {
         setActivityLoading(true);
         try {
-          const res = await fetch(`/api/users/${user.id}/activity`);
+          const res = await fetch(`/api/users/${user.id}/activity`, { credentials: 'include' });
           if (!res.ok) throw new Error('Could not fetch activity');
           const data = await res.json();
-          setActivity(data);
+
+          // Only update state if component is still mounted
+          if (isMounted) {
+            setActivity(data);
+          }
         } catch (err) {
-          toastError(err.message);
+          if (isMounted) {
+            toastError(err.message);
+          }
         } finally {
-          setActivityLoading(false);
+          if (isMounted) {
+            setActivityLoading(false);
+          }
         }
       }
     }
+
     fetchActivity();
+
+    return () => {
+      isMounted = false;
+    };
   }, [tab, user, toastError]);
 
   async function handleSave(e: React.FormEvent) {
