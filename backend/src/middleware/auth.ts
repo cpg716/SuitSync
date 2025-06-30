@@ -9,9 +9,10 @@ const DEMO = process.env.DEMO === 'true';
 export async function authMiddleware(req: Request, res: Response, next: NextFunction) {
   try {
     // Check for session-based authentication (Lightspeed OAuth)
-    if (req.session?.userId) {
+    if (req.session?.userId && typeof req.session.userId === 'number') {
+      const userId: number = req.session.userId;
       const user = await prisma.user.findUnique({
-        where: { id: req.session.userId },
+        where: { id: userId },
         select: {
           id: true,
           email: true,
@@ -49,8 +50,9 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     if (token) {
       const secret = process.env.JWT_SECRET || process.env.SESSION_SECRET || 'changeme';
       const decoded = jwt.verify(token, secret) as { id: string };
+      const userId = typeof decoded.id === 'string' ? parseInt(decoded.id, 10) : decoded.id;
       const user = await prisma.user.findUnique({
-        where: { id: typeof decoded.id === 'string' ? Number(decoded.id) : decoded.id },
+        where: { id: userId },
         select: {
           id: true,
           email: true,

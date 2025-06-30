@@ -7,7 +7,7 @@ import { join } from 'path';
 export const getSystemMetrics = async (req: Request, res: Response): Promise<void> => {
   try {
     const currentMetrics = metricsService.getCurrentMetrics();
-    const hours = parseInt(req.query.hours as string) || 1;
+    const hours = parseInt((req.query.hours as string) || '1', 10);
     const history = metricsService.getMetricsHistory(hours);
 
     res.json({
@@ -51,11 +51,11 @@ export const getAlerts = async (req: Request, res: Response): Promise<void> => {
 
 export const getLogs = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { 
-      level = 'all', 
-      hours = 1, 
-      limit = 100,
-      search 
+    const {
+      level = 'all',
+      hours = '1',
+      limit = '100',
+      search
     } = req.query as {
       level?: string;
       hours?: string;
@@ -107,7 +107,7 @@ export const getLogs = async (req: Request, res: Response): Promise<void> => {
 
     // Sort by timestamp (newest first) and limit
     logs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-    const limitedLogs = logs.slice(0, parseInt(limit));
+    const limitedLogs = logs.slice(0, parseInt(limit, 10));
 
     res.json({
       logs: limitedLogs,
@@ -267,7 +267,7 @@ export const getHealthCheck = async (req: Request, res: Response): Promise<void>
 export const clearLogs = async (req: Request, res: Response): Promise<void> => {
   try {
     const { olderThan } = req.body; // days
-    const days = parseInt(olderThan) || 7;
+    const days = parseInt(olderThan || '7', 10);
     const cutoffTime = Date.now() - days * 24 * 60 * 60 * 1000;
     
     const logsDir = join(process.cwd(), 'logs');

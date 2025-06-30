@@ -81,7 +81,7 @@ async function createWebhook(client: any, webhookDef: any): Promise<any> {
     return response.data.data;
   } catch (error: any) {
     const errorMessage = error.response?.data?.message || error.message;
-    logger.error(`Error creating webhook for "${webhookDef.type}":`, errorMessage, error.response?.data?.fields);
+    logger.error(`Error creating webhook for "${webhookDef.type}": ${errorMessage}`, error.response?.data?.fields);
     throw error;
   }
 }

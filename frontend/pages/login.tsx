@@ -101,7 +101,8 @@ export default function LoginPage() {
   const handleLightspeedLogin = () => {
     // Simply redirect to the backend endpoint that starts the OAuth flow.
     // The backend will handle the redirect to Lightspeed's authorization page.
-    window.location.href = '/api/auth/start-lightspeed';
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
+    window.location.href = `${backendUrl}/auth/start-lightspeed`;
   };
 
   const handleUserSelect = (selectedUser) => {

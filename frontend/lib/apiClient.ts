@@ -2,7 +2,7 @@ import axios from 'axios';
 import type { LightspeedHealth } from '../components/LightspeedStatus';
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api',
   withCredentials: true,
 });
 

@@ -17,11 +17,11 @@ const testDbName = `suitsync_test_${randomBytes(8).toString('hex')}`;
 process.env.DATABASE_URL = `postgresql://suitsync:supersecret@localhost:5432/${testDbName}`;
 
 // Global test utilities
-global.testDbName = testDbName;
+(global as any).testDbName = testDbName;
 
 // Mock console methods to reduce noise in tests
 const originalConsole = { ...console };
-global.console = {
+(global as any).console = {
   ...console,
   log: jest.fn(),
   info: jest.fn(),
@@ -31,8 +31,8 @@ global.console = {
 };
 
 // Restore console for specific tests if needed
-global.restoreConsole = () => {
-  global.console = originalConsole;
+(global as any).restoreConsole = () => {
+  (global as any).console = originalConsole;
 };
 
 // Mock BigInt serialization
