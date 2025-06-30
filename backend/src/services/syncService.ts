@@ -5,7 +5,7 @@ import { createLightspeedClient } from '../lightspeedClient';
 
 const prisma = new PrismaClient().$extends(withAccelerate());
 
-type Mapper<T> = (item: any) => T;
+type Mapper<T> = (item: any) => Omit<T, 'id'>;
 
 type PrismaModel<T> = {
   upsert: (args: any) => Promise<T>;
@@ -69,10 +69,7 @@ async function syncResource<T>(req: any, resourceName: string, endpoint: string,
         await model.upsert({
           where: { lightspeedId: item.id.toString() },
           update: mappedData,
-          create: {
-            lightspeedId: item.id.toString(),
-            ...mappedData,
-          },
+          create: mappedData,
         });
         upsertedCount++;
       } catch (loopError: any) {
@@ -119,31 +116,27 @@ async function syncResource<T>(req: any, resourceName: string, endpoint: string,
 }
 
 const customerMapper = (c: any) => ({
-  id: c.id,
-  name: c.name,
-  email: c.email,
-  phone: c.phone,
-  address: c.address,
-  lightspeedId: c.lightspeedId,
-  lightspeedVersion: BigInt(c.lightspeedVersion || 0),
+  name: c.name || `${c.first_name || ''} ${c.last_name || ''}`.trim() || 'Unknown Customer',
+  email: c.email || null,
+  phone: c.phone || c.mobile || null,
+  address: c.address_1 ? `${c.address_1}${c.address_2 ? ', ' + c.address_2 : ''}${c.city ? ', ' + c.city : ''}${c.state ? ', ' + c.state : ''}${c.postcode ? ' ' + c.postcode : ''}`.trim() : null,
+  lightspeedId: c.id.toString(),
+  lightspeedVersion: BigInt(c.version || 0),
   syncedAt: new Date(),
-  createdAt: c.createdAt ? new Date(c.createdAt) : new Date(),
-  updatedAt: c.updatedAt ? new Date(c.updatedAt) : new Date(),
-  createdBy: c.createdBy || null,
+  createdAt: c.created_at ? new Date(c.created_at) : new Date(),
+  updatedAt: c.updated_at ? new Date(c.updated_at) : new Date(),
+  createdBy: null, // Lightspeed customers don't have a local creator
 });
 
 const productMapper = (p: any) => ({
-  id: p.id,
-  name: p.name,
-  sku: p.sku,
-  price: p.price,
-  lightspeedId: p.lightspeedId,
-  lightspeedVersion: BigInt(p.lightspeedVersion || 0),
+  name: p.name || 'Unknown Product',
+  sku: p.sku || null,
+  price: parseFloat(p.price || '0') || 0,
+  category: p.category?.name || null,
+  brand: p.brand?.name || null,
+  lightspeedId: p.id.toString(),
+  lightspeedVersion: BigInt(p.version || 0),
   syncedAt: new Date(),
-  createdAt: p.createdAt ? new Date(p.createdAt) : new Date(),
-  updatedAt: p.updatedAt ? new Date(p.updatedAt) : new Date(),
-  category: p.category || null,
-  brand: p.brand || null,
 });
 
 export const syncCustomers = (req: any) => syncResource(req, 'customers', '/customers', prisma.customer, customerMapper);

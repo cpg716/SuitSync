@@ -13,7 +13,7 @@ import { api } from '../lib/apiClient';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { Calendar, dateFnsLocalizer, View } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay, addMinutes, isValid } from 'date-fns';
-import enUS from 'date-fns/locale/en-US';
+import enUS from 'date-fns/locale/en-US/index.js';
 import { useAuth } from '@/src/AuthContext';
 import { ListIcon, CalendarIcon, Plus } from 'lucide-react';
 

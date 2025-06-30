@@ -1,17 +1,32 @@
 # Stage 1: Build
-FROM node:18-alpine AS build
+FROM node:20-alpine AS build
 WORKDIR /app
+
+# Copy package files and install dependencies
 COPY package*.json ./
-RUN npm install
+RUN npm ci
+
+# Copy source code and build
 COPY . .
-COPY .env.local .env.local
 RUN npm run build
 
 # Stage 2: Run
-FROM node:20-alpine
+FROM node:20-alpine AS runner
 WORKDIR /app
-COPY --from=build /app /app
 ENV NODE_ENV=production
-RUN npm install -g npm@11.4.2
+
+# Install curl for health checks
+RUN apk add --no-cache curl
+
+# Copy built application
+COPY --from=build /app/.next ./.next
+COPY --from=build /app/public ./public
+COPY --from=build /app/package*.json ./
+COPY --from=build /app/node_modules ./node_modules
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:3000 || exit 1
+
 EXPOSE 3000
-CMD ["npm", "run", "start"] 
+CMD ["npm", "start"]

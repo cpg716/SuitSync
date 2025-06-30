@@ -25,14 +25,32 @@ export default function LoginPage() {
   }, [user, authLoading, router]);
 
   useEffect(() => {
-    // Show modal if ?switch=1 or if no session
+    // Show modal only if ?switch=1 is present
     const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('switch') === '1' || (!authLoading && !user)) {
+    if (urlParams.get('switch') === '1') {
       setShowSwitchUser(true);
       setLoadingUsers(true);
       axios.get('/api/users')
-        .then(res => setAllUsers(Array.isArray(res.data) ? res.data : []))
-        .catch(() => setAllUsers([]))
+        .then(res => {
+          if (Array.isArray(res.data)) {
+            setAllUsers(res.data);
+          } else if (res.data && typeof res.data === 'object' && Array.isArray((res.data as any).lightspeedUsers)) {
+            setAllUsers((res.data as any).lightspeedUsers);
+          } else {
+            setAllUsers([]);
+          }
+        })
+        .catch(err => {
+          if (err.response && err.response.status === 401) {
+            toastError('You must be logged in to view users.');
+            window.location.href = '/login';
+          } else if (err.response && err.response.status === 404) {
+            toastError('User list is unavailable.');
+          } else {
+            toastError('Failed to fetch users.');
+          }
+          setAllUsers([]);
+        })
         .then(() => setLoadingUsers(false));
     }
   }, [authLoading, user]);

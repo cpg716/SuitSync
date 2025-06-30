@@ -1,4 +1,6 @@
-# SuitSync Brand Usage Guide
+# SuitSync Branding Guide
+
+> **Note:** For the latest project architecture, Docker usage, and AI-augmented workflow, see the main [README.md](../README.md) and the docs directory.
 
 This document outlines the correct usage of SuitSync logo assets throughout the application to ensure consistent and professional branding.
 

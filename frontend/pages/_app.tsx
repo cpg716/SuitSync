@@ -14,12 +14,21 @@ import { AdminSettingsProvider } from '../src/AdminSettingsContext';
 
 function InnerApp({ Component, pageProps }: AppProps) {
   // Support per-page layout: if a page exports getLayout, use it; otherwise, wrap in Layout
-  const getLayout = (Component as any).getLayout || ((page: React.ReactNode, props: any) => <Layout title={props.title || (Component as any).title}>{page}</Layout>);
+  const router = useRouter();
+  let getLayout;
+  if (router.pathname === '/login') {
+    // Force minimal layout for login page
+    getLayout = (page: React.ReactNode) => page;
+    // Debug log
+    if (typeof window !== 'undefined') console.log('Using minimal layout for /login');
+  } else {
+    getLayout = (Component as any).getLayout || ((page: React.ReactNode, props: any) => <Layout title={props.title || (Component as any).title}>{page}</Layout>);
+    if (typeof window !== 'undefined') console.log('Using default layout for', router.pathname);
+  }
 
   const [showSplash, setShowSplash] = useState(true);
   const { authError, user, loading } = useAuth();
   const [health, setHealth] = useState(null);
-  const router = useRouter();
 
   useEffect(() => {
     const timer = setTimeout(() => setShowSplash(false), 1200);

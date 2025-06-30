@@ -3,13 +3,13 @@ import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import session from 'express-session';
-import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
 import morgan from 'morgan';
 import { config } from './utils/config'; // Zod-validated config
 import { PrismaClient } from '@prisma/client';
 import { PrismaSessionStore } from '@quixo3/prisma-session-store';
 import { withAccelerate } from '@prisma/extension-accelerate';
+import { securityHeaders, rateLimits, speedLimiter, securityLogger, requestSizeLimit, sanitizeInput } from './middleware/security';
+import { requestId, requestLogger, errorLogger, performanceMonitor } from './middleware/requestLogger';
 
 // Load environment variables and validate
 // (dotenv/config is loaded in config.ts)
@@ -20,17 +20,23 @@ import { withAccelerate } from '@prisma/extension-accelerate';
 const app = express();
 const prisma = new PrismaClient().$extends(withAccelerate());
 
-// Security middleware
-app.use(helmet());
-app.use(rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 200, // limit each IP
-  standardHeaders: true,
-  legacyHeaders: false,
-}));
+// Request tracking and logging
+app.use(requestId);
+app.use(requestLogger);
+app.use(performanceMonitor(1000)); // Log slow requests > 1s
 
-// Logging
-app.use(morgan('dev'));
+// Security middleware
+app.use(securityHeaders);
+app.use(rateLimits.general);
+app.use(speedLimiter);
+app.use(securityLogger);
+app.use(requestSizeLimit());
+app.use(sanitizeInput);
+
+// Logging (keep morgan for development)
+if (process.env.NODE_ENV === 'development') {
+  app.use(morgan('dev'));
+}
 
 // CORS
 const corsOptions = {
@@ -41,6 +47,15 @@ const corsOptions = {
   optionsSuccessStatus: 200,
 };
 app.use(cors(corsOptions));
+
+// Special middleware for webhooks to capture raw body for signature verification
+app.use('/api/webhooks', express.raw({ type: 'application/x-www-form-urlencoded' }), (req: any, res, next) => {
+  req.rawBody = req.body;
+  next();
+});
+
+// Parse URL-encoded bodies for webhooks (Lightspeed sends form-encoded data)
+app.use('/api/webhooks', express.urlencoded({ extended: true }));
 
 app.use(express.json());
 app.use(cookieParser());
@@ -81,10 +96,21 @@ app.get('/api/health', (_req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
+// Error logging middleware (before global error handler)
+app.use(errorLogger);
+
 // Global error handler
 app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error(err);
-  res.status(500).json({ error: 'Internal Server Error' });
+  // Error already logged by errorLogger middleware
+  const statusCode = err.statusCode || 500;
+  const message = process.env.NODE_ENV === 'production'
+    ? 'Internal Server Error'
+    : err.message || 'Internal Server Error';
+
+  res.status(statusCode).json({
+    error: message,
+    ...(process.env.NODE_ENV !== 'production' && { stack: err.stack })
+  });
 });
 
 const PORT = config.PORT;

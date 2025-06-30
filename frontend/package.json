@@ -5,8 +5,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "prestart": "npm run lint",
-    "lint": "echo 'Skipping lint'"
+    "lint": "next lint",
+    "lint:fix": "next lint --fix",
+    "type-check": "tsc --noEmit",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "dependencies": {
     "@fullcalendar/core": "6.1.17",
@@ -44,9 +48,14 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
+    "@types/jest": "^30.0.0",
     "@types/node": "24.0.1",
     "autoprefixer": "10.4.21",
+    "eslint": "^9.30.0",
+    "eslint-config-next": "^15.3.4",
     "framer-motion": "10.12.4",
+    "jest": "^30.0.3",
+    "jest-environment-jsdom": "^30.0.2",
     "postcss": "8.5.5",
     "tailwindcss": "3.4.17"
   }

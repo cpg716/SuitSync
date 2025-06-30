@@ -20,7 +20,10 @@ const getAppointmentsAndLsCustomerId = async (partyId: number) => {
         include: { tailor: true, member: true },
       },
     },
-  });
+  }) as (import('@prisma/client').Party & {
+    members: import('@prisma/client').PartyMember[];
+    appointments: import('@prisma/client').Appointment[];
+  }) | null;
   if (!party) {
     throw new Error('Party not found');
   }

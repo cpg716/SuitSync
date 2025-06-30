@@ -32,6 +32,7 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [onClose, setOnClose] = useState(() => () => {});
+  const [error, setError] = useState<string | null>(null);
 
   // Fetch users function
   const fetchUsers = async () => {
@@ -43,12 +44,21 @@ export default function UsersPage() {
         const data = await response.json();
         setUsers(data);
         console.log('Users page - Users data:', data);
+      } else if (response.status === 401) {
+        toastError('You must be logged in to view users.');
+        setError('You must be logged in to view users.');
+        window.location.href = '/login';
+      } else if (response.status === 404) {
+        toastError('User list is unavailable.');
+        setError('User list is unavailable.');
       } else {
         toastError('Failed to fetch users');
+        setError('Failed to fetch users');
       }
     } catch (error) {
       console.error('Error fetching users:', error);
       toastError('Error fetching users');
+      setError('Error fetching users');
     } finally {
       setLoading(false);
     }
@@ -90,6 +100,16 @@ export default function UsersPage() {
         <div className="container mx-auto px-4 py-8">
           <h1 className="text-2xl font-bold text-red-600">Access Denied</h1>
           <p>You must be logged in to access this page.</p>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout title="Users">
+        <div className="container mx-auto px-4 py-8">
+          <h1 className="text-2xl font-bold text-red-600">{error}</h1>
         </div>
       </Layout>
     );

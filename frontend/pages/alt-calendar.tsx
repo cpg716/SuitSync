@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { Calendar, dateFnsLocalizer, View } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay, addMinutes, isValid } from 'date-fns';
-import enUS from 'date-fns/locale/en-US';
+import enUS from 'date-fns/locale/en-US/index.js';
 import useSWR from 'swr';
 import { fetcher, api } from '../lib/apiClient';
 import { Button } from '../components/ui/Button';

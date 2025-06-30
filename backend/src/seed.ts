@@ -1,17 +1,20 @@
-import { PrismaClient, AlterationJobStatus } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { withAccelerate } from '@prisma/extension-accelerate';
-import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient().$extends(withAccelerate());
 
 async function main() {
-  // Double-run guard: if users exist, exit
-  const userCount = await prisma.user.count();
-  if (userCount > 0) {
-    console.log("Users exist, clearing and re-seeding...");
+  console.log("🚀 SuitSync uses Lightspeed OAuth for authentication.");
+  console.log("📝 This seed script only creates demo data, not users.");
+  console.log("👤 Users will be created automatically when they sign in via Lightspeed.\n");
+
+  // Check if demo data already exists
+  const customerCount = await prisma.customer.count();
+  if (customerCount > 0) {
+    console.log("Demo data exists, clearing and re-seeding...");
     // Clear existing data in correct order due to foreign key constraints
     for (const model of [
-      'alterationJob', 'appointment', 'partyMember', 'saleAssignment', 'auditLog', 'party', 'customer', 'user', 'skill']) {
+      'alterationJob', 'appointment', 'partyMember', 'saleAssignment', 'auditLog', 'party', 'customer', 'skill']) {
       try {
         // @ts-ignore
         await prisma[model].deleteMany();
@@ -19,59 +22,6 @@ async function main() {
         console.warn(`Warning: Could not deleteMany for ${model}:`, e.message);
       }
     }
-  }
-
-  // Seed demo admin user
-  const users = [];
-  users.push(await prisma.user.create({
-    data: {
-      email: 'admin@demo.com',
-      passwordHash: bcrypt.hashSync('admin', 10),
-      name: 'Admin User',
-      role: 'admin',
-      photoUrl: 'https://randomuser.me/api/portraits/men/1.jpg',
-    }
-  }));
-
-  // Seed demo users (tailors)
-  for (let i = 1; i <= 3; i++) {
-    users.push(await prisma.user.create({
-      data: {
-        email: `tailor${i}@demo.com`,
-        passwordHash: bcrypt.hashSync('demo', 10),
-        name: `Tailor ${i}`,
-        role: 'tailor',
-        photoUrl: `https://randomuser.me/api/portraits/men/${i+1}.jpg`,
-      }
-    }));
-  }
-
-  // Seed demo users (sales associates)
-  const associates = [];
-  for (let i = 1; i <= 3; i++) {
-    associates.push(await prisma.user.create({
-      data: {
-        email: `sales${i}@demo.com`,
-        passwordHash: bcrypt.hashSync('demo', 10),
-        name: `Sales Associate ${i}`,
-        role: 'associate',
-        photoUrl: `https://randomuser.me/api/portraits/women/${i+1}.jpg`,
-      }
-    }));
-  }
-
-  // Seed demo users (support)
-  const supportStaff = [];
-  for (let i = 1; i <= 2; i++) {
-    supportStaff.push(await prisma.user.create({
-      data: {
-        email: `support${i}@demo.com`,
-        passwordHash: bcrypt.hashSync('demo', 10),
-        name: `Support Staff ${i}`,
-        role: 'support',
-        photoUrl: `https://randomuser.me/api/portraits/men/${i+4}.jpg`,
-      }
-    }));
   }
 
   // Seed demo customers
@@ -109,16 +59,10 @@ async function main() {
     skills.push(await prisma.skill.create({ data: { name } }));
   }
 
-  // Assign random subset of skills to each tailor
-  for (const user of users) {
-    const userSkills = skills.sort(() => 0.5 - Math.random()).slice(0, 5);
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { skills: { connect: userSkills.map((s: { id: number }) => ({ id: s.id })) } },
-    });
-  }
+  // Skills will be assigned to users when they are created via Lightspeed OAuth
+  console.log(`✅ Created ${skills.length} alteration skills`);
 
-  // Seed 10 parties
+  // Seed 10 demo parties
   const parties = [];
   for (let i = 1; i <= 10; i++) {
     const party = await prisma.party.create({
@@ -131,33 +75,36 @@ async function main() {
       }
     });
     parties.push(party);
-    // 2 alterations each
+
+    // Create 2 demo alteration jobs per party (without assigned tailors)
     for (let j = 1; j <= 2; j++) {
-      const skill = skills[(i+j)%skills.length];
       await prisma.alterationJob.create({
         data: {
           jobNumber: `JOB-${i}-${j}`,
           qrCode: `QR-${i}-${j}`,
           partyId: party.id,
           customerId: null,
-          notes: `Alteration ${j} for party ${i}`,
+          notes: `Demo alteration ${j} for party ${i} - needs tailor assignment`,
           status: 'NOT_STARTED',
           timeSpentMinutes: 30 * j,
-          tailorId: users[(i+j)%users.length].id,
+          tailorId: null, // Will be assigned when tailors sign in via Lightspeed
         }
       });
     }
-    // 1 appointment each
+
+    // Create 1 demo appointment per party (without assigned tailor)
     await prisma.appointment.create({
       data: {
         partyId: party.id,
         dateTime: new Date(Date.now() + i * 7200000),
         durationMinutes: 60,
-        tailorId: users[i%users.length].id,
+        tailorId: null, // Will be assigned when tailors sign in via Lightspeed
         status: 'scheduled',
       }
     });
   }
+
+  console.log(`✅ Created ${parties.length} demo parties with alteration jobs and appointments`);
 
   // Seed PartyMembers for each party
   const partyMembers = [];
@@ -176,31 +123,13 @@ async function main() {
     }
   }
 
-  // Seed SaleAssignments for each party
-  for (let i = 0; i < parties.length; i++) {
-    await prisma.saleAssignment.create({
-      data: {
-        saleId: `LS-SALE-${i+1}`,
-        associateId: associates[i%associates.length].id,
-        commissionRate: 0.1,
-        amount: 100 + i * 10,
-      }
-    });
-  }
-
-  // Seed more SaleAssignments for each associate
-  for (const associate of associates) {
-    for (let i = 0; i < 5; i++) {
-      await prisma.saleAssignment.create({
-        data: {
-          saleId: `LS-SALE-${associate.id}-${i+1}`,
-          associateId: associate.id,
-          commissionRate: 0.08 + 0.02 * (i % 3), // 8-12%
-          amount: 120 + Math.floor(Math.random() * 300),
-        }
-      });
-    }
-  }
+  // Note: Sale assignments will be created when sales staff sign in via Lightspeed
+  console.log("📊 Demo data seeding complete!");
+  console.log("🔐 To use SuitSync:");
+  console.log("1. Start the backend server: npm run dev");
+  console.log("2. Navigate to the frontend: http://localhost:3001");
+  console.log("3. Click 'Sign in with Lightspeed' to authenticate");
+  console.log("4. Users and roles will be synced from your Lightspeed account");
 }
 
 main()

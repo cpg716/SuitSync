@@ -7,8 +7,6 @@ COPY package.json package-lock.json ./
 COPY prisma ./prisma
 RUN npm ci
 RUN npx prisma generate
-RUN ls -l /app/node_modules/.prisma/client
-RUN npm install -g npm@11.4.2
 
 # 2) Copy source & build
 COPY . .
@@ -19,18 +17,19 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
+# Install curl for health checks
+RUN apk add --no-cache curl
+
 # 1) Pull only runtime artifacts
 COPY --from=builder /app/package.json /app/package-lock.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/node_modules/.prisma /app/node_modules/.prisma
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
-RUN ls -l /app/node_modules/.prisma/client
-RUN npm install -g npm@11.4.2
 
-# 2) Healthcheck waits for Postgres
-HEALTHCHECK --interval=10s --timeout=5s \
-  CMD pg_isready -h postgres -p 5432 || exit 1
+# 2) Healthcheck for the application
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:3000/api/health || exit 1
 
-# 3) On start: deploy migrations, seed, then run server
-CMD ["sh", "-c", "if [ ! -d ./node_modules/.prisma/client ]; then npx prisma generate; fi && npx prisma migrate deploy && node dist/seed.js && node dist/index.js"] 
+# 3) On start: deploy migrations, then run server
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]

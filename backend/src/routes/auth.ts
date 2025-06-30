@@ -6,13 +6,15 @@ import { asyncHandler } from '../utils/asyncHandler';
 
 const router = express.Router();
 
-// Local auth
-router.post('/login', asyncHandler(login));
+// Session management
 router.get('/session', authMiddleware, asyncHandler(getSession));
 router.post('/logout', asyncHandler(logout));
 
-// Lightspeed OAuth
+// Lightspeed OAuth (primary authentication method)
 router.get('/start-lightspeed', asyncHandler(redirectToLightspeed));
 router.get('/callback', asyncHandler(handleCallback));
+
+// Legacy local login endpoint (returns error directing to Lightspeed)
+router.post('/login', asyncHandler(login));
 
 export default router; 

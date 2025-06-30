@@ -9,6 +9,8 @@
 - [Application Architecture](#application-architecture)
 - [Key Features](#key-features)
 - [Local Development Setup](#local-development-setup)
+- [Docker Usage](#docker-usage)
+- [AI-Augmented Workflow](#ai-augmented-workflow)
 - [Scripts and Tooling](#scripts-and-tooling)
 - [Contributing](#contributing)
 
@@ -18,9 +20,9 @@
 
 ### Backend
 - **Framework**: Node.js with Express
-- **Language**: JavaScript (with JSDoc for type safety)
+- **Language**: TypeScript (with strict type safety)
 - **Database ORM**: Prisma
-- **Database**: PostgreSQL (recommended) or SQLite (for demo)
+- **Database**: PostgreSQL (recommended)
 - **Authentication**: JWT for staff sessions, OAuth 2.0 for Lightspeed API
 - **API**: RESTful API with robust error handling and logging.
 
@@ -35,6 +37,7 @@
 - **Package Manager**: `pnpm` (recommended)
 - **Testing**: Jest, React Testing Library
 - **Linting**: ESLint
+- **Containerization**: Docker & Docker Compose for local and production environments
 
 ---
 
@@ -42,12 +45,12 @@
 
 The project is organized as a monorepo to streamline development and deployment.
 
-- **`/server`**: The Node.js/Express backend application.
+- **`/backend`**: The Node.js/Express backend application.
     - `controllers/`: Handles incoming API requests, business logic, and responses.
     - `routes/`: Defines all API endpoints and maps them to controllers.
-    - `services/`: Contains core business logic modules (e.g., `syncService.js`, `workflowService.js`).
-    - `middleware/`: Express middleware for tasks like authentication (`auth.js`).
-    - `lightspeedClient.js`: A robust, centralized Axios client for all Lightspeed API communication, featuring automated token refresh and rate limit handling.
+    - `services/`: Core business logic modules (e.g., `syncService.ts`, `notificationService.ts`).
+    - `middleware/`: Express middleware for tasks like authentication (`auth.ts`).
+    - `lightspeedClient.ts`: Centralized Axios client for all Lightspeed API communication, with automated token refresh and rate limit handling.
 
 - **`/frontend`**: The Next.js/React frontend application.
     - `pages/`: Application routes and views.
@@ -55,10 +58,10 @@ The project is organized as a monorepo to streamline development and deployment.
     - `lib/`: Utility functions and the frontend API client (`apiClient.ts`).
     - `contexts/`: React contexts for managing global state like authentication.
 
-- **`/prisma`**: Database schema, migrations, and seeding.
+- **`/backend/prisma`**: Database schema, migrations, and seeding.
     - `schema.prisma`: The single source of truth for all database models and relationships.
     - `migrations/`: Automatically generated SQL migration files.
-    - `seed.js`: A script to populate the database with initial data for development and testing.
+    - `seed.ts`: Script to populate the database with initial data for development and testing.
 
 ---
 
@@ -78,6 +81,7 @@ The project is organized as a monorepo to streamline development and deployment.
 ### 1. Prerequisites
 - Node.js (v18 or later)
 - `pnpm` package manager (`npm install -g pnpm`)
+- Docker & Docker Compose (for containerized development)
 - A Lightspeed X-Series developer account and API credentials.
 
 ### 2. Clone the Repository
@@ -87,35 +91,13 @@ cd suitsync_full
 ```
 
 ### 3. Install Dependencies
-This command will install dependencies for the root, `/server`, and `/frontend` packages.
+This command will install dependencies for the root, `/backend`, and `/frontend` packages.
 ```sh
 pnpm install
 ```
 
 ### 4. Configure Environment Variables
-Create a `.env` file in the project root. This file is critical for connecting to Lightspeed and other services.
-```dotenv
-# Lightspeed API Credentials
-LS_DOMAIN="your-store" # e.g., "suitsync-demo"
-LS_CLIENT_ID="your_lightspeed_client_id"
-LS_CLIENT_SECRET="your_lightspeed_client_secret"
-LS_REDIRECT_URI="http://localhost:3000/api/auth/callback"
-LS_PERSONAL_ACCESS_TOKEN="your_lightspeed_personal_access_token_for_system_tasks"
-
-# Application Settings
-SESSION_SECRET="a_strong_and_long_random_string_for_sessions"
-DATABASE_URL="file:./prisma/dev.db" # Use PostgreSQL in production
-FRONTEND_URL="http://localhost:3001"
-NEXT_PUBLIC_API_URL="http://localhost:3000/api"
-
-# Notification Services (Optional)
-SENDGRID_API_KEY="your_sendgrid_key"
-SENDGRID_FROM="notifications@yourdomain.com"
-TWILIO_ACCOUNT_SID="your_twilio_sid"
-TWILIO_AUTH_TOKEN="your_twilio_auth_token"
-TWILIO_PHONE_NUMBER="+15551234567"
-```
-**Note:** The `LS_PERSONAL_ACCESS_TOKEN` is used for system-level background tasks like the initial data sync and is recommended for production.
+Create a `.env` file in the project root. This file is critical for connecting to Lightspeed and other services. See [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md) for a full list and descriptions.
 
 ### 5. Initialize the Database
 This command runs Prisma migrations to set up your database schema and then runs the seed script to populate it with initial data.
@@ -124,21 +106,54 @@ pnpm db:init
 ```
 
 ### 6. Run the Development Servers
-This will start the backend on port 3000 and the frontend on port 3001 concurrently.
+You can run the backend and frontend separately, or use Docker Compose for a fully containerized environment.
+
+#### Option A: Native (host) development
 ```sh
-pnpm dev
+pnpm dev:server   # Starts backend on :3000
+pnpm dev:frontend # Starts frontend on :3001
+```
+
+#### Option B: Docker Compose (recommended)
+```sh
+docker-compose -f docker-compose.dev.yml up --build
 ```
 - **Backend API**: `http://localhost:3000`
 - **Frontend App**: `http://localhost:3001`
 
 ---
 
+## Docker Usage
+
+- **Local Development:**
+  - Use `docker-compose.dev.yml` for a hot-reloading dev environment with backend, frontend, and Postgres containers.
+  - All code changes are reflected live via volume mounts.
+- **Production:**
+  - Use `docker-compose.yml` for a production-like environment. This builds and runs optimized containers for backend, frontend, and database.
+  - Ensure all environment variables are set in `.env` and secrets are managed securely.
+- **Troubleshooting:**
+  - Use `docker-compose logs` to view service logs.
+  - If you see migration or session issues, check backend logs and Prisma migration state.
+  - For Compose version warnings, update to the latest Compose spec.
+
+---
+
+## AI-Augmented Workflow
+
+See [docs/AI_WORKFLOW.md](docs/AI_WORKFLOW.md) for best practices on using AI tools (Cursor, Copilot, ChatGPT, etc.) to refactor, debug, and extend SuitSync. Highlights:
+- Use AI to review backend and frontend code for compliance, error handling, and integration with Lightspeed.
+- Prompt AI to generate or improve tests, documentation, and code modernization.
+- Use project-wide search for keywords like `customer`, `group`, `sale`, `commission`, `sync`, `alteration` to audit integration points.
+
+---
+
 ## Scripts and Tooling
 
-- `pnpm dev`: Starts both backend and frontend servers for development.
+- `pnpm dev:server`: Starts backend server for development.
+- `pnpm dev:frontend`: Starts frontend server for development.
 - `pnpm db:init`: Resets the database, applies migrations, and runs the seed script.
-- `pnpm lint`: Runs ESLint on both `/server` and `/frontend`.
-- `pnpm test`: Runs Jest tests for both `/server` and `/frontend`.
+- `pnpm lint`: Runs ESLint on both `/backend` and `/frontend`.
+- `pnpm test`: Runs Jest tests for both `/backend` and `/frontend`.
 
 ---
 

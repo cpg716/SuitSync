@@ -7,58 +7,100 @@ on:
     branches: [main]
 
 jobs:
-  build-and-test:
+  docker-build-and-test:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node-version: [18.x, 20.x]
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: suitsync
+          POSTGRES_PASSWORD: supersecret
+          POSTGRES_DB: suitsync
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
     steps:
       - uses: actions/checkout@v4
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-      - name: Cache node modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            frontend/node_modules
-            server/node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-      - name: Install dependencies (backend)
-        run: cd server && npm ci
-      - name: Install dependencies (frontend)
-        run: cd frontend && npm ci
-      - name: Lint (backend)
-        run: cd server && npm run lint || true
-      - name: Lint (frontend)
-        run: cd frontend && npm run lint || true
-      - name: Type-check (frontend)
-        run: cd frontend && npm run type-check || true
-      - name: Unit tests (backend)
-        run: cd server && npm test || true
-      - name: Unit tests (frontend)
-        run: cd frontend && npm test || true
-      - name: E2E tests (Cypress)
-        run: cd frontend && npx cypress run || true
 
-  deploy:
-    needs: build-and-test
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend Docker image
+        run: |
+          docker build -t suitsync-backend:test ./backend
+
+      - name: Build frontend Docker image
+        run: |
+          docker build -t suitsync-frontend:test ./frontend
+
+      - name: Create test environment file
+        run: |
+          cat > .env.test << EOF
+          DATABASE_URL="postgresql://suitsync:supersecret@localhost:5432/suitsync"
+          NODE_ENV=test
+          SESSION_SECRET=test_secret_key_for_ci_cd_pipeline_testing_only
+          JWT_SECRET=test_jwt_secret_for_ci_cd_pipeline_testing_only
+          FRONTEND_URL=http://localhost:3001
+          LS_DOMAIN=test
+          LS_CLIENT_ID=test
+          LS_CLIENT_SECRET=test
+          LS_REDIRECT_URI=http://localhost:3000/api/auth/callback
+          LS_PERSONAL_ACCESS_TOKEN=test
+          EOF
+
+      - name: Run backend tests in Docker
+        run: |
+          docker run --rm \
+            --network host \
+            --env-file .env.test \
+            suitsync-backend:test \
+            sh -c "npm run build && npm test"
+
+      - name: Run database migrations
+        run: |
+          docker run --rm \
+            --network host \
+            --env-file .env.test \
+            suitsync-backend:test \
+            sh -c "npx prisma migrate deploy"
+
+  docker-deploy:
+    needs: docker-build-and-test
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Deploy backend (Node/Express)
-        run: |
-          echo "Deploy backend to your Node/Express host here (e.g., SSH, rsync, or cloud deploy)"
-      - name: Deploy frontend (Vercel)
-        uses: amondnet/vercel-action@v25
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub (optional)
+        if: ${{ secrets.DOCKER_HUB_USERNAME }}
+        uses: docker/login-action@v3
         with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          working-directory: ./frontend
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }} 
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Build and push Docker images
+        run: |
+          # Build production images
+          docker build -t suitsync-backend:latest ./backend
+          docker build -t suitsync-frontend:latest ./frontend
+
+          # Tag and push to registry (if configured)
+          if [ "${{ secrets.DOCKER_HUB_USERNAME }}" ]; then
+            docker tag suitsync-backend:latest ${{ secrets.DOCKER_HUB_USERNAME }}/suitsync-backend:latest
+            docker tag suitsync-frontend:latest ${{ secrets.DOCKER_HUB_USERNAME }}/suitsync-frontend:latest
+            docker push ${{ secrets.DOCKER_HUB_USERNAME }}/suitsync-backend:latest
+            docker push ${{ secrets.DOCKER_HUB_USERNAME }}/suitsync-frontend:latest
+          fi
+
+      - name: Deploy with Docker Compose
+        run: |
+          echo "Deploy using docker-compose to your production server"
+          echo "Example: ssh user@server 'cd /app && docker-compose pull && docker-compose up -d'"

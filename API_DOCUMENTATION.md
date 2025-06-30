@@ -1,4 +1,6 @@
-# SuitSync API Documentation
+# API Documentation for SuitSync
+
+> **Note:** For the latest project architecture, Docker usage, and AI-augmented workflow, see the main [README.md](./README.md) and the docs directory.
 
 This document provides a detailed overview of the SuitSync REST API endpoints.
 
@@ -128,4 +130,4 @@ Manages the data synchronization between SuitSync and Lightspeed.
   - **Returns**: `202 Accepted` with a message that the sync has started.
 
 ---
-This documentation provides a high-level overview. For details on request/response bodies, please refer to the JSDoc comments in the respective controller files in `server/controllers/`. 
+This documentation provides a high-level overview. For details on request/response bodies, please refer to the JSDoc comments in the respective controller files in `backend/src/controllers/`.

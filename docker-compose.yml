@@ -1,4 +1,4 @@
-version: '3.8'
+# version: '3.8'
 services:
   db:
     image: postgres:15-alpine
@@ -25,6 +25,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    env_file:
+      - ./.env
     environment:
       DATABASE_URL: postgresql://suitsync_prod:suitsync_prod_pw_ChangeMe123@db:5432/suitsync_prod
       SESSION_SECRET: super_secret_session_key_1234567890

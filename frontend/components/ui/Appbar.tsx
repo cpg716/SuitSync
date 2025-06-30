@@ -18,6 +18,7 @@ import {
 import ThemeToggle from '../ThemeToggle';
 import { SwitchUserModal } from './SwitchUserModal';
 import axios from 'axios';
+import { useToast } from '../ToastContext';
 
 const routeTitles = {
   '/': 'Dashboard',
@@ -36,8 +37,9 @@ export const Appbar: React.FC = () => {
   const [currentTitle, setCurrentTitle] = useState('');
   const install = usePWAInstall();
   const [showSwitchUser, setShowSwitchUser] = useState(false);
-  const [allUsers, setAllUsers] = useState([]);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     setCurrentTitle(routeTitles[router.pathname] || '');
@@ -48,8 +50,26 @@ export const Appbar: React.FC = () => {
     if (showSwitchUser && allUsers.length === 0) {
       setLoadingUsers(true);
       axios.get('/api/users')
-        .then(res => setAllUsers(Array.isArray(res.data) ? res.data : []))
-        .catch(() => setAllUsers([]))
+        .then(res => {
+          if (Array.isArray(res.data)) {
+            setAllUsers(res.data);
+          } else if (res.data && typeof res.data === 'object' && Array.isArray((res.data as any).lightspeedUsers)) {
+            setAllUsers((res.data as any).lightspeedUsers);
+          } else {
+            setAllUsers([]);
+          }
+        })
+        .catch(err => {
+          if (err.response && err.response.status === 401) {
+            toast.error('You must be logged in to view users.');
+            window.location.href = '/login';
+          } else if (err.response && err.response.status === 404) {
+            toast.error('User list is unavailable.');
+          } else {
+            toast.error('Failed to fetch users.');
+          }
+          setAllUsers([]);
+        })
         .then(() => setLoadingUsers(false));
     }
   }, [showSwitchUser, allUsers.length]);

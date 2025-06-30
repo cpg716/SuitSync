@@ -1,6 +1,30 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import querystring from 'querystring';
 
+// Rate limiting helper
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Exponential backoff for rate limiting
+const handleRateLimit = async (error: any, retryCount: number = 0): Promise<void> => {
+  if (error.response?.status === 429 && retryCount < 3) {
+    const retryAfter = error.response.headers['retry-after'];
+    let waitTime = 1000 * Math.pow(2, retryCount); // Exponential backoff: 1s, 2s, 4s
+
+    if (retryAfter) {
+      // If Retry-After header is present, use it
+      const retryDate = new Date(retryAfter);
+      if (!isNaN(retryDate.getTime())) {
+        waitTime = Math.max(retryDate.getTime() - Date.now(), waitTime);
+      }
+    }
+
+    console.warn(`Rate limited. Waiting ${waitTime}ms before retry ${retryCount + 1}/3`);
+    await delay(waitTime);
+    return;
+  }
+  throw error; // Re-throw if not rate limit or max retries exceeded
+};
+
 function getDomainPrefix(req: any) {
   return req?.session?.lsDomainPrefix || process.env.LS_DOMAIN;
 }
@@ -52,17 +76,38 @@ function createAxiosInstance(req: any): AxiosInstance {
 export function createLightspeedClient(req: any) {
   let client = createAxiosInstance(req);
 
-  async function requestWithRefresh(method: string, endpoint: string, data?: any, params?: any) {
+  async function requestWithRefresh(method: string, endpoint: string, data?: any, params?: any, retryCount: number = 0): Promise<any> {
     try {
+      let response;
       if (method === 'get') {
-        return await client.get(endpoint, { params });
+        response = await client.get(endpoint, { params });
       } else if (method === 'post') {
-        return await client.post(endpoint, data);
+        response = await client.post(endpoint, data);
       } else if (method === 'put') {
-        return await client.put(endpoint, data);
+        response = await client.put(endpoint, data);
       }
+
+      // Log rate limit headers for monitoring
+      if (response?.headers['x-ratelimit-remaining']) {
+        const remaining = response.headers['x-ratelimit-remaining'];
+        const limit = response.headers['x-ratelimit-limit'];
+        console.debug(`Rate limit: ${remaining}/${limit} remaining`);
+      }
+
+      return response;
     } catch (error) {
       const err = error as AxiosError;
+
+      // Handle rate limiting with exponential backoff
+      if (err.response?.status === 429) {
+        try {
+          await handleRateLimit(err, retryCount);
+          return await requestWithRefresh(method, endpoint, data, params, retryCount + 1);
+        } catch (rateLimitError) {
+          throw rateLimitError;
+        }
+      }
+
       if (err.response?.status === 401 && !req._retry) {
         req._retry = true;
         const newToken = await refreshAccessToken(req);
@@ -79,21 +124,60 @@ export function createLightspeedClient(req: any) {
     }
   }
 
+  // Proper pagination implementation following Lightspeed API 2.0 cursor-based pagination
+  const fetchAllWithPagination = async (endpoint: string, initialParams: any = {}): Promise<any[]> => {
+    let allItems: any[] = [];
+    let after = initialParams.after || 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      try {
+        const params = { ...initialParams, after };
+        const response = await requestWithRefresh('get', endpoint, undefined, params);
+        if (!response) throw new Error('No response from Lightspeed');
+
+        const { data } = response;
+        const items = data.data || data; // Handle both {data: [...]} and [...] responses
+
+        if (Array.isArray(items) && items.length > 0) {
+          allItems = allItems.concat(items);
+
+          // Check if we have version info for cursor pagination
+          if (data.version && data.version.max) {
+            after = data.version.max;
+            // If we got fewer items than expected, we're likely on the last page
+            hasMore = items.length >= 100; // Lightspeed default page size
+          } else if (items.length > 0 && items[items.length - 1].version) {
+            // Fallback: use version from last item
+            after = items[items.length - 1].version;
+            hasMore = items.length >= 100;
+          } else {
+            hasMore = false;
+          }
+        } else {
+          hasMore = false;
+        }
+      } catch (error: any) {
+        console.error(`Error during paginated fetch for ${endpoint}:`, {
+          message: error.response?.data?.message || error.message,
+          endpoint,
+          params: { ...initialParams, after },
+        });
+        throw error; // Re-throw to let caller handle
+      }
+    }
+
+    console.info(`Finished paginated fetch for ${endpoint}. Found ${allItems.length} items.`);
+    return allItems;
+  };
+
   return {
     get: (endpoint: string, params?: any) => requestWithRefresh('get', endpoint, undefined, params),
     post: (endpoint: string, data: any) => requestWithRefresh('post', endpoint, data),
     put: (endpoint: string, data: any) => requestWithRefresh('put', endpoint, data),
-    fetchAllWithPagination: async (endpoint: string, params: any) => {
-      const response = await requestWithRefresh('get', endpoint, undefined, params);
-      if (!response) throw new Error('No response from Lightspeed');
-      const { data } = response;
-      return data;
-    },
+    fetchAllWithPagination,
     getCustomers: async () => {
-      const response = await requestWithRefresh('get', '/customers');
-      if (!response) throw new Error('No response from Lightspeed');
-      const { data } = response;
-      return data;
+      return await fetchAllWithPagination('/customers');
     },
   };
 }

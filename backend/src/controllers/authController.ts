@@ -1,50 +1,31 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { withAccelerate } from '@prisma/extension-accelerate';
-import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient().$extends(withAccelerate());
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3001';
-const JWT_SECRET = process.env.JWT_SECRET || 'changeme';
 
-// Local, non-Lightspeed login
+// SuitSync uses Lightspeed OAuth only - no local login
 export const login = async (req: Request, res: Response): Promise<void> => {
-  const { email, password } = req.body;
-  if (!email || !password) {
-    res.status(400).json({ error: 'Email and password are required.' });
-    return;
-  }
-  const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || !user.passwordHash) {
-    res.status(401).json({ error: 'Invalid credentials or user does not have a local password.' });
-    return;
-  }
-  const valid = await bcrypt.compare(password, user.passwordHash);
-  if (!valid) {
-    res.status(401).json({ error: 'Invalid credentials.' });
-    return;
-  }
-  const jwtToken = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
-  res.cookie('token', jwtToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 24 * 60 * 60 * 1000,
+  res.status(400).json({
+    error: 'Local login is not supported. Please use Lightspeed OAuth.',
+    redirectTo: '/auth/start-lightspeed'
   });
-  res.json({ id: user.id, name: user.name, email: user.email, role: user.role });
 };
 
 export const logout = async (req: Request, res: Response): Promise<void> => {
+  // Clear any JWT cookies (if they exist)
   res.clearCookie('token', { path: '/' });
+
+  // Destroy the session (this clears Lightspeed tokens and user session)
   if (req.session) {
     await new Promise<void>(resolve => req.session.destroy(() => resolve()));
   }
+
   res.json({ message: 'Logged out successfully' });
 };
 
 export const getSession = async (req: Request, res: Response): Promise<void> => {
+  // Check if user is authenticated (either via session or JWT)
   if ((req as any).user) {
     try {
       const dbUser = await prisma.user.findUnique({
@@ -60,18 +41,22 @@ export const getSession = async (req: Request, res: Response): Promise<void> => 
           updatedAt: true
         }
       });
+
       if (!dbUser) {
         res.status(401).json({ error: 'User not found' });
         return;
       }
+
+      // Include Lightspeed connection status
       const lightspeedStatus = {
         connected: !!req.session?.lsAccessToken,
         domain: req.session?.lsDomainPrefix || null,
         lastSync: req.session?.lastLightspeedSync || null
       };
-      res.json({ 
+
+      res.json({
         ...dbUser,
-        lightspeed: lightspeedStatus 
+        lightspeed: lightspeedStatus
       });
       return;
     } catch (error) {
@@ -80,7 +65,10 @@ export const getSession = async (req: Request, res: Response): Promise<void> => 
       return;
     }
   } else {
-    res.status(401).json({ error: 'Not authenticated' });
+    res.status(401).json({
+      error: 'Not authenticated. Please sign in with Lightspeed.',
+      redirectTo: '/login'
+    });
     return;
   }
-}; 
+};

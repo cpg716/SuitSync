@@ -5,6 +5,9 @@ declare module 'express-session' {
     userId?: number;
     lsAccessToken?: string;
     lsRefreshToken?: string;
+    lsDomainPrefix?: string;
+    lsAuthState?: string;
+    lastLightspeedSync?: string;
     // Add other custom session properties as needed
   }
-} 
+}

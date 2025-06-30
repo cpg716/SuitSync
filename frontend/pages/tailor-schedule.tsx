@@ -4,7 +4,7 @@ import useSWR from 'swr';
 import { fetcher } from '../lib/apiClient';
 import { Calendar, dateFnsLocalizer, Views } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay, isToday } from 'date-fns';
-import enUS from 'date-fns/locale/en-US';
+import enUS from 'date-fns/locale/en-US/index.js';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { Users, Scissors, Timer, ArrowRight, AlertTriangle } from 'lucide-react';

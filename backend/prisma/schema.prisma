@@ -30,6 +30,13 @@ model Customer {
 
   @@index([lightspeedId])
   @@index([email])
+  @@index([name])
+  @@index([phone])
+  @@index([createdAt])
+  @@index([updatedAt])
+  @@index([syncedAt])
+  @@index([createdBy])
+  @@index([lightspeedVersion])
 }
 
 model Measurements {
@@ -84,6 +91,12 @@ model User {
   assignedTasks        AlterationTask[]    @relation("TaskAssignedUser")
   assignmentLogs       AssignmentLog[]
   userSchedules        UserSchedule[]
+
+  @@index([email])
+  @@index([role])
+  @@index([lightspeedEmployeeId])
+  @@index([createdAt])
+  @@index([name])
 }
 
 model UserSchedule {
@@ -155,12 +168,22 @@ model AlterationJob {
   workflowSteps            AlterationWorkflowStep[]
   assignmentLogs           AssignmentLog[]
 
+  @@index([jobNumber])
+  @@index([status])
+  @@index([orderStatus])
   @@index([partyId])
   @@index([customerId])
   @@index([tailorId])
+  @@index([receivedDate])
+  @@index([dueDate])
+  @@index([createdAt])
+  @@index([rushOrder])
+  @@index([lightspeedServiceOrderId])
   @@index([partyMemberId])
-  @@index([jobNumber])
   @@index([qrCode])
+  @@index([status, dueDate])
+  @@index([customerId, status])
+  @@index([tailorId, status])
 }
 
 enum AlterationJobStatus {
@@ -347,6 +370,15 @@ model Appointment {
   @@index([parentId])
   @@index([memberId])
   @@index([tailorId])
+  @@index([dateTime])
+  @@index([status])
+  @@index([type])
+  @@index([customerId])
+  @@index([saleId])
+  @@index([syncedToLightspeed])
+  @@index([dateTime, status])
+  @@index([partyId, dateTime])
+  @@index([tailorId, dateTime])
 }
 
 enum AppointmentType {
@@ -561,9 +593,8 @@ model AssignmentLog {
 }
 
 model Session {
-  id        String   @id @default(cuid())
-  sid       String   @unique
-  data      String
-  expires   DateTime
-  expiresAt DateTime?
+  id      String   @id @default(cuid())
+  sid     String   @unique
+  data    String
+  expires DateTime
 }

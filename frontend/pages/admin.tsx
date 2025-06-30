@@ -20,6 +20,7 @@ const defaultConfig = {
 };
 
 function SyncStatusCard() {
+  const toast = useToast();
   const [status, setStatus] = useState('ok');
   const [lastSync, setLastSync] = useState('');
   const [errors, setErrors] = useState([]);
@@ -45,6 +46,7 @@ function SyncStatusCard() {
 }
 
 function ReminderSettingsCard() {
+  const toast = useToast();
   const [intervals, setIntervals] = useState([24, 4]);
   const [emailSubject, setEmailSubject] = useState('');
   const [emailBody, setEmailBody] = useState('');
@@ -108,6 +110,7 @@ function ReminderSettingsCard() {
 
 // --- Alteration Task Types Admin ---
 function TaskTypesAdmin() {
+  const toast = useToast();
   const [types, setTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
@@ -177,6 +180,7 @@ function TaskTypesAdmin() {
 
 // --- Tailor Abilities Admin ---
 function TailorAbilitiesAdmin() {
+  const toast = useToast();
   const [abilities, setAbilities] = useState([]);
   const [tailors, setTailors] = useState([]);
   const [taskTypes, setTaskTypes] = useState([]);
@@ -189,12 +193,27 @@ function TailorAbilitiesAdmin() {
   useEffect(() => {
     Promise.all([
       fetch('/api/admin/settings/tailor-abilities').then(r => r.json()),
-      fetch('/api/users').then(r => r.json()),
+      fetch('/api/users').then(async r => {
+        if (!r.ok) {
+          if (r.status === 401) {
+            toast.error('You must be logged in to view users.');
+            window.location.href = '/login';
+            return [];
+          } else if (r.status === 404) {
+            toast.error('User list is unavailable.');
+            return [];
+          } else {
+            toast.error('Failed to fetch users.');
+            return [];
+          }
+        }
+        return r.json();
+      }),
       fetch('/api/admin/settings/task-types').then(r => r.json()),
     ]).then(([a, u, t]) => {
       setAbilities(a);
-      const userArr = Array.isArray(u) ? u : (Array.isArray(u.localUsers) ? u.localUsers : []);
-      setTailors(userArr.filter(u => u.role === 'tailor'));
+      const userArr = Array.isArray(u) ? u : (Array.isArray(u?.localUsers) ? u.localUsers : []);
+      setTailors((userArr || []).filter(u => u.role === 'tailor'));
       setTaskTypes(t);
       setLoading(false);
     });
@@ -265,6 +284,7 @@ function TailorAbilitiesAdmin() {
 
 // --- Tailor Schedules Admin ---
 function TailorSchedulesAdmin() {
+  const toast = useToast();
   const [schedules, setSchedules] = useState([]);
   const [tailors, setTailors] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -276,11 +296,26 @@ function TailorSchedulesAdmin() {
   useEffect(() => {
     Promise.all([
       fetch('/api/admin/settings/tailor-schedules').then(r => r.json()),
-      fetch('/api/users').then(r => r.json()),
+      fetch('/api/users').then(async r => {
+        if (!r.ok) {
+          if (r.status === 401) {
+            toast.error('You must be logged in to view users.');
+            window.location.href = '/login';
+            return [];
+          } else if (r.status === 404) {
+            toast.error('User list is unavailable.');
+            return [];
+          } else {
+            toast.error('Failed to fetch users.');
+            return [];
+          }
+        }
+        return r.json();
+      }),
     ]).then(([s, u]) => {
       setSchedules(s);
-      const userArr = Array.isArray(u) ? u : (Array.isArray(u.localUsers) ? u.localUsers : []);
-      setTailors(userArr.filter(u => u.role === 'tailor'));
+      const userArr = Array.isArray(u) ? u : (Array.isArray(u?.localUsers) ? u.localUsers : []);
+      setTailors((userArr || []).filter(u => u.role === 'tailor'));
       setLoading(false);
     });
   }, []);
@@ -350,6 +385,7 @@ function TailorSchedulesAdmin() {
 }
 
 function UsersAdminCard() {
+  const toast = useToast();
   const [users, setUsers] = useState([]);
   const [localUsers, setLocalUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -358,7 +394,22 @@ function UsersAdminCard() {
   const USERS_PER_ROW = 5;
   const USERS_PER_PAGE = 15;
   useEffect(() => {
-    fetch('/api/users').then(r => r.json()).then(data => {
+    fetch('/api/users').then(async r => {
+      if (!r.ok) {
+        if (r.status === 401) {
+          toast.error('You must be logged in to view users.');
+          window.location.href = '/login';
+          return { lightspeedUsers: [], localUsers: [] };
+        } else if (r.status === 404) {
+          toast.error('User list is unavailable.');
+          return { lightspeedUsers: [], localUsers: [] };
+        } else {
+          toast.error('Failed to fetch users.');
+          return { lightspeedUsers: [], localUsers: [] };
+        }
+      }
+      return r.json();
+    }).then(data => {
       setUsers(Array.isArray(data.lightspeedUsers) ? data.lightspeedUsers : []);
       setLocalUsers(Array.isArray(data.localUsers) ? data.localUsers : []);
       setLoading(false);

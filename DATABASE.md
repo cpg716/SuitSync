@@ -1,3 +1,7 @@
+# SuitSync Database Documentation
+
+> **Note:** For the latest project architecture, Docker usage, and environment variable documentation, see the main [README.md](./README.md) and the docs directory.
+
 # SuitSync Database Schema
 
 This document provides a visual overview of the core database models and their relationships in the SuitSync application, as defined in `prisma/schema.prisma`.

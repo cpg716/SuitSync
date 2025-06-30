@@ -1,4 +1,0 @@
--- AlterTable
-ALTER TABLE "SyncStatus" ADD COLUMN     "errorMessage" TEXT,
-ADD COLUMN     "lastSyncedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-ADD COLUMN     "status" TEXT NOT NULL DEFAULT 'IDLE';
