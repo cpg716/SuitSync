@@ -6,10 +6,8 @@ import session from 'express-session';
 import morgan from 'morgan';
 import { config } from './utils/config'; // Zod-validated config
 import { PrismaClient } from '@prisma/client';
-import { PrismaSessionStore } from '@quixo3/prisma-session-store';
 import { withAccelerate } from '@prisma/extension-accelerate';
-import { securityHeaders, rateLimits, speedLimiter, securityLogger, requestSizeLimit, sanitizeInput } from './middleware/security';
-import { requestId, requestLogger, errorLogger, performanceMonitor } from './middleware/requestLogger';
+import { securityHeaders, rateLimits, speedLimiter, requestSizeLimit } from './middleware/security';
 
 // Load environment variables and validate
 // (dotenv/config is loaded in config.ts)
@@ -20,18 +18,11 @@ import { requestId, requestLogger, errorLogger, performanceMonitor } from './mid
 const app = express();
 const prisma = new PrismaClient().$extends(withAccelerate());
 
-// Request tracking and logging
-app.use(requestId);
-app.use(requestLogger);
-app.use(performanceMonitor(1000)); // Log slow requests > 1s
-
 // Security middleware
 app.use(securityHeaders);
 app.use(rateLimits.general);
 app.use(speedLimiter);
-app.use(securityLogger);
 app.use(requestSizeLimit());
-app.use(sanitizeInput);
 
 // Logging (keep morgan for development)
 if (process.env.NODE_ENV === 'development') {
@@ -61,16 +52,9 @@ app.use(express.json());
 app.use(cookieParser());
 
 // Session typing is handled via src/types/express-session/index.d.ts
+// Using default memory store for now - TODO: Fix PrismaSessionStore configuration
 app.use(
   session({
-    // @ts-expect-error: PrismaSessionStore expects a different type signature, but this works at runtime
-    store: new PrismaSessionStore(prisma, {
-      checkPeriod: 2 * 60 * 1000, // 2 minutes
-      dbRecordIdIsSessionId: true,
-      dbRecordIdFunction: undefined,
-      sessionModel: 'Session',
-      expiresField: 'expires',
-    }),
     secret: config.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
@@ -95,9 +79,6 @@ app.use(express.static(path.join(__dirname, '../../frontend/out')));
 app.get('/api/health', (_req, res) => {
   res.status(200).json({ status: 'ok' });
 });
-
-// Error logging middleware (before global error handler)
-app.use(errorLogger);
 
 // Global error handler
 app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
