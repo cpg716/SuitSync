@@ -50,9 +50,9 @@ export default function Layout({ children, title }: LayoutProps) {
         <Appbar />
       </div>
       <div className="flex flex-1 flex-row pt-12 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white">
-        {/* Mobile toggle - improved positioning */}
+        {/* Mobile toggle - improved positioning and touch-friendly */}
         <button
-          className="lg:hidden fixed top-3 left-3 z-50 p-2 rounded bg-blue-600 text-white shadow-lg transition-transform hover:scale-105"
+          className="lg:hidden fixed top-3 left-3 z-50 p-3 rounded-lg bg-blue-600 text-white shadow-lg transition-all duration-200 hover:scale-105 hover:bg-blue-700 active:scale-95 min-h-[44px] min-w-[44px] flex items-center justify-center"
           onClick={() => setSidebarOpen(o => !o)}
           aria-label="Open sidebar"
         >
@@ -87,14 +87,15 @@ export default function Layout({ children, title }: LayoutProps) {
               const Icon = item.icon;
               const isActive = router.pathname === item.href;
               return (
-                <Link 
-                  key={item.href} 
-                  href={item.href} 
+                <Link
+                  key={item.href}
+                  href={item.href}
                   className={`
                     flex items-center gap-3 px-3 py-3 rounded-lg font-medium text-sm
-                    text-gray-700 dark:text-gray-300 
-                    hover:bg-blue-100 dark:hover:bg-blue-900/50 
-                    transition-all duration-200
+                    text-gray-700 dark:text-gray-300
+                    hover:bg-blue-100 dark:hover:bg-blue-900/50
+                    transition-all duration-200 active:scale-95
+                    min-h-[44px] touch-manipulation
                     ${isActive ? 'bg-blue-100 dark:bg-blue-900/70 font-bold text-blue-600 dark:text-blue-400' : ''}
                     ${collapsed ? 'justify-center' : ''}
                   `}
@@ -115,7 +116,7 @@ export default function Layout({ children, title }: LayoutProps) {
                 width={64}
                 height={64}
                 className={`w-auto transition-all duration-300 ${collapsed ? 'h-8' : 'h-16'}`}
-                style={{ width: 'auto', height: collapsed ? '32px' : '64px' }}
+                style={{ width: 'auto', height: 'auto' }}
               />
             </div>
             <div className={`flex items-center ${collapsed ? 'justify-center' : 'justify-between'} w-full`}>
@@ -142,7 +143,7 @@ export default function Layout({ children, title }: LayoutProps) {
             ${sidebarOpen ? 'lg:blur-none' : ''}
           `}
         >
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 max-w-full bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white">
+          <div className="container mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 max-w-full bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white">
             <div className="w-full overflow-hidden">
               {children}
             </div>

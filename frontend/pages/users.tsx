@@ -4,6 +4,7 @@ import { useAuth } from '../src/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
+import { UserAvatar } from '../components/ui/UserAvatar';
 import { useToast } from '../components/ToastContext';
 import { User, RefreshCw, Download } from 'lucide-react';
 import { Modal } from '../components/ui/Modal';
@@ -142,23 +143,12 @@ export default function UsersPage() {
               </CardHeader>
               <CardContent>
                 <div className="flex items-center space-x-4 p-4 border rounded-lg bg-blue-50">
-                  <div className="w-16 h-16 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
-                    {user.photoUrl ? (
-                      <img 
-                        src={user.photoUrl} 
-                        alt={user.name}
-                        className="w-full h-full object-cover"
-                        onLoad={() => console.log('Current user photo loaded successfully:', user.photoUrl)}
-                        onError={(e) => {
-                          console.error('Failed to load current user photo:', user.photoUrl);
-                          e.currentTarget.style.display = 'none';
-                          const sibling = e.currentTarget.nextElementSibling as HTMLElement;
-                          if (sibling) sibling.style.display = 'flex';
-                        }}
-                      />
-                    ) : null}
-                    <User className="w-8 h-8 text-gray-400" style={user.photoUrl ? { display: 'none' } : {}} />
-                  </div>
+                  <UserAvatar
+                    user={user}
+                    size="xl"
+                    showName={false}
+                    showEmail={false}
+                  />
                   <div className="flex-1">
                     <div className="font-bold text-lg">{user.name}</div>
                     <div className="text-gray-600">{user.email}</div>
@@ -190,22 +180,12 @@ export default function UsersPage() {
                       <div className="grid gap-4">
                         {users.localUsers.map((userData) => (
                           <div key={userData.id} className="flex items-center space-x-4 p-4 border rounded-lg">
-                            <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
-                              {userData.photoUrl ? (
-                                <img 
-                                  src={userData.photoUrl} 
-                                  alt={userData.name}
-                                  className="w-full h-full object-cover"
-                                  onError={(e) => {
-                                    console.error('Failed to load user photo:', userData.photoUrl);
-                                    e.currentTarget.style.display = 'none';
-                                    const sibling = e.currentTarget.nextElementSibling as HTMLElement;
-                                    if (sibling) sibling.style.display = 'flex';
-                                  }}
-                                />
-                              ) : null}
-                              <User className="w-6 h-6 text-gray-400" style={userData.photoUrl ? { display: 'none' } : {}} />
-                            </div>
+                            <UserAvatar
+                              user={userData}
+                              size="lg"
+                              showName={false}
+                              showEmail={false}
+                            />
                             <div className="flex-1">
                               <div className="font-medium">{userData.name}</div>
                               <div className="text-sm text-gray-500">{userData.email}</div>
@@ -231,17 +211,17 @@ export default function UsersPage() {
                         <div className="grid gap-4">
                           {users.lightspeedUsers.map((lsUser) => (
                             <div key={lsUser.id} className="flex items-center space-x-4 p-4 border rounded-lg bg-blue-50">
-                              <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
-                                {lsUser.photo ? (
-                                  <img 
-                                    src={lsUser.photo} 
-                                    alt={lsUser.display_name}
-                                    className="w-full h-full object-cover"
-                                  />
-                                ) : (
-                                  <User className="w-6 h-6 text-gray-400" />
-                                )}
-                              </div>
+                              <UserAvatar
+                                user={{
+                                  id: lsUser.id,
+                                  name: lsUser.display_name,
+                                  email: lsUser.email,
+                                  photoUrl: lsUser.photo
+                                }}
+                                size="lg"
+                                showName={false}
+                                showEmail={false}
+                              />
                               <div className="flex-1">
                                 <div className="font-medium">{lsUser.display_name}</div>
                                 <div className="text-sm text-gray-500">{lsUser.email}</div>

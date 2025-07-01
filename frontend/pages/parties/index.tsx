@@ -140,21 +140,22 @@ export default function PartiesList() {
   return (
     <div className="w-full space-y-6">
       {/* Header and Search Section - Responsive */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div className="flex-1">
           <input
             type="text"
             placeholder="Search parties or customers..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-gray-800 text-black dark:text-white transition-colors"
+            className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 sm:py-2 focus:outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-gray-800 text-black dark:text-white transition-colors text-sm sm:text-base h-11 sm:h-10"
           />
         </div>
-        <Button 
-          className="w-full sm:w-auto px-6 py-2 bg-primary text-white hover:bg-primary/90" 
+        <Button
+          className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-2 bg-primary text-white hover:bg-primary/90 min-h-[44px] sm:min-h-[40px] text-sm sm:text-base touch-manipulation"
           onClick={() => { setEditParty(null); setModalOpen(true); }}
         >
-          + Add Party
+          <span className="hidden xs:inline">+ Add Party</span>
+          <span className="xs:hidden">+ Add</span>
         </Button>
       </div>
 
@@ -261,56 +262,59 @@ export default function PartiesList() {
             <div className="lg:hidden">
               <div className="divide-y divide-gray-200 dark:divide-gray-700">
                 {paginated.map(party => (
-                  <div key={party.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                    <div className="flex items-start justify-between mb-3">
+                  <div key={party.id} className="p-4 sm:p-5 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors active:bg-gray-100 dark:active:bg-gray-800">
+                    <div className="flex items-start justify-between mb-4">
                       <div className="flex-1 min-w-0">
-                        <Link 
+                        <Link
                           href={`/parties/${party.id}`}
-                          className="text-lg font-medium text-primary dark:text-accent hover:underline block truncate"
+                          className="text-base sm:text-lg font-medium text-primary dark:text-accent hover:underline block truncate"
                         >
                           {party.name}
                         </Link>
                         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                          {new Date(party.eventDate).toLocaleDateString('en-US', { 
-                            year: 'numeric', 
-                            month: 'short', 
-                            day: 'numeric' 
+                          {new Date(party.eventDate).toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
                           })}
                         </p>
                       </div>
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full flex-shrink-0 ml-2 ${
-                        party.syncedToLs 
-                          ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400' 
+                      <span className={`inline-flex px-2.5 py-1.5 text-xs font-semibold rounded-full flex-shrink-0 ml-3 ${
+                        party.syncedToLs
+                          ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
                           : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
                       }`}>
                         {party.syncedToLs ? 'Synced' : 'Local'}
                       </span>
                     </div>
-                    
+
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-3 flex-1 min-w-0">
-                        <div className="w-8 h-8 rounded-full bg-primary/10 dark:bg-accent/10 flex items-center justify-center flex-shrink-0">
-                          <span className="text-xs font-bold text-primary dark:text-accent">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-primary/10 dark:bg-accent/10 flex items-center justify-center flex-shrink-0">
+                          <span className="text-sm sm:text-base font-bold text-primary dark:text-accent">
                             {party.customer?.name?.[0] || '?'}
                           </span>
                         </div>
-                        <span className="text-sm text-gray-900 dark:text-gray-100 truncate">
-                          {party.customer?.name || '—'}
-                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Customer</p>
+                          <span className="text-sm text-gray-900 dark:text-gray-100 truncate block">
+                            {party.customer?.name || '—'}
+                          </span>
+                        </div>
                       </div>
-                      
-                      <div className="flex space-x-2 flex-shrink-0 ml-2">
-                        <Link 
+
+                      <div className="flex space-x-2 flex-shrink-0 ml-3">
+                        <Link
                           href={`/parties/${party.id}`}
-                          className="text-primary dark:text-accent hover:underline text-sm"
+                          className="text-primary dark:text-accent hover:underline text-sm font-medium min-h-[44px] flex items-center px-2 touch-manipulation"
                         >
                           View
                         </Link>
-                        <Button 
-                          size="sm" 
-                          variant="ghost" 
+                        <Button
+                          size="sm"
+                          variant="ghost"
                           onClick={() => { setEditParty(party); setModalOpen(true); }}
-                          className="text-xs px-2 py-1"
+                          className="text-xs px-3 py-2 min-h-[44px] touch-manipulation"
                         >
                           Edit
                         </Button>

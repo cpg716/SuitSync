@@ -3,6 +3,7 @@ import { Button } from './Button';
 import { Card } from './Card';
 import { Input } from './Input';
 import { Modal } from './Modal';
+import { TailorSelect } from './UserSelect';
 import { api } from '../../lib/apiClient';
 import { format } from 'date-fns';
 import type { Party } from '../../src/types/parties';
@@ -214,19 +215,16 @@ export const AlterationModal = function({ open, onClose, onSubmit, alteration, l
 
               {/* Tailor Assignment */}
               <div>
-                <label className="block text-sm font-medium mb-1 dark:text-gray-300">Assign Tailor</label>
-                <select
+                <label className="block text-sm font-medium mb-2 dark:text-gray-300">Assign Tailor</label>
+                <TailorSelect
+                  users={Array.isArray(tailors) ? tailors : []}
                   value={formData.tailorId}
-                  onChange={(e) => handleChange('tailorId', e.target.value)}
-                  className="w-full border rounded p-2 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                >
-                  <option value="">Select Tailor</option>
-                  {(Array.isArray(tailors) ? tailors : []).map(tailor => (
-                    <option key={tailor.id} value={tailor.id}>
-                      {tailor.name}
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={(value) => handleChange('tailorId', value)}
+                  placeholder="Select tailor..."
+                  allowEmpty={true}
+                  emptyLabel="No tailor assigned"
+                  className="w-full"
+                />
               </div>
 
               {/* Status */}

@@ -132,7 +132,7 @@ export default function LoginPage() {
             width={200}
             height={80}
             className="h-20 w-auto mb-2 drop-shadow-lg"
-            style={{ width: 'auto', height: '80px' }}
+            style={{ width: 'auto', height: 'auto' }}
             priority
           />
           <Image
@@ -141,7 +141,7 @@ export default function LoginPage() {
             width={120}
             height={40}
             className="h-10 w-auto mb-2"
-            style={{ width: 'auto', height: '40px' }}
+            style={{ width: 'auto', height: 'auto' }}
           />
           <h1 className="text-2xl font-bold mb-2 text-primary">Sign in to SuitSync</h1>
           <p className="text-sm text-gray-600 text-center">

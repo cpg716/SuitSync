@@ -3,6 +3,7 @@ import { Modal } from './Modal';
 import { Card } from './Card';
 import { Input } from './Input';
 import { Skeleton } from './Skeleton';
+import { UserAvatar } from './UserAvatar';
 import { User, Clock, X, LogOut } from 'lucide-react';
 import axios from 'axios';
 
@@ -206,13 +207,12 @@ export const SwitchUserModal: React.FC<SwitchUserModalProps> = ({
                       }`}
                       onClick={() => handleCachedUserClick(user)}
                     >
-                      {user.photoUrl ? (
-                        <img src={user.photoUrl} alt={user.name} className="h-10 w-10 rounded-full object-cover" />
-                      ) : (
-                        <div className="h-10 w-10 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center">
-                          <User size={20} />
-                        </div>
-                      )}
+                      <UserAvatar
+                        user={user}
+                        size="md"
+                        showName={false}
+                        showEmail={false}
+                      />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="font-semibold truncate">{user.name}</span>
@@ -271,13 +271,12 @@ export const SwitchUserModal: React.FC<SwitchUserModalProps> = ({
                       className="flex items-center gap-3 p-3 cursor-pointer hover:bg-accent/10 opacity-75"
                       onClick={() => handleNewUserClick(user)}
                     >
-                      {user.photoUrl ? (
-                        <img src={user.photoUrl} alt={user.name} className="h-10 w-10 rounded-full object-cover" />
-                      ) : (
-                        <div className="h-10 w-10 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center">
-                          <User size={20} />
-                        </div>
-                      )}
+                      <UserAvatar
+                        user={user}
+                        size="md"
+                        showName={false}
+                        showEmail={false}
+                      />
                       <div className="flex-1 min-w-0">
                         <div className="font-semibold truncate">{user.name}</div>
                         <div className="text-xs text-gray-500 truncate">{user.email}</div>

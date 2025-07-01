@@ -80,34 +80,35 @@ export default function CustomersPage() {
   return (
     <div className="space-y-6">
       {/* Streamlined Action Bar - All in One Row */}
-      <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center">
+      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-start sm:items-center">
         {/* Search Section */}
-        <form onSubmit={handleSearch} className="flex gap-2 flex-1 min-w-0">
+        <form onSubmit={handleSearch} className="flex gap-2 flex-1 min-w-0 w-full sm:w-auto">
           <div className="flex-1 relative min-w-0">
             <Input
               type="text"
               placeholder="Search customers..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 w-full"
+              className="pl-10 w-full h-10 sm:h-11 text-sm sm:text-base"
             />
-            <MagnifyingGlass size={20} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <MagnifyingGlass size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           </div>
-          <Button type="submit" className="flex-shrink-0">
+          <Button type="submit" className="flex-shrink-0 px-4 sm:px-6 min-h-[44px] sm:min-h-[40px] text-sm sm:text-base touch-manipulation">
             Search
           </Button>
         </form>
-        
+
         {/* Sync Status and Controls */}
-        <div className="flex items-center gap-3 flex-shrink-0">
+        <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0 w-full sm:w-auto justify-between sm:justify-start">
           <ResourceSyncStatus resource="customers" />
           {user?.role === 'admin' && (
-            <Button 
-              onClick={() => setAddModalOpen(true)} 
-              className="flex items-center gap-2 bg-primary text-white hover:bg-primary/90"
+            <Button
+              onClick={() => setAddModalOpen(true)}
+              className="flex items-center gap-1 sm:gap-2 bg-primary text-white hover:bg-primary/90 px-3 sm:px-4 min-h-[44px] sm:min-h-[40px] text-sm sm:text-base touch-manipulation"
             >
-              <Plus size={20} />
-              Add Customer
+              <Plus size={18} />
+              <span className="hidden xs:inline">Add Customer</span>
+              <span className="xs:hidden">Add</span>
             </Button>
           )}
         </div>
@@ -211,16 +212,16 @@ export default function CustomersPage() {
             <div className="lg:hidden">
               <div className="divide-y divide-gray-200 dark:divide-gray-700">
                 {(Array.isArray(customers) && customers.length > 0) ? customers.map((customer) => (
-                  <div key={customer.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                    <div className="flex items-start justify-between mb-3">
+                  <div key={customer.id} className="p-4 sm:p-5 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors active:bg-gray-100 dark:active:bg-gray-800">
+                    <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center space-x-3 flex-1 min-w-0">
-                        <div className="h-12 w-12 rounded-full bg-primary/10 dark:bg-accent/10 flex items-center justify-center flex-shrink-0">
-                          <span className="text-lg font-bold text-primary dark:text-accent">
+                        <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-full bg-primary/10 dark:bg-accent/10 flex items-center justify-center flex-shrink-0">
+                          <span className="text-lg sm:text-xl font-bold text-primary dark:text-accent">
                             {customer.name?.charAt(0)?.toUpperCase() || '?'}
                           </span>
                         </div>
                         <div className="min-w-0 flex-1">
-                          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 truncate">
+                          <h3 className="text-base sm:text-lg font-medium text-gray-900 dark:text-gray-100 truncate">
                             {customer.name}
                           </h3>
                           <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
@@ -229,37 +230,37 @@ export default function CustomersPage() {
                         </div>
                       </div>
                     </div>
-                    
-                    <div className="grid grid-cols-2 gap-4 mb-3 text-sm">
+
+                    <div className="grid grid-cols-1 xs:grid-cols-2 gap-3 sm:gap-4 mb-4 text-sm">
                       <div>
-                        <p className="text-gray-500 dark:text-gray-400">Phone</p>
-                        <p className="text-gray-900 dark:text-gray-100">{customer.phone || '—'}</p>
+                        <p className="text-gray-500 dark:text-gray-400 text-xs font-medium uppercase tracking-wide">Phone</p>
+                        <p className="text-gray-900 dark:text-gray-100 mt-1">{customer.phone || '—'}</p>
                       </div>
                       <div>
-                        <p className="text-gray-500 dark:text-gray-400">Parties</p>
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400">
+                        <p className="text-gray-500 dark:text-gray-400 text-xs font-medium uppercase tracking-wide">Parties</p>
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400 mt-1">
                           {customer.parties?.length || 0}
                         </span>
                       </div>
                     </div>
-                    
+
                     <div className="flex items-center justify-between">
                       <div>
                         {customer.measurements ? (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
+                          <span className="inline-flex items-center px-2.5 py-1.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
                             Measurements Complete
                           </span>
                         ) : (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200">
+                          <span className="inline-flex items-center px-2.5 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200">
                             Measurements Pending
                           </span>
                         )}
                       </div>
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         variant="ghost"
                         onClick={() => router.push(`/customers/${customer.id}`)}
-                        className="text-primary dark:text-accent"
+                        className="text-primary dark:text-accent min-h-[44px] px-4 touch-manipulation"
                       >
                         View Details
                       </Button>

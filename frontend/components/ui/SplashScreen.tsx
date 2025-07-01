@@ -9,7 +9,7 @@ export const SplashScreen: React.FC = () => (
       width={128}
       height={128}
       className="h-32 w-auto mb-8 drop-shadow-xl animate-fade-in"
-      style={{ width: 'auto', height: '128px' }}
+      style={{ width: 'auto', height: 'auto' }}
       priority
     />
     <div className="flex items-center justify-center">
