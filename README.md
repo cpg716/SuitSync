@@ -2,7 +2,14 @@
 
 [![CI/CD Pipeline](https://github.com/your-org/suitsync_full/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/suitsync_full/actions/workflows/ci.yml)
 
-**SuitSync** is a full-stack, production-ready application designed to streamline operations for a men's suit shop by providing deep, bidirectional integration with the **Lightspeed X-Series** retail platform. It handles everything from party and appointment management to job tracking, notifications, and analytics, all built on a modern, robust technology stack.
+**SuitSync** is a production-ready, full-stack retail management system specifically designed for men's suit shops. It provides seamless integration with **Lightspeed X-Series** retail platform, featuring QR-based alteration tracking, party management, appointment scheduling, and comprehensive analytics.
+
+## 🚀 Recent Updates (v2.0)
+- ✅ **Fixed Lightspeed X-Series Integration** - Corrected API endpoints and OAuth flow
+- ✅ **Enhanced Session Management** - Prevents 431 header size errors
+- ✅ **Added Circuit Breaker Pattern** - Improved API reliability
+- ✅ **Database Error Handling** - Proper Prisma error management
+- ✅ **Security Enhancements** - Rate limiting and input validation
 
 ## Table of Contents
 - [Technology Stack](#technology-stack)
@@ -112,7 +119,23 @@ pnpm install
 ```
 
 ### 4. Configure Environment Variables
-Create a `.env` file in the project root. This file is critical for connecting to Lightspeed and other services. See [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md) for a full list and descriptions.
+Create a `.env` file in the project root with your Lightspeed X-Series credentials:
+
+```bash
+# Database
+DATABASE_URL="postgresql://postgres:postgres@db:5432/suitsync_prod"
+
+# Application
+FRONTEND_URL=http://localhost:3001
+SESSION_SECRET=your-32-char-secret-here
+JWT_SECRET=your-32-char-secret-here
+
+# Lightspeed X-Series API
+LS_CLIENT_ID=your_client_id
+LS_CLIENT_SECRET=your_client_secret
+LS_ACCOUNT_ID=your_account_id
+LS_REDIRECT_URI=http://localhost:3000/api/auth/callback
+```
 
 ### 5. Initialize the Database
 This command runs Prisma migrations to set up your database schema and then runs the seed script to populate it with initial data.

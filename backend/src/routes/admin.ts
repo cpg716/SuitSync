@@ -13,7 +13,10 @@ import {
   getTailorSchedules,
   upsertTailorSchedule,
   deleteTailorSchedule,
-  getTaskTypes
+  getTaskTypes,
+  getNotificationSettings,
+  updateNotificationSettings,
+  getScheduledJobsStatus
 } from '../controllers/adminController';
 import { authMiddleware, requireAdmin } from '../middleware/auth';
 import { asyncHandler } from '../utils/asyncHandler';
@@ -42,4 +45,11 @@ router.delete('/settings/tailor-schedules/:id', asyncHandler(deleteTailorSchedul
 
 router.get('/settings/skills', asyncHandler(getSkills));
 
-export default router; 
+// Notification settings
+router.get('/notification-settings', asyncHandler(getNotificationSettings));
+router.put('/notification-settings', asyncHandler(updateNotificationSettings));
+
+// Scheduled jobs status
+router.get('/scheduled-jobs', asyncHandler(getScheduledJobsStatus));
+
+export default router;

@@ -31,13 +31,15 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (error.response && error.response.status === 401) {
-      // Token is invalid or expired, redirect to login (no console log)
-      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+    if (error.response?.status === 401) {
+      // Prevent redirect loops
+      if (typeof window !== 'undefined' && 
+          !window.location.pathname.includes('/login') &&
+          !window.location.pathname.includes('/auth/')) {
         localStorage.removeItem('token');
-        window.location.href = '/login?sessionExpired=true';
+        // Use replace to prevent back button issues
+        window.location.replace('/login?sessionExpired=true');
       }
-      // Suppress AxiosError logging for 401
       return Promise.reject(error);
     }
 

@@ -27,6 +27,7 @@ model Customer {
   alterationJobs    AlterationJob[]
   createdByUser     User?           @relation("CustomerCreator", fields: [createdBy], references: [id])
   sales             Sale[]
+  individualAppointments Appointment[] @relation("IndividualCustomerAppointments")
 
   @@index([lightspeedId])
   @@index([email])
@@ -375,6 +376,19 @@ model Appointment {
   tailorId           Int?
   tailor             User?             @relation("TailorAppointments", fields: [tailorId], references: [id])
   lsEventId          String?
+  // Workflow automation fields
+  workflowStage      Int?              @default(1) // 1=first_fitting, 2=alterations_fitting, 3=pickup
+  autoScheduleNext   Boolean           @default(false)
+  nextAppointmentId  Int?
+  nextAppointment    Appointment?      @relation("AppointmentSequence", fields: [nextAppointmentId], references: [id])
+  previousAppointment Appointment[]    @relation("AppointmentSequence")
+  // Individual customer support
+  individualCustomerId Int?
+  individualCustomer Customer?         @relation("IndividualCustomerAppointments", fields: [individualCustomerId], references: [id])
+  // Notification tracking
+  remindersScheduled Boolean           @default(false)
+  remindersSent      Json?             // Track which reminders have been sent
+  notificationSchedules NotificationSchedule[]
 
   @@index([partyId])
   @@index([parentId])
@@ -393,6 +407,8 @@ model Appointment {
 
 enum AppointmentType {
   fitting
+  first_fitting
+  alterations_fitting
   pickup
   final_try
   other
@@ -484,8 +500,45 @@ model Settings {
   emailSubject      String   @default("Reminder: Your appointment at {shopName}")
   emailBody         String   @default("Hi {customerName},\nThis is a reminder for your appointment with {partyName} on {dateTime}.")
   smsBody           String   @default("Reminder: {partyName} appointment on {dateTime} at {shopName}.")
+  // Enhanced notification settings
+  earlyMorningCutoff String  @default("09:30") // Time before which to send 1h instead of 3h reminder
+  pickupReadySubject String  @default("Your garment is ready for pickup!")
+  pickupReadyEmail   String  @default("Hi {customerName},\nYour garment for {partyName} is ready for pickup!")
+  pickupReadySms     String  @default("Your garment for {partyName} is ready for pickup at {shopName}!")
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+}
+
+model NotificationSchedule {
+  id            Int      @id @default(autoincrement())
+  appointmentId Int
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  type          NotificationType
+  scheduledFor  DateTime
+  sent          Boolean  @default(false)
+  sentAt        DateTime?
+  method        NotificationMethod
+  recipient     String   // email or phone number
+  subject       String?
+  message       String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([scheduledFor, sent])
+  @@index([appointmentId])
+}
+
+enum NotificationType {
+  appointment_reminder_24h
+  appointment_reminder_3h
+  appointment_reminder_1h
+  pickup_ready
+}
+
+enum NotificationMethod {
+  email
+  sms
+  both
 }
 
 model AlterationTaskType {

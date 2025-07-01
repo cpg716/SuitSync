@@ -8,6 +8,8 @@ import { config } from './utils/config'; // Zod-validated config
 import { PrismaClient } from '@prisma/client';
 import { withAccelerate } from '@prisma/extension-accelerate';
 import { securityHeaders, rateLimits, speedLimiter, requestSizeLimit, sessionSizeLimit, headerSizeMonitor } from './middleware/security';
+import { sessionSizeManager } from './middleware/sessionManager';
+import { scheduledJobService } from './services/scheduledJobService';
 
 // Load environment variables and validate
 // (dotenv/config is loaded in config.ts)
@@ -81,6 +83,7 @@ app.use(
 
 // Add session size limiting to prevent 431 errors
 app.use(sessionSizeLimit());
+app.use(sessionSizeManager());
 
 // Register all API routes
 import { initRoutes } from './routes/initRoutes';
@@ -113,10 +116,27 @@ app.use((err: any, req: express.Request, res: express.Response, _next: express.N
 const PORT = config.PORT;
 const server = app.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
+
+  // Initialize scheduled jobs after server starts
+  try {
+    scheduledJobService.initialize();
+    console.log('Scheduled jobs initialized successfully');
+  } catch (error) {
+    console.error('Error initializing scheduled jobs:', error);
+  }
 });
 
 const shutdown = async (signal: string) => {
   console.log(`Received ${signal}. Shutting down gracefully...`);
+
+  // Stop scheduled jobs first
+  try {
+    scheduledJobService.stopAll();
+    console.log('Scheduled jobs stopped');
+  } catch (error) {
+    console.error('Error stopping scheduled jobs:', error);
+  }
+
   server.close(async (err?: Error) => {
     if (err) {
       console.error('Error during server shutdown:', err);

@@ -5,6 +5,8 @@ import { setCustomFieldValue } from '../lightspeedClient'; // TODO: migrate this
 import { getOrCreateSuitSyncAppointmentsField, verifyAndGetCustomField, createOrUpdateCustomField, initialize as initializeWorkflow } from '../services/workflowService';
 import logger from '../utils/logger'; // TODO: migrate this as well
 import { processWebhook } from '../services/webhookService';
+import { executeWorkflowTriggers } from '../services/appointmentWorkflowService';
+import { scheduleAppointmentReminders } from '../services/notificationSchedulingService';
 
 const prisma = new PrismaClient().$extends(withAccelerate());
 
@@ -77,19 +79,79 @@ export const listAppointments = async (req: Request, res: Response): Promise<voi
 
 export const createAppointment = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { partyId, dateTime, durationMinutes, tailorId, memberId, type, notes } = req.body;
+    const {
+      partyId,
+      dateTime,
+      durationMinutes,
+      tailorId,
+      memberId,
+      type,
+      notes,
+      status,
+      individualCustomerId,
+      assignedStaffId,
+      workflowStage,
+      autoScheduleNext
+    } = req.body;
+
+    const appointmentData: any = {
+      dateTime: new Date(dateTime),
+      durationMinutes,
+      type,
+      notes,
+      status: status || 'scheduled'
+    };
+
+    // Handle party vs individual customer
+    if (partyId) {
+      appointmentData.partyId = partyId;
+      if (memberId) {
+        appointmentData.memberId = memberId;
+      }
+    } else if (individualCustomerId) {
+      appointmentData.individualCustomerId = individualCustomerId;
+    } else {
+      res.status(400).json({ error: 'Either partyId or individualCustomerId is required' });
+      return;
+    }
+
+    // Handle staff assignment (support both tailorId and assignedStaffId for compatibility)
+    if (assignedStaffId || tailorId) {
+      appointmentData.tailorId = assignedStaffId || tailorId;
+    }
+
+    // Workflow fields
+    if (workflowStage) {
+      appointmentData.workflowStage = workflowStage;
+    }
+    if (autoScheduleNext !== undefined) {
+      appointmentData.autoScheduleNext = autoScheduleNext;
+    }
+
     const appointment = await prisma.appointment.create({
-      data: { 
-        partyId, 
-        dateTime: new Date(dateTime), 
-        durationMinutes, 
-        tailorId, 
-        memberId,
-        type, 
-        notes 
-      },
+      data: appointmentData,
+      include: {
+        party: true,
+        member: true,
+        individualCustomer: true,
+        tailor: true
+      }
     });
-    await syncAppointmentsToLightspeed(req, partyId);
+
+    // Sync to Lightspeed if it's a party appointment
+    if (partyId) {
+      await syncAppointmentsToLightspeed(req, partyId);
+    }
+
+    // Schedule reminder notifications
+    try {
+      await scheduleAppointmentReminders(appointment.id);
+      logger.info(`Scheduled reminders for appointment ${appointment.id}`);
+    } catch (notificationError: any) {
+      logger.error('Error scheduling appointment reminders:', notificationError);
+      // Don't fail the appointment creation if notification scheduling fails
+    }
+
     res.status(201).json(appointment);
     return;
   } catch (err: any) {
@@ -103,6 +165,17 @@ export const updateAppointment = async (req: Request, res: Response): Promise<vo
   try {
     const appointmentId = Number(req.params.id);
     const { dateTime, durationMinutes, tailorId, memberId, type, notes, status } = req.body;
+
+    // Get the current appointment to check for status changes
+    const currentAppointment = await prisma.appointment.findUnique({
+      where: { id: appointmentId }
+    });
+
+    if (!currentAppointment) {
+      res.status(404).json({ error: 'Appointment not found' });
+      return;
+    }
+
     const updatedAppointment = await prisma.appointment.update({
       where: { id: appointmentId },
       data: {
@@ -115,8 +188,38 @@ export const updateAppointment = async (req: Request, res: Response): Promise<vo
         status,
       },
     });
-    await syncAppointmentsToLightspeed(req, updatedAppointment.partyId);
-    res.json(updatedAppointment);
+
+    // Trigger workflow automation if appointment was just completed
+    if (status === 'completed' && currentAppointment.status !== 'completed') {
+      try {
+        const workflowResult = await executeWorkflowTriggers(appointmentId);
+        logger.info(`Workflow triggers executed for appointment ${appointmentId}`, {
+          actions: workflowResult.actions,
+          errors: workflowResult.errors
+        });
+
+        // Include workflow results in response
+        res.json({
+          ...updatedAppointment,
+          workflowResult
+        });
+      } catch (workflowError: any) {
+        logger.error('Error executing workflow triggers:', workflowError);
+        // Still return the updated appointment even if workflow fails
+        res.json({
+          ...updatedAppointment,
+          workflowResult: {
+            success: false,
+            actions: [],
+            errors: [workflowError.message || 'Workflow execution failed']
+          }
+        });
+      }
+    } else {
+      await syncAppointmentsToLightspeed(req, updatedAppointment.partyId);
+      res.json(updatedAppointment);
+    }
+
     return;
   } catch (err: any) {
     logger.error(`Error updating appointment ${req.params.id}:`, err);

@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { withAccelerate } from '@prisma/extension-accelerate';
+import logger from '../utils/logger';
+import { scheduledJobService } from '../services/scheduledJobService';
 
 const prisma = new PrismaClient().$extends(withAccelerate());
 
@@ -10,10 +12,14 @@ export const getSettings = async (req: Request, res: Response) => {
     settings = await prisma.settings.create({
       data: {
         id: 1,
-        reminderIntervals: '24,4',
+        reminderIntervals: '24,3',
+        earlyMorningCutoff: '09:30',
         emailSubject: 'Reminder: Your appointment at {shopName}',
-        emailBody: 'Hi {customerName},\nThis is a reminder for your appointment with {partyName} on {dateTime}.',
+        emailBody: 'Hi {customerName},\n\nThis is a reminder for your appointment with {partyName} on {dateTime}.\n\nThank you!',
         smsBody: 'Reminder: {partyName} appointment on {dateTime} at {shopName}.',
+        pickupReadySubject: 'Your garment is ready for pickup!',
+        pickupReadyEmail: 'Hi {customerName},\n\nYour garment for {partyName} is ready for pickup!\n\nPlease visit us at your earliest convenience.',
+        pickupReadySms: 'Your garment for {partyName} is ready for pickup at {shopName}!'
       },
     });
   }
@@ -21,12 +27,43 @@ export const getSettings = async (req: Request, res: Response) => {
 };
 
 export const updateSettings = async (req: Request, res: Response) => {
-  const { reminderIntervals, emailSubject, emailBody, smsBody } = req.body;
+  const {
+    reminderIntervals,
+    earlyMorningCutoff,
+    emailSubject,
+    emailBody,
+    smsBody,
+    pickupReadySubject,
+    pickupReadyEmail,
+    pickupReadySms
+  } = req.body;
+
   const settings = await prisma.settings.upsert({
     where: { id: 1 },
-    update: { reminderIntervals, emailSubject, emailBody, smsBody },
-    create: { id: 1, reminderIntervals, emailSubject, emailBody, smsBody },
+    update: {
+      reminderIntervals,
+      earlyMorningCutoff,
+      emailSubject,
+      emailBody,
+      smsBody,
+      pickupReadySubject,
+      pickupReadyEmail,
+      pickupReadySms
+    },
+    create: {
+      id: 1,
+      reminderIntervals,
+      earlyMorningCutoff,
+      emailSubject,
+      emailBody,
+      smsBody,
+      pickupReadySubject,
+      pickupReadyEmail,
+      pickupReadySms
+    },
   });
+
+  logger.info('Notification settings updated', { userId: req.session?.userId });
   res.json(settings);
 };
 
@@ -144,4 +181,91 @@ export const getSkills = async (req: Request, res: Response) => {
     orderBy: { tailor: { name: 'asc' } },
   });
   res.json(abilities);
-}; 
+};
+
+// Notification Settings Endpoints
+export const getNotificationSettings = async (req: Request, res: Response): Promise<void> => {
+  try {
+    let settings = await prisma.settings.findUnique({ where: { id: 1 } });
+    if (!settings) {
+      settings = await prisma.settings.create({
+        data: {
+          id: 1,
+          reminderIntervals: '24,3',
+          earlyMorningCutoff: '09:30',
+          emailSubject: 'Reminder: Your appointment at {shopName}',
+          emailBody: 'Hi {customerName},\n\nThis is a reminder for your appointment with {partyName} on {dateTime}.\n\nThank you!',
+          smsBody: 'Reminder: {partyName} appointment on {dateTime} at {shopName}.',
+          pickupReadySubject: 'Your garment is ready for pickup!',
+          pickupReadyEmail: 'Hi {customerName},\n\nYour garment for {partyName} is ready for pickup!\n\nPlease visit us at your earliest convenience.',
+          pickupReadySms: 'Your garment for {partyName} is ready for pickup at {shopName}!'
+        },
+      });
+    }
+    res.json(settings);
+  } catch (error: any) {
+    logger.error('Error getting notification settings:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const updateNotificationSettings = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const {
+      reminderIntervals,
+      earlyMorningCutoff,
+      emailSubject,
+      emailBody,
+      smsBody,
+      pickupReadySubject,
+      pickupReadyEmail,
+      pickupReadySms
+    } = req.body;
+
+    const settings = await prisma.settings.upsert({
+      where: { id: 1 },
+      update: {
+        reminderIntervals,
+        earlyMorningCutoff,
+        emailSubject,
+        emailBody,
+        smsBody,
+        pickupReadySubject,
+        pickupReadyEmail,
+        pickupReadySms
+      },
+      create: {
+        id: 1,
+        reminderIntervals,
+        earlyMorningCutoff,
+        emailSubject,
+        emailBody,
+        smsBody,
+        pickupReadySubject,
+        pickupReadyEmail,
+        pickupReadySms
+      },
+    });
+
+    logger.info('Notification settings updated', {
+      userId: req.session?.userId,
+      settings: { reminderIntervals, earlyMorningCutoff }
+    });
+
+    res.json(settings);
+  } catch (error: any) {
+    logger.error('Error updating notification settings:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Scheduled Jobs Management
+export const getScheduledJobsStatus = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const jobStatus = scheduledJobService.getJobStatus();
+    res.json(jobStatus);
+  } catch (error: any) {
+    logger.error('Error getting scheduled jobs status:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};

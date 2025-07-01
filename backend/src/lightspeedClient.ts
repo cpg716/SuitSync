@@ -1,6 +1,7 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import querystring from 'querystring';
 import { MultiUserSessionService } from './services/multiUserSessionService';
+import { lightspeedCircuitBreaker } from './services/circuitBreaker';
 
 // Rate limiting helper
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -77,16 +78,19 @@ async function refreshAccessToken(req: any) {
 }
 
 function createAxiosInstance(req: any): AxiosInstance {
-  const domainPrefix = getDomainPrefix(req);
   const accessToken = getAccessToken(req);
-  if (!domainPrefix || !accessToken) throw new Error('No Lightspeed session');
+  const accountID = req.session?.lsAccountID || process.env.LS_ACCOUNT_ID;
+  
+  if (!accessToken) throw new Error('No Lightspeed access token');
+  if (!accountID) throw new Error('No Lightspeed account ID');
+  
   return axios.create({
-    baseURL: `https://${domainPrefix}.retail.lightspeed.app/api/2.0`,
+    baseURL: `https://api.lightspeedapp.com/API/V3/Account/${accountID}`,
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    withCredentials: true,
+    timeout: 30000,
   });
 }
 
@@ -94,15 +98,16 @@ export function createLightspeedClient(req: any) {
   let client = createAxiosInstance(req);
 
   async function requestWithRefresh(method: string, endpoint: string, data?: any, params?: any, retryCount: number = 0): Promise<any> {
-    try {
-      let response;
-      if (method === 'get') {
-        response = await client.get(endpoint, { params });
-      } else if (method === 'post') {
-        response = await client.post(endpoint, data);
-      } else if (method === 'put') {
-        response = await client.put(endpoint, data);
-      }
+    return await lightspeedCircuitBreaker.execute(async () => {
+      try {
+        let response;
+        if (method === 'get') {
+          response = await client.get(endpoint, { params });
+        } else if (method === 'post') {
+          response = await client.post(endpoint, data);
+        } else if (method === 'put') {
+          response = await client.put(endpoint, data);
+        }
 
       // Log rate limit headers for monitoring
       if (response?.headers['x-ratelimit-remaining']) {
@@ -138,7 +143,10 @@ export function createLightspeedClient(req: any) {
         }
       }
       throw error;
-    }
+      } catch (error) {
+        throw error;
+      }
+    });
   }
 
   // Proper pagination implementation following Lightspeed API 2.0 cursor-based pagination

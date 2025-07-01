@@ -1,8 +1,14 @@
-# SuitSync API Reference
+# SuitSync API Reference v2.0
 
 ## Overview
 
 The SuitSync API provides comprehensive endpoints for managing customers, parties, alteration jobs, appointments, and integrations with Lightspeed X-Series. All endpoints require authentication unless otherwise specified.
+
+## 🆕 What's New in v2.0
+- ✅ **Fixed Lightspeed Integration** - Correct X-Series API endpoints
+- ✅ **Enhanced Error Handling** - Standardized error responses with circuit breaker
+- ✅ **Session Management** - Prevents header size issues (431 errors)
+- ✅ **Database Error Handling** - Proper Prisma error management
 
 ## Base URL
 

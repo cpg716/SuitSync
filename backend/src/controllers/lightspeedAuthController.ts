@@ -42,11 +42,12 @@ export const redirectToLightspeed = async (req: Request, res: Response): Promise
   try {
     const state = crypto.randomBytes(16).toString('hex');
     req.session.lsAuthState = state;
-    const authUrl = new URL(`https://secure.retail.lightspeed.app/connect`);
+    const authUrl = new URL('https://cloud.lightspeedapp.com/oauth/authorize.php');
     authUrl.searchParams.set('response_type', 'code');
     authUrl.searchParams.set('client_id', LS_CLIENT_ID);
     authUrl.searchParams.set('redirect_uri', LS_REDIRECT_URI);
     authUrl.searchParams.set('state', state);
+    authUrl.searchParams.set('scope', 'employee:all');
     logger.info('Redirecting to Lightspeed for authorization...');
     res.redirect(authUrl.toString());
     return;
@@ -81,14 +82,20 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
   try {
     logger.info('Exchanging authorization code for tokens...');
     const tokenResponse = await axios.post(
-      `https://${domain_prefix}.retail.lightspeed.app/api/1.0/token`,
+      'https://cloud.lightspeedapp.com/oauth/access_token.php',
       querystring.stringify({
-        grant_type: 'authorization_code',
-        code: code,
         client_id: LS_CLIENT_ID,
         client_secret: LS_CLIENT_SECRET,
+        code: code,
+        grant_type: 'authorization_code',
         redirect_uri: LS_REDIRECT_URI,
-      })
+      }),
+      { 
+        headers: { 
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'application/json'
+        } 
+      }
     );
     logger.info('Lightspeed token response:', tokenResponse.data);
     const { access_token, refresh_token, expires_in } = tokenResponse.data;
