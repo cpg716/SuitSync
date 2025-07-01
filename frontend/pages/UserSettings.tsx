@@ -4,8 +4,9 @@ import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { useToast } from '../components/ToastContext';
 import { Card } from '../components/ui/Card';
-import { Bell, Mail, Smartphone, UserCircle } from 'lucide-react';
+import { Bell, Mail, Smartphone, UserCircle, KeyRound, Shield, AlertTriangle } from 'lucide-react';
 import ScheduleEditor from '../components/ui/ScheduleEditor';
+import { apiFetch } from '../lib/apiClient';
 
 export default function UserSettings({ userId, adminView }: { userId?: number, adminView?: boolean }) {
   const { user: currentUser, loading: authLoading, refreshUser } = useAuth();
@@ -30,6 +31,12 @@ export default function UserSettings({ userId, adminView }: { userId?: number, a
   const [conflicts, setConflicts] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  // PIN management state (for admin view)
+  const [pinInfo, setPinInfo] = useState<any>(null);
+  const [pinLoading, setPinLoading] = useState(false);
+  const [newPin, setNewPin] = useState('');
+  const [pinSaving, setPinSaving] = useState(false);
+
   useEffect(() => {
     async function fetchUser() {
       setLoading(true);
@@ -40,7 +47,12 @@ export default function UserSettings({ userId, adminView }: { userId?: number, a
         setLoading(false);
         return;
       }
-      const res = await fetch(`/api/users/${id}`);
+      const res = await fetch(`/api/users/${id}`, {
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
       if (res.ok) {
         const data = await res.json();
         setUser(data);
@@ -50,7 +62,9 @@ export default function UserSettings({ userId, adminView }: { userId?: number, a
         setCommissionRate(data.commissionRate || '');
         setSkills(data.skills || []);
       } else {
-        setError('User not found');
+        const errorText = await res.text();
+        console.error('Failed to fetch user:', res.status, errorText);
+        setError(`User not found (${res.status})`);
         setUser(null);
       }
       setLoading(false);
@@ -58,7 +72,12 @@ export default function UserSettings({ userId, adminView }: { userId?: number, a
     fetchUser();
     // Fetch all possible skills/task types for tailors or admins
     if ((currentUser?.role === 'tailor' || currentUser?.role === 'admin') || adminView) {
-      fetch('/api/task-types').then(r => r.json()).then(setAllSkills);
+      fetch('/api/task-types', {
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }).then(r => r.json()).then(setAllSkills);
     }
   }, [userId, adminView, currentUser]);
 
@@ -70,7 +89,12 @@ export default function UserSettings({ userId, adminView }: { userId?: number, a
       const id = user.id;
       let url = `/api/users/${id}/schedule`;
       if (!isDefault && weekStart) url += `?week=${weekStart.toISOString().slice(0,10)}`;
-      const res = await fetch(url);
+      const res = await fetch(url, {
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
       if (res.ok) {
         const data = await res.json();
         setSchedule(data ? JSON.parse(data.days) : Array(7).fill({ isOff: true, blocks: [] }));
@@ -215,6 +239,89 @@ export default function UserSettings({ userId, adminView }: { userId?: number, a
     success('Week confirmed!');
   }
 
+  // PIN management functions (for admin view)
+  const fetchPinInfo = async () => {
+    if (!adminView || !userId) return;
+
+    setPinLoading(true);
+    try {
+      // For admin view, we need to fetch PIN info for the specific user
+      const response = await apiFetch(`/api/users/${userId}/pin-info`);
+      if (response.ok) {
+        const data = await response.json();
+        setPinInfo(data.pinInfo);
+      }
+    } catch (error) {
+      console.error('Error fetching PIN info:', error);
+    } finally {
+      setPinLoading(false);
+    }
+  };
+
+  const handleAdminSetPin = async () => {
+    if (!adminView || !userId || !newPin) return;
+
+    if (!/^\d{4}$/.test(newPin)) {
+      toastError('PIN must be exactly 4 digits');
+      return;
+    }
+
+    setPinSaving(true);
+    try {
+      const response = await apiFetch(`/api/users/${userId}/admin-set-pin`, {
+        method: 'POST',
+        body: JSON.stringify({ pin: newPin })
+      });
+
+      if (response.ok) {
+        success('PIN set successfully');
+        setNewPin('');
+        fetchPinInfo();
+      } else {
+        const errorData = await response.json();
+        toastError(errorData.error || 'Failed to set PIN');
+      }
+    } catch (error) {
+      toastError('Failed to set PIN');
+    } finally {
+      setPinSaving(false);
+    }
+  };
+
+  const handleAdminRemovePin = async () => {
+    if (!adminView || !userId) return;
+
+    if (!confirm('Are you sure you want to remove this user\'s PIN?')) {
+      return;
+    }
+
+    setPinSaving(true);
+    try {
+      const response = await apiFetch(`/api/users/${userId}/admin-remove-pin`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        success('PIN removed successfully');
+        fetchPinInfo();
+      } else {
+        const errorData = await response.json();
+        toastError(errorData.error || 'Failed to remove PIN');
+      }
+    } catch (error) {
+      toastError('Failed to remove PIN');
+    } finally {
+      setPinSaving(false);
+    }
+  };
+
+  // Fetch PIN info when component loads (admin view only)
+  useEffect(() => {
+    if (adminView && userId && user) {
+      fetchPinInfo();
+    }
+  }, [adminView, userId, user]);
+
   if (loading || authLoading) return <div className="p-8">Loading...</div>;
   if (error) return <div className="p-8 text-red-600">{error}</div>;
   if (!user) return <div className="p-8 text-red-600">User not found.</div>;
@@ -299,7 +406,114 @@ export default function UserSettings({ userId, adminView }: { userId?: number, a
             <Button className="mt-2 bg-primary text-white" type="submit" disabled={skillsSaving}>{skillsSaving ? 'Saving...' : 'Save Skills'}</Button>
           </form>
         )}
+
+        {/* PIN Management (admin view only) */}
+        {adminView && (
+          <div className="mb-8 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <KeyRound className="h-5 w-5 text-blue-600" />
+              <h3 className="text-lg font-semibold">PIN Management</h3>
+              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">Admin Only</span>
+            </div>
+
+            {pinLoading ? (
+              <div className="text-center py-4">Loading PIN information...</div>
+            ) : (
+              <div className="space-y-4">
+                {pinInfo?.hasPin ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-green-600">
+                      <Shield className="h-4 w-4" />
+                      <span className="text-sm font-medium">User has PIN set</span>
+                    </div>
+
+                    {pinInfo.setAt && (
+                      <div className="text-sm text-gray-600">
+                        Set on: {new Date(pinInfo.setAt).toLocaleDateString()}
+                      </div>
+                    )}
+
+                    {pinInfo.lastUsed && (
+                      <div className="text-sm text-gray-600">
+                        Last used: {new Date(pinInfo.lastUsed).toLocaleDateString()}
+                      </div>
+                    )}
+
+                    {pinInfo.attempts > 0 && (
+                      <div className="text-sm text-amber-600">
+                        Failed attempts: {pinInfo.attempts}
+                      </div>
+                    )}
+
+                    {pinInfo.lockedUntil && new Date(pinInfo.lockedUntil) > new Date() && (
+                      <div className="flex items-center gap-2 text-red-600 bg-red-50 p-3 rounded-lg">
+                        <AlertTriangle className="h-4 w-4" />
+                        <span className="text-sm">
+                          Account locked until: {new Date(pinInfo.lockedUntil).toLocaleString()}
+                        </span>
+                      </div>
+                    )}
+
+                    {pinInfo.isExpired && (
+                      <div className="flex items-center gap-2 text-amber-600 bg-amber-50 p-3 rounded-lg">
+                        <AlertTriangle className="h-4 w-4" />
+                        <span className="text-sm">PIN has expired</span>
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleAdminRemovePin}
+                        disabled={pinSaving}
+                        className="text-red-600 border-red-300 hover:bg-red-50"
+                      >
+                        {pinSaving ? 'Removing...' : 'Remove PIN'}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-600 mb-4">
+                    User has no PIN set. Set a PIN to enable quick user switching.
+                  </div>
+                )}
+
+                {/* Admin PIN Set/Reset */}
+                <div className="border-t pt-4">
+                  <label className="block text-sm font-medium mb-2">
+                    {pinInfo?.hasPin ? 'Reset PIN' : 'Set PIN'}
+                  </label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="password"
+                      value={newPin}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/\D/g, '').slice(0, 4);
+                        setNewPin(value);
+                      }}
+                      placeholder="••••"
+                      maxLength={4}
+                      className="w-24 text-center text-xl tracking-widest"
+                    />
+                    <Button
+                      type="button"
+                      onClick={handleAdminSetPin}
+                      disabled={pinSaving || !newPin || newPin.length !== 4}
+                      className="bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      {pinSaving ? 'Setting...' : (pinInfo?.hasPin ? 'Reset PIN' : 'Set PIN')}
+                    </Button>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-2">
+                    Enter a 4-digit PIN for this user
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </Card>
     </div>
   );
-} 
+}

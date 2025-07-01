@@ -49,7 +49,7 @@ services:
     container_name: suitsync-frontend
     restart: always
     environment:
-      NEXT_PUBLIC_BACKEND_URL: http://localhost:3000
+      NEXT_PUBLIC_BACKEND_URL: http://backend:3000
       NODE_ENV: development
     ports:
       - '3001:3000'

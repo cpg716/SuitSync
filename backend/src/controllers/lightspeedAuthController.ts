@@ -17,6 +17,27 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3001';
 const JWT_SECRET = process.env.JWT_SECRET || '';
 const LS_DOMAIN = process.env.LS_DOMAIN || '';
 
+/**
+ * Map Lightspeed account types to SuitSync roles
+ * This provides a default mapping that can be overridden in the admin interface
+ */
+function mapLightspeedRoleToSuitSync(lightspeedAccountType: string): string {
+  switch (lightspeedAccountType?.toLowerCase()) {
+    case 'admin':
+      return 'admin';
+    case 'manager':
+      return 'sales_management';
+    case 'employee':
+    case 'sales':
+      return 'sales';
+    case 'tailor':
+      return 'tailor';
+    default:
+      // Default to sales for unknown types
+      return 'sales';
+  }
+}
+
 export const redirectToLightspeed = async (req: Request, res: Response): Promise<void> => {
   try {
     const state = crypto.randomBytes(16).toString('hex');
@@ -132,33 +153,135 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
     const name = userPayload.display_name;
     // Handle null email from Lightspeed - create a fallback email using username
     const email = userPayload.email || `${userPayload.username}@lightspeed.local`;
-    const isAdmin = userPayload.account_type === 'admin';
-    const role = isAdmin ? 'admin' : 'user';
-    logger.info(`Authenticated Lightspeed user: ${name}, Role: ${role}`);
 
-    // Store Lightspeed user data directly in session (NO local database storage)
+    // Map Lightspeed account types to SuitSync roles
+    // Default to 'sales' for non-admin users, can be updated in SuitSync admin interface
+    const role = mapLightspeedRoleToSuitSync(userPayload.account_type);
+    logger.info(`Authenticated Lightspeed user: ${name}, Account Type: ${userPayload.account_type}, SuitSync Role: ${role}`);
+
+    // HYBRID SYSTEM: Create/update local user record with Lightspeed data
+    let localUser;
+    try {
+      // Try to find existing user by Lightspeed ID or email
+      localUser = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { lightspeedEmployeeId: lightspeedId },
+            { email: email }
+          ]
+        }
+      });
+
+      if (localUser) {
+        // Update existing user with latest Lightspeed data
+        localUser = await prisma.user.update({
+          where: { id: localUser.id },
+          data: {
+            name,
+            email,
+            role,
+            photoUrl: userPayload.image_source || localUser.photoUrl,
+            lightspeedEmployeeId: lightspeedId,
+          }
+        });
+        logger.info(`Updated existing local user ${localUser.id} with Lightspeed data`);
+      } else {
+        // Create new local user from Lightspeed data
+        localUser = await prisma.user.create({
+          data: {
+            name,
+            email,
+            role,
+            photoUrl: userPayload.image_source || undefined,
+            lightspeedEmployeeId: lightspeedId,
+            commissionRate: 0.1, // Default commission rate
+          }
+        });
+        logger.info(`Created new local user ${localUser.id} from Lightspeed data`);
+      }
+    } catch (error) {
+      logger.error('Error creating/updating local user:', error);
+      // Continue with session-only authentication if database fails
+      localUser = null;
+    }
+
+    // Create hybrid user object for session
     const lightspeedUser = {
-      id: lightspeedId, // Use Lightspeed ID as the user ID
+      id: localUser?.id || lightspeedId, // Use local DB ID if available, fallback to Lightspeed ID
+      lightspeedId: lightspeedId,
       name,
       email,
       role,
       photoUrl: userPayload.image_source || undefined,
       lightspeedEmployeeId: lightspeedId,
-      isLightspeedUser: true // Flag to indicate this is a pure Lightspeed user
+      isLightspeedUser: true,
+      hasLocalRecord: !!localUser,
+      localUserId: localUser?.id
     };
 
-    logger.info(`Pure Lightspeed authentication - no local user storage`);
+    logger.info(`Hybrid authentication - ${localUser ? 'with' : 'without'} local user storage`);
 
-    // Store Lightspeed user and tokens directly in session (no database)
+    // Store hybrid user and tokens in session
     req.session.lightspeedUser = lightspeedUser;
     req.session.lsAccessToken = access_token;
     req.session.lsRefreshToken = refresh_token;
     req.session.lsDomainPrefix = domain_prefix;
     req.session.lsTokenExpiresAt = expiresAt;
-    req.session.userId = lightspeedId; // Store as string for Lightspeed user ID
+    req.session.userId = localUser?.id || lightspeedId; // Use local DB ID if available
 
-    logger.info(`Lightspeed user ${lightspeedUser.name} (${lightspeedUser.email}) successfully authenticated - session-only storage`);
-    res.redirect(`${FRONTEND_URL}/`);
+    // If we have a local user, also store the session in the database for multi-user support
+    if (localUser) {
+      try {
+        await prisma.userSession.upsert({
+          where: {
+            userId_browserSessionId: {
+              userId: localUser.id,
+              browserSessionId: req.sessionID
+            }
+          },
+          update: {
+            lsAccessToken: access_token,
+            lsRefreshToken: refresh_token,
+            lsDomainPrefix: domain_prefix,
+            expiresAt: expiresAt,
+            lastActive: new Date(),
+          },
+          create: {
+            userId: localUser.id,
+            browserSessionId: req.sessionID,
+            lsAccessToken: access_token,
+            lsRefreshToken: refresh_token,
+            lsDomainPrefix: domain_prefix,
+            expiresAt: expiresAt,
+          }
+        });
+        logger.info(`Stored user session in database for multi-user support`);
+      } catch (error) {
+        logger.error('Error storing user session in database:', error);
+        // Continue without database session storage
+      }
+    }
+
+    logger.info(`Hybrid user ${lightspeedUser.name} (${lightspeedUser.email}) successfully authenticated`);
+
+    // Check if user needs to set up PIN (first time authentication or no PIN set)
+    let needsPinSetup = false;
+    if (localUser) {
+      const pinInfo = await prisma.user.findUnique({
+        where: { id: localUser.id },
+        select: { pinHash: true, pinSetAt: true }
+      });
+
+      needsPinSetup = !pinInfo?.pinHash;
+      logger.info(`User ${localUser.id} PIN setup required: ${needsPinSetup}`);
+    }
+
+    // Redirect to appropriate page
+    const redirectUrl = needsPinSetup
+      ? `${FRONTEND_URL}/setup-pin`
+      : `${FRONTEND_URL}/dashboard`;
+
+    res.redirect(redirectUrl);
     return;
   } catch (error: unknown) {
     let errorMsg = 'Unknown error';

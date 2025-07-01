@@ -4,25 +4,12 @@ import { withAccelerate } from '@prisma/extension-accelerate';
 const prisma = new PrismaClient().$extends(withAccelerate());
 
 async function main() {
-  console.log("🚀 SuitSync uses Lightspeed OAuth for authentication.");
-  console.log("📝 This seed script only creates demo data, not users.");
-  console.log("👤 Users will be created automatically when they sign in via Lightspeed.\n");
-
-  // Check if demo data already exists
-  const customerCount = await prisma.customer.count();
-  if (customerCount > 0) {
-    console.log("Demo data exists, clearing and re-seeding...");
-    // Clear existing data in correct order due to foreign key constraints
-    for (const model of [
-      'alterationJob', 'appointment', 'partyMember', 'saleAssignment', 'auditLog', 'party', 'customer', 'skill']) {
-      try {
-        // @ts-ignore
-        await prisma[model].deleteMany();
-      } catch (e: any) {
-        console.warn(`Warning: Could not deleteMany for ${model}:`, e.message);
-      }
-    }
-  }
+  console.log("🚀 SuitSync is production-ready with no demo data");
+  console.log("🔐 All authentication is through Lightspeed OAuth");
+  console.log("👤 Users will be created automatically when they sign in via Lightspeed");
+  console.log("📊 All data comes from real Lightspeed integration");
+  console.log("✅ No demo data seeded - ready for production use");
+  return;
 
   // Seed demo customers
   const customers = [];

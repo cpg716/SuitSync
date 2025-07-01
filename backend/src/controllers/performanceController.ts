@@ -164,7 +164,8 @@ export const getSystemHealth = async (req: Request, res: Response): Promise<void
     
     // Calculate health scores
     const cacheHitRatio = cacheService.getHitRatio();
-    const memoryUsageRatio = memoryUsage.heapUsed / memoryUsage.heapTotal;
+    // Use RSS memory vs reasonable container limit (512MB) for more accurate health assessment
+    const memoryUsageRatio = memoryUsage.rss / (512 * 1024 * 1024);
     
     const health = {
       status: 'healthy',

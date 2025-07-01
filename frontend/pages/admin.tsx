@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo } from 'react';
+import dynamic from 'next/dynamic';
 import { useToast } from '../components/ToastContext';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -8,9 +9,19 @@ import { Settings, RefreshCw, Mail, MessageCircle, KeyRound, Info } from 'lucide
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/Tabs';
 import { Modal } from '../components/ui/Modal';
-import UserSettings from './UserSettings';
 import { useAuth } from '../src/AuthContext';
 import { apiFetch, getApiUrl } from '../lib/apiClient';
+
+// Dynamically import heavy components
+const UserSettings = dynamic(() => import('./UserSettings'), {
+  loading: () => <Skeleton className="h-64 w-full" />,
+  ssr: false
+});
+
+const RolePermissionsDisplay = dynamic(() => import('../components/RolePermissionsDisplay'), {
+  loading: () => <Skeleton className="h-64 w-full" />,
+  ssr: false
+});
 
 const defaultConfig = {
   podiumApiKey: '',
@@ -196,7 +207,7 @@ function TailorAbilitiesAdmin() {
   useEffect(() => {
     Promise.all([
       fetch('http://localhost:3000/api/admin/settings/tailor-abilities', { credentials: 'include' }).then(r => r.json()),
-      fetch('/api/users', { credentials: 'include' }).then(async r => {
+      fetch('http://localhost:3000/api/users', { credentials: 'include' }).then(async r => {
         if (!r.ok) {
           if (r.status === 401) {
             toast.error('You must be logged in to view users.');
@@ -215,7 +226,7 @@ function TailorAbilitiesAdmin() {
       fetch('http://localhost:3000/api/admin/settings/task-types', { credentials: 'include' }).then(r => r.json()),
     ]).then(([a, u, t]) => {
       setAbilities(a);
-      const userArr = Array.isArray(u) ? u : (Array.isArray(u?.localUsers) ? u.localUsers : []);
+      const userArr = Array.isArray(u) ? u : (Array.isArray(u?.lightspeedUsers) ? u.lightspeedUsers : (Array.isArray(u?.users) ? u.users : []));
       setTailors((userArr || []).filter(u => u.role === 'tailor'));
       setTaskTypes(t);
       setLoading(false);
@@ -318,7 +329,7 @@ function TailorSchedulesAdmin() {
       }),
     ]).then(([s, u]) => {
       setSchedules(s);
-      const userArr = Array.isArray(u) ? u : (Array.isArray(u?.localUsers) ? u.localUsers : []);
+      const userArr = Array.isArray(u) ? u : (Array.isArray(u?.lightspeedUsers) ? u.lightspeedUsers : (Array.isArray(u?.users) ? u.users : []));
       setTailors((userArr || []).filter(u => u.role === 'tailor'));
       setLoading(false);
     });
@@ -396,8 +407,7 @@ function UsersAdminCard() {
   const [loading, setLoading] = useState(true);
   const [profileUserId, setProfileUserId] = useState<number|null>(null);
   const [page, setPage] = useState(1);
-  const USERS_PER_ROW = 5;
-  const USERS_PER_PAGE = 15;
+  const USERS_PER_PAGE = 20; // Increased for better grid layout
   useEffect(() => {
     apiFetch('/api/users').then(async r => {
       if (!r.ok) {
@@ -415,7 +425,9 @@ function UsersAdminCard() {
       }
       return r.json();
     }).then(data => {
-      setUsers(Array.isArray(data.lightspeedUsers) ? data.lightspeedUsers : []);
+      // Use the combined users array that includes both local and Lightspeed-only users
+      const allUsers = data.users || [...(data.localUsers || []), ...(data.lightspeedUsers || [])];
+      setUsers(allUsers);
       setLocalUsers(Array.isArray(data.localUsers) ? data.localUsers : []);
       setLoading(false);
     });
@@ -433,44 +445,158 @@ function UsersAdminCard() {
   };
   const pagedUsers = users.slice((page-1)*USERS_PER_PAGE, page*USERS_PER_PAGE);
   const totalPages = Math.ceil(users.length / USERS_PER_PAGE);
+  const handleSyncUsers = async () => {
+    try {
+      toast.success('Starting user sync...');
+      const response = await apiFetch('/api/users/sync', { method: 'POST' });
+      if (response.ok) {
+        const result = await response.json();
+        toast.success(`Sync completed: ${result.created} created, ${result.updated} updated`);
+
+        // Refresh the users list by re-fetching data
+        setLoading(true);
+        const usersResponse = await apiFetch('/api/users');
+        if (usersResponse.ok) {
+          const data = await usersResponse.json();
+          const allUsers = data.users || [...(data.localUsers || []), ...(data.lightspeedUsers || [])];
+          setUsers(allUsers);
+          setLocalUsers(Array.isArray(data.localUsers) ? data.localUsers : []);
+        }
+        setLoading(false);
+      } else {
+        toast.error('Failed to sync users');
+      }
+    } catch (error) {
+      toast.error('Failed to sync users');
+    }
+  };
+
   return (
-    <Card title="Users (Lightspeed Staff Directory)" className="mb-8 w-full">
-      {loading ? <Skeleton className="h-24 w-full" /> : (
+    <Card title="Users (Staff Directory)" className="mb-8 w-full">
+      {loading ? <Skeleton className="h-64 w-full" /> : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-6 w-full">
+          {/* Header with sync button */}
+          <div className="flex justify-between items-center mb-6">
+            <div className="text-sm text-gray-600 dark:text-gray-400">
+              {users.length} total users ({localUsers.length} with local profiles)
+            </div>
+            <Button
+              onClick={handleSyncUsers}
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Sync Users
+            </Button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6 w-full">
             {pagedUsers.map(u => {
               const local = getLocalUser(u) || {};
+              const hasLocalProfile = !!getUserId(u);
               return (
                 <div
                   key={u.id}
-                  className="bg-white dark:bg-gray-900 rounded-xl shadow-lg flex flex-col items-center border border-gray-200 dark:border-gray-700 w-full min-w-0 aspect-square justify-center p-6"
-                  style={{ aspectRatio: '1 / 1', minHeight: '18rem', maxHeight: '22rem' }}
+                  className={`
+                    bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-lg
+                    transition-all duration-200 ease-in-out transform hover:scale-105
+                    flex flex-col items-center border border-gray-200 dark:border-gray-600
+                    w-full min-w-0 p-4 sm:p-6 relative overflow-hidden
+                    ${hasLocalProfile ? 'ring-2 ring-blue-500/20' : ''}
+                  `}
+                  style={{ minHeight: '280px' }}
                 >
-                  {u.photo ? <img src={u.photo} alt={u.display_name} className="h-24 w-24 rounded-full object-cover mb-3 shadow" /> : <div className="h-24 w-24 rounded-full bg-gray-200 mb-3" />}
-                  <div className="text-xl font-bold mb-1 text-center">{u.display_name}</div>
-                  <div className="text-gray-500 text-sm mb-1 text-center">{getPhone(u)}</div>
-                  <div className="text-gray-500 text-sm mb-1 text-center">{u.email}</div>
-                  <div className="text-primary text-sm font-semibold mb-3 capitalize text-center">{u.account_type || local.role || '-'}</div>
+                  {/* Status indicator */}
+                  <div className={`absolute top-2 right-2 w-3 h-3 rounded-full ${hasLocalProfile ? 'bg-green-500' : 'bg-gray-300'}`} />
+
+                  {/* Profile photo */}
+                  <div className="relative mb-3">
+                    {u.photoUrl ? (
+                      <img
+                        src={u.photoUrl}
+                        alt={u.name}
+                        className="h-16 w-16 sm:h-20 sm:w-20 rounded-full object-cover shadow-md ring-2 ring-white dark:ring-gray-700"
+                      />
+                    ) : (
+                      <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shadow-md ring-2 ring-white dark:ring-gray-700">
+                        <span className="text-white font-bold text-lg sm:text-xl">
+                          {u.name?.charAt(0)?.toUpperCase() || '?'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* User info */}
+                  <div className="flex-1 flex flex-col items-center text-center space-y-1 mb-4">
+                    <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white leading-tight">
+                      {u.name || 'Unknown User'}
+                    </h3>
+
+                    {getPhone(u) !== '-' && (
+                      <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">
+                        {getPhone(u)}
+                      </p>
+                    )}
+
+                    <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate w-full px-2">
+                      {u.email}
+                    </p>
+
+                    <div className={`
+                      inline-flex items-center px-2 py-1 rounded-full text-xs font-medium
+                      ${u.role === 'admin'
+                        ? 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300'
+                        : 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300'
+                      }
+                    `}>
+                      {u.role || local.role || 'User'}
+                    </div>
+                  </div>
+
+                  {/* Action button */}
                   <Button
-                    variant="outline"
-                    className="w-full"
+                    variant={hasLocalProfile ? "default" : "outline"}
+                    size="sm"
+                    className="w-full text-xs sm:text-sm"
                     onClick={() => setProfileUserId(getUserId(u))}
-                    disabled={!getUserId(u)}
+                    disabled={!hasLocalProfile}
                   >
-                    View Profile
+                    {hasLocalProfile ? 'View Profile' : 'No Local Profile'}
                   </Button>
-                  {!getUserId(u) && (
-                    <div className="text-xs text-gray-400 mt-2 text-center">No local profile</div>
-                  )}
                 </div>
               );
             })}
           </div>
+
+          {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex justify-center items-center gap-2 mt-6">
-              <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage(page-1)}>Prev</Button>
-              <span className="text-sm">Page {page} of {totalPages}</span>
-              <Button variant="outline" size="sm" disabled={page === totalPages} onClick={() => setPage(page+1)}>Next</Button>
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                Showing {((page-1)*USERS_PER_PAGE)+1}-{Math.min(page*USERS_PER_PAGE, users.length)} of {users.length} users
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page === 1}
+                  onClick={() => setPage(page-1)}
+                  className="px-3"
+                >
+                  ← Previous
+                </Button>
+                <span className="text-sm font-medium px-3 py-1 bg-gray-100 dark:bg-gray-800 rounded">
+                  {page} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page === totalPages}
+                  onClick={() => setPage(page+1)}
+                  className="px-3"
+                >
+                  Next →
+                </Button>
+              </div>
             </div>
           )}
         </>
@@ -486,6 +612,7 @@ const TABS = [
   { value: 'general', label: 'General' },
   { value: 'notifications', label: 'Notifications' },
   { value: 'users', label: 'Users' },
+  { value: 'roles', label: 'Role Permissions' },
   { value: 'tailors', label: 'Tailors' },
   { value: 'availability', label: 'My Availability' },
   { value: 'integrations', label: 'Integrations' },
@@ -632,6 +759,20 @@ export default function AdminSettings() {
                 </TabsContent>
                 <TabsContent value="users">
                   <UsersAdminCard />
+                </TabsContent>
+                <TabsContent value="roles">
+                  <Card title="Role-Based Permissions" className="mb-8">
+                    <div className="p-6">
+                      <div className="mb-4">
+                        <h3 className="text-lg font-semibold mb-2">SuitSync Role Permissions</h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          Each role has specific permissions for different areas of SuitSync.
+                          Roles are initially assigned based on Lightspeed account types but can be updated here.
+                        </p>
+                      </div>
+                      <RolePermissionsDisplay />
+                    </div>
+                  </Card>
                 </TabsContent>
                 <TabsContent value="tailors">
                   <TaskTypesAdmin />

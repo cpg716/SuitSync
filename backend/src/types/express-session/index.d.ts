@@ -18,15 +18,18 @@ declare module 'express-session' {
     lsDomainPrefix?: string;
     lsTokenExpiresAt?: Date;
 
-    // Pure Lightspeed user data (no local database)
+    // Hybrid Lightspeed user data (with optional local database integration)
     lightspeedUser?: {
-      id: string;
+      id: string | number; // Can be local DB ID (number) or Lightspeed ID (string)
+      lightspeedId?: string; // Always the Lightspeed employee ID
       name: string;
       email: string;
       role: string;
       photoUrl?: string;
       lightspeedEmployeeId: string;
       isLightspeedUser: boolean;
+      hasLocalRecord?: boolean; // Whether this user has a local database record
+      localUserId?: number; // Local database user ID if available
     };
 
     // Multi-user session support (legacy)

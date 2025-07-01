@@ -93,11 +93,20 @@ model User {
   userSchedules        UserSchedule[]
   userSessions         UserSession[]       @relation("UserSessions")
 
+  // PIN-based user switching
+  pinHash              String?
+  pinSetAt             DateTime?
+  pinAttempts          Int?                @default(0)
+  pinLockedUntil       DateTime?
+  lastPinUse           DateTime?
+
   @@index([email])
   @@index([role])
   @@index([lightspeedEmployeeId])
   @@index([createdAt])
   @@index([name])
+  @@index([pinHash])
+  @@index([pinLockedUntil])
 }
 
 model UserSchedule {

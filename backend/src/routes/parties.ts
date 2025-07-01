@@ -1,6 +1,6 @@
 import express from 'express';
 import * as partiesController from '../controllers/partiesController';
-import { authMiddleware } from '../middleware/auth';
+import { authMiddleware, requirePermission } from '../middleware/auth';
 import { PrismaClient } from '@prisma/client';
 import { withAccelerate } from '@prisma/extension-accelerate';
 import { logChange } from '../services/AuditLogService'; // TODO: migrate this as well
@@ -11,9 +11,10 @@ const prisma = new PrismaClient().$extends(withAccelerate());
 
 router.use(authMiddleware);
 
-router.get('/', asyncHandler(partiesController.listParties));
-router.get('/:id', asyncHandler(partiesController.getPartyDetail));
-router.post('/', asyncHandler(partiesController.createParty));
+// Parties are for Sales, Sales Management, and Sales Support (assign)
+router.get('/', requirePermission('parties', 'read'), asyncHandler(partiesController.listParties));
+router.get('/:id', requirePermission('parties', 'read'), asyncHandler(partiesController.getPartyDetail));
+router.post('/', requirePermission('parties', 'write'), asyncHandler(partiesController.createParty));
 
 // GET /api/parties/:id/members
 router.get('/:id/members', asyncHandler(async (req: express.Request, res: express.Response) => {

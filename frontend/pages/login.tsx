@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/router';
 import { useAuth } from '../src/AuthContext';
 import { Button } from '@/components/ui/Button';
@@ -34,8 +35,10 @@ export default function LoginPage() {
         .then(res => {
           if (Array.isArray(res.data)) {
             setAllUsers(res.data);
-          } else if (res.data && typeof res.data === 'object' && Array.isArray((res.data as any).lightspeedUsers)) {
-            setAllUsers((res.data as any).lightspeedUsers);
+          } else if (res.data && typeof res.data === 'object') {
+            // Use the combined users array that includes both local and Lightspeed-only users
+            const allUsers = (res.data as any).users || [...((res.data as any).localUsers || []), ...((res.data as any).lightspeedUsers || [])];
+            setAllUsers(allUsers);
           } else {
             setAllUsers([]);
           }
@@ -123,8 +126,23 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-[linear-gradient(to_bottom_right,_#dbeafe_0%,_#fff_50%,_#bfdbfe_100%)] dark:bg-[var(--bg-dark)] transition-colors">
       <Card className="w-full max-w-md p-8 bg-white shadow-2xl border border-accent">
         <div className="flex flex-col items-center mb-6">
-          <img src="/suitsync-logoh.png" alt="SuitSync Logo" className="h-20 w-auto mb-2 drop-shadow-lg" />
-          <img src="/riverside-logo-full.jpg" alt="Riverside Logo" className="h-10 w-auto mb-2" />
+          <Image
+            src="/suitsync-logoh.png"
+            alt="SuitSync Logo"
+            width={200}
+            height={80}
+            className="h-20 w-auto mb-2 drop-shadow-lg"
+            style={{ width: 'auto', height: '80px' }}
+            priority
+          />
+          <Image
+            src="/riverside-logo-full.jpg"
+            alt="Riverside Logo"
+            width={120}
+            height={40}
+            className="h-10 w-auto mb-2"
+            style={{ width: 'auto', height: '40px' }}
+          />
           <h1 className="text-2xl font-bold mb-2 text-primary">Sign in to SuitSync</h1>
           <p className="text-sm text-gray-600 text-center">
             Sign in with your Lightspeed X-Series account to access SuitSync

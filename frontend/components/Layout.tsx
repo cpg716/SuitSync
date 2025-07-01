@@ -1,5 +1,6 @@
 // frontend/components/Layout.tsx
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/router';
 import { Home, Users, Calendar, Scissors, Printer, BarChart, Settings, Sun, Moon, Menu } from 'lucide-react';
 import { useState, useEffect, ReactNode } from 'react';
@@ -108,10 +109,13 @@ export default function Layout({ children, title }: LayoutProps) {
           {/* Footer */}
           <div className={`mt-auto p-4 border-t border-gray-200 dark:border-gray-700 ${collapsed ? 'flex flex-col items-center space-y-2' : 'space-y-3'}`}>
             <div className="flex items-center justify-center">
-              <img 
-                src="/riverside-logo-icon.jpg" 
-                alt="Riverside Icon" 
-                className={`w-auto transition-all duration-300 ${collapsed ? 'h-8' : 'h-16'}`} 
+              <Image
+                src="/riverside-logo-icon.jpg"
+                alt="Riverside Icon"
+                width={64}
+                height={64}
+                className={`w-auto transition-all duration-300 ${collapsed ? 'h-8' : 'h-16'}`}
+                style={{ width: 'auto', height: collapsed ? '32px' : '64px' }}
               />
             </div>
             <div className={`flex items-center ${collapsed ? 'justify-center' : 'justify-between'} w-full`}>

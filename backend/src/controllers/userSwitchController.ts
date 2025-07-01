@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { MultiUserSessionService } from '../services/multiUserSessionService';
+import { PinService } from '../services/pinService';
 import logger from '../utils/logger';
 
 const prisma = new PrismaClient();
@@ -300,9 +301,193 @@ export const refreshUserSession = async (req: Request, res: Response): Promise<v
     });
   } catch (error) {
     logger.error('Error refreshing user session:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error',
-      success: false 
+      success: false
+    });
+  }
+};
+
+/**
+ * Switch user using PIN
+ */
+export const switchUserWithPin = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { userId, pin } = req.body;
+
+    if (!userId || !pin) {
+      res.status(400).json({
+        error: 'userId and pin are required',
+        success: false
+      });
+      return;
+    }
+
+    if (typeof userId !== 'number' || typeof pin !== 'string') {
+      res.status(400).json({
+        error: 'Invalid userId or pin format',
+        success: false
+      });
+      return;
+    }
+
+    // Validate PIN
+    const pinResult = await PinService.validatePin(userId, pin);
+
+    if (!pinResult.success) {
+      res.status(401).json({
+        success: false,
+        error: pinResult.error,
+        attemptsRemaining: pinResult.attemptsRemaining,
+        lockedUntil: pinResult.lockedUntil
+      });
+      return;
+    }
+
+    // Switch to the user
+    const success = await MultiUserSessionService.switchToUser(req, userId);
+
+    if (success) {
+      logger.info(`Successfully switched to user ${userId} using PIN`);
+      res.json({
+        success: true,
+        message: `Switched to ${pinResult.user?.name}`,
+        user: {
+          id: pinResult.user.id,
+          name: pinResult.user.name,
+          email: pinResult.user.email,
+          role: pinResult.user.role,
+        },
+      });
+    } else {
+      logger.warn(`Failed to switch to user ${userId} - not in cache`);
+      res.status(401).json({
+        success: false,
+        requiresAuth: true,
+        message: 'User session not found in cache. Full authentication required.',
+        authUrl: `/api/auth/start-lightspeed?targetUserId=${userId}`,
+      });
+    }
+  } catch (error) {
+    logger.error('Error switching user with PIN:', error);
+    res.status(500).json({
+      error: 'Internal server error',
+      success: false
+    });
+  }
+};
+
+/**
+ * Set PIN for current user
+ */
+export const setUserPin = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { pin } = req.body;
+    const currentUser = (req as any).user;
+
+    if (!currentUser || !currentUser.localUserId) {
+      res.status(401).json({
+        error: 'Authentication required and user must have local record',
+        success: false
+      });
+      return;
+    }
+
+    if (!pin || typeof pin !== 'string') {
+      res.status(400).json({
+        error: 'PIN is required',
+        success: false
+      });
+      return;
+    }
+
+    const result = await PinService.setPin(currentUser.localUserId, pin);
+
+    if (result.success) {
+      logger.info(`PIN set for user ${currentUser.localUserId}`);
+      res.json({
+        success: true,
+        message: 'PIN set successfully'
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        error: result.error
+      });
+    }
+  } catch (error) {
+    logger.error('Error setting user PIN:', error);
+    res.status(500).json({
+      error: 'Internal server error',
+      success: false
+    });
+  }
+};
+
+/**
+ * Remove PIN for current user
+ */
+export const removeUserPin = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const currentUser = (req as any).user;
+
+    if (!currentUser || !currentUser.localUserId) {
+      res.status(401).json({
+        error: 'Authentication required and user must have local record',
+        success: false
+      });
+      return;
+    }
+
+    const result = await PinService.removePin(currentUser.localUserId);
+
+    if (result.success) {
+      logger.info(`PIN removed for user ${currentUser.localUserId}`);
+      res.json({
+        success: true,
+        message: 'PIN removed successfully'
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        error: result.error
+      });
+    }
+  } catch (error) {
+    logger.error('Error removing user PIN:', error);
+    res.status(500).json({
+      error: 'Internal server error',
+      success: false
+    });
+  }
+};
+
+/**
+ * Get PIN info for current user
+ */
+export const getUserPinInfo = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const currentUser = (req as any).user;
+
+    if (!currentUser || !currentUser.localUserId) {
+      res.status(401).json({
+        error: 'Authentication required and user must have local record',
+        success: false
+      });
+      return;
+    }
+
+    const pinInfo = await PinService.getPinInfo(currentUser.localUserId);
+
+    res.json({
+      success: true,
+      pinInfo
+    });
+  } catch (error) {
+    logger.error('Error getting user PIN info:', error);
+    res.status(500).json({
+      error: 'Internal server error',
+      success: false
     });
   }
 };

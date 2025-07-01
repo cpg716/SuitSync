@@ -78,12 +78,26 @@ export const AlterationModal = function({ open, onClose, onSubmit, alteration, l
         const [partiesRes, customersRes, tailorsRes] = await Promise.all([
           api.get('/api/parties'),
           api.get('/api/customers'),
-          api.get('/api/users?role=tailor')
+          api.get('/api/users')
         ]);
 
         setParties(Array.isArray(partiesRes.data) ? partiesRes.data : []);
         setCustomers(Array.isArray(customersRes.data) ? customersRes.data : []);
-        setTailors(Array.isArray(tailorsRes.data) ? tailorsRes.data : []);
+
+        // Handle different response formats for users/tailors
+        if (tailorsRes.data && Array.isArray(tailorsRes.data.users)) {
+          // Use combined users list and filter for tailors
+          const allUsers = tailorsRes.data.users || [];
+          setTailors(allUsers.filter(u => u.role === 'tailor'));
+        } else if (tailorsRes.data && Array.isArray(tailorsRes.data.lightspeedUsers)) {
+          // Use lightspeed users and filter for tailors
+          const lightspeedUsers = tailorsRes.data.lightspeedUsers || [];
+          setTailors(lightspeedUsers.filter(u => u.role === 'tailor'));
+        } else if (Array.isArray(tailorsRes.data)) {
+          // Fallback for direct array response
+          setTailors(tailorsRes.data.filter(u => u.role === 'tailor'));
+        }
+
         setDataLoading(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load data');

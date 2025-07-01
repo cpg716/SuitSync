@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, memo, useMemo, useCallback } from 'react';
 import {
   Bar,
   BarChart,
@@ -28,9 +28,9 @@ const statusColors = {
   syncing: 'text-yellow-500',
 };
 
-// A simple card component, might need to be moved to its own file if it grows
-const StatCard = ({ title, value, link, icon: Icon }) => {
-  const cardContent = (
+// Memoized StatCard component to prevent unnecessary re-renders
+const StatCard = memo(({ title, value, link, icon: Icon }) => {
+  const cardContent = useMemo(() => (
     <Card className={link ? "cursor-pointer hover:shadow-md transition-shadow" : ""}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium">{title}</CardTitle>
@@ -43,62 +43,83 @@ const StatCard = ({ title, value, link, icon: Icon }) => {
         {link && <span className="text-xs text-muted-foreground hover:text-primary">View all</span>}
       </CardContent>
     </Card>
-  );
+  ), [title, value, link, Icon]);
 
   if (link) {
     return <Link href={link}>{cardContent}</Link>;
   }
 
   return cardContent;
-};
+});
 
-export default function Dashboard() {
+StatCard.displayName = 'StatCard';
+
+function Dashboard() {
   const [metrics, setMetrics] = useState(null);
   const [sync, setSync] = useState({ status: 'syncing', last: null });
   const [apiError, setApiError] = useState<string | null>(null);
-  const { data: dashboardStats } = useSWR('/api/stats/dashboard', fetcher);
-  const { data: syncStatus, mutate: mutateSync } = useSWR('/api/sync/status', fetcher, { refreshInterval: 5000 });
-  const { data: recentSales } = useSWR('/api/sales/recent', fetcher);
 
-  useEffect(() => {
-    const fetchAllMetrics = async () => {
-      try {
-        const [partiesRes, apptsRes, alterationsRes, commissionsRes] = await Promise.all([
-          api.get('/api/parties'),
-          api.get('/api/appointments'),
-          api.get('/api/alterations'),
-          api.get('/api/commissions/leaderboard'),
-        ]);
-        setMetrics({
-          parties: partiesRes.data,
-          appts: apptsRes.data,
-          alterations: alterationsRes.data,
-          commissions: commissionsRes.data,
-        });
-      } catch (error) {
-        console.error("Failed to load dashboard metrics", error);
-        setApiError('Failed to load dashboard metrics. Please try again later.');
-      }
-    };
+  // Optimize SWR calls with better caching
+  const { data: dashboardStats } = useSWR('/api/stats/dashboard', fetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 30000, // 30 seconds
+  });
+  const { data: syncStatus, mutate: mutateSync } = useSWR('/api/sync/status', fetcher, {
+    refreshInterval: 10000, // Reduced from 5s to 10s for better performance
+    revalidateOnFocus: false,
+  });
+  const { data: recentSales } = useSWR('/api/sales/recent', fetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 60000, // 1 minute
+  });
 
-    fetchAllMetrics();
+  // Memoize the fetch function to prevent recreation on every render
+  const fetchAllMetrics = useCallback(async () => {
+    try {
+      const [partiesRes, apptsRes, alterationsRes, commissionsRes] = await Promise.all([
+        api.get('/api/parties'),
+        api.get('/api/appointments'),
+        api.get('/api/alterations'),
+        api.get('/api/commissions/leaderboard'),
+      ]);
+      setMetrics({
+        parties: partiesRes.data,
+        appts: apptsRes.data,
+        alterations: alterationsRes.data,
+        commissions: commissionsRes.data,
+      });
+    } catch (error) {
+      console.error("Failed to load dashboard metrics", error);
+      setApiError('Failed to load dashboard metrics. Please try again later.');
+    }
   }, []);
 
-  // Defensive: always check for arrays
-  const alterationsArr = Array.isArray(metrics?.alterations) ? metrics.alterations : [];
-  const partiesArr = Array.isArray(metrics?.parties) ? metrics.parties : [];
-  const apptsArr = Array.isArray(metrics?.appts) ? metrics.appts : [];
-  const commissionsArr = Array.isArray(metrics?.commissions) ? metrics.commissions : [];
+  useEffect(() => {
+    fetchAllMetrics();
+  }, [fetchAllMetrics]);
 
-  const alterationStatus = alterationsArr.reduce((acc, a) => {
-    acc[a.status] = (acc[a.status] || 0) + 1;
-    return acc;
-  }, {});
-  const alterationPie = Object.entries(alterationStatus).map(([k, v]) => ({ name: k, value: v }));
-  const partyTimeline = partiesArr.map(p => ({ date: p.eventDate.slice(0, 10), count: 1 }));
-  const salesBar = commissionsArr
-    .filter(c => c.associate?.role === 'associate' || c.associate?.role === 'sales' || !c.associate?.role)
-    .map(c => ({ name: c.associate?.name, sales: c.totalSales }));
+  // Memoize expensive calculations to prevent recalculation on every render
+  const { alterationsArr, partiesArr, apptsArr, commissionsArr } = useMemo(() => ({
+    alterationsArr: Array.isArray(metrics?.alterations) ? metrics.alterations : [],
+    partiesArr: Array.isArray(metrics?.parties) ? metrics.parties : [],
+    apptsArr: Array.isArray(metrics?.appts) ? metrics.appts : [],
+    commissionsArr: Array.isArray(metrics?.commissions) ? metrics.commissions : [],
+  }), [metrics]);
+
+  const { alterationPie, partyTimeline, salesBar } = useMemo(() => {
+    const alterationStatus = alterationsArr.reduce((acc, a) => {
+      acc[a.status] = (acc[a.status] || 0) + 1;
+      return acc;
+    }, {});
+
+    return {
+      alterationPie: Object.entries(alterationStatus).map(([k, v]) => ({ name: k, value: v })),
+      partyTimeline: partiesArr.map(p => ({ date: p.eventDate.slice(0, 10), count: 1 })),
+      salesBar: commissionsArr
+        .filter(c => c.associate?.role === 'associate' || c.associate?.role === 'sales' || !c.associate?.role)
+        .map(c => ({ name: c.associate?.name, sales: c.totalSales }))
+    };
+  }, [alterationsArr, partiesArr, commissionsArr]);
 
   // Today's Appointments and Alterations
   const today = new Date();
@@ -293,4 +314,8 @@ export default function Dashboard() {
   );
 }
 
-Dashboard.title = 'Dashboard';
+// Memoize the entire Dashboard component to prevent unnecessary re-renders
+const MemoizedDashboard = memo(Dashboard);
+MemoizedDashboard.title = 'Dashboard';
+
+export default MemoizedDashboard;

@@ -61,14 +61,14 @@ class MetricsService {
       {
         id: 'high-memory-usage',
         name: 'High Memory Usage',
-        condition: (metrics) => metrics.memory.usagePercentage > 85,
+        condition: (metrics) => metrics.memory.usagePercentage > 70, // 70% of 512MB = ~358MB
         severity: 'high',
         cooldown: 15,
       },
       {
         id: 'critical-memory-usage',
         name: 'Critical Memory Usage',
-        condition: (metrics) => metrics.memory.usagePercentage > 95,
+        condition: (metrics) => metrics.memory.usagePercentage > 85, // 85% of 512MB = ~435MB
         severity: 'critical',
         cooldown: 5,
       },
@@ -134,10 +134,12 @@ class MetricsService {
           loadAverage: process.platform === 'linux' ? require('os').loadavg() : [0, 0, 0],
         },
         memory: {
-          used: memoryUsage.heapUsed,
+          used: memoryUsage.rss, // Use RSS (Resident Set Size) for more accurate memory usage
           total: memoryUsage.heapTotal,
           free: memoryUsage.heapTotal - memoryUsage.heapUsed,
-          usagePercentage: (memoryUsage.heapUsed / memoryUsage.heapTotal) * 100,
+          // Use a more conservative calculation based on RSS vs a reasonable limit
+          // Instead of heap percentage, use RSS as percentage of reasonable container limit (512MB)
+          usagePercentage: Math.min((memoryUsage.rss / (512 * 1024 * 1024)) * 100, 100),
         },
         database: dbMetrics,
         api: apiMetrics,

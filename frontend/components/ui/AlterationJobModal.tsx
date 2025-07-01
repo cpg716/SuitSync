@@ -169,7 +169,7 @@ export function AlterationJobModal({
     }
   }, [open, preselectedCustomerId, preselectedPartyId, preselectedPartyMemberId]);
 
-  const selectedParty = parties.find(p => p.id === parseInt(formData.partyId as string));
+  const selectedParty = Array.isArray(parties) ? parties.find(p => p.id === parseInt(formData.partyId as string)) : null;
   const selectedCustomer = safeCustomers.find(c => c.id === parseInt(formData.customerId as string)) || selectedParty?.customer;
 
   const handleInputChange = (field: string, value: any) => {

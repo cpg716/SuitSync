@@ -1,15 +1,16 @@
 import express from 'express';
 import * as appointmentsController from '../controllers/appointmentsController';
-import { authMiddleware } from '../middleware/auth';
+import { authMiddleware, requirePermission } from '../middleware/auth';
 import { asyncHandler } from '../utils/asyncHandler';
 
 const router = express.Router();
 
 router.use(authMiddleware);
 
-router.get('/', asyncHandler(appointmentsController.listAppointments));
-router.post('/', asyncHandler(appointmentsController.createAppointment));
-router.put('/:id', asyncHandler(appointmentsController.updateAppointment));
-router.delete('/:id', asyncHandler(appointmentsController.deleteAppointment));
+// Appointments are for Sales, Sales Management, Admin, and Sales Support (assign only)
+router.get('/', requirePermission('appointments', 'read'), asyncHandler(appointmentsController.listAppointments));
+router.post('/', requirePermission('appointments', 'write'), asyncHandler(appointmentsController.createAppointment));
+router.put('/:id', requirePermission('appointments', 'write'), asyncHandler(appointmentsController.updateAppointment));
+router.delete('/:id', requirePermission('appointments', 'write'), asyncHandler(appointmentsController.deleteAppointment));
 
 export default router; 

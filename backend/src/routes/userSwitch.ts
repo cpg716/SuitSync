@@ -8,6 +8,10 @@ import {
   getSessionStatus,
   clearAllCachedUsers,
   refreshUserSession,
+  switchUserWithPin,
+  setUserPin,
+  removeUserPin,
+  getUserPinInfo
 } from '../controllers/userSwitchController';
 
 const router = express.Router();
@@ -32,5 +36,11 @@ router.delete('/cached-users', asyncHandler(clearAllCachedUsers));
 
 // Refresh tokens for a specific user
 router.post('/refresh-user-session', asyncHandler(refreshUserSession));
+
+// PIN-based user switching
+router.post('/switch-user-pin', asyncHandler(switchUserWithPin));
+router.post('/set-pin', asyncHandler(setUserPin));
+router.delete('/pin', asyncHandler(removeUserPin));
+router.get('/pin-info', asyncHandler(getUserPinInfo));
 
 export default router;

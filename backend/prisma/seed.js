@@ -4,20 +4,15 @@ const prisma = new PrismaClient();
 const bcrypt = require('bcryptjs');
 
 async function main() {
-  // Double-run guard: if users exist, exit
-  const userCount = await prisma.user.count();
-  if (userCount > 0) {
-    console.log("Users exist, clearing and re-seeding...");
-    // Clear existing data in correct order due to foreign key constraints
-    for (const model of [
-      'alterationJob', 'appointment', 'partyMember', 'saleAssignment', 'auditLog', 'party', 'customer', 'user', 'skill']) {
-      try {
-        await prisma[model].deleteMany();
-      } catch (e) {
-        console.warn(`Warning: Could not deleteMany for ${model}:`, e.message);
-      }
-    }
-  }
+  // SuitSync is production-ready with no demo data
+  // All users authenticate through Lightspeed OAuth
+  console.log("🚫 SuitSync uses production Lightspeed authentication only - no demo data seeded");
+  console.log("🔐 To use SuitSync:");
+  console.log("1. Start the backend server: npm run dev");
+  console.log("2. Navigate to the frontend: http://localhost:3001");
+  console.log("3. Click 'Sign in with Lightspeed' to authenticate");
+  console.log("4. Users and roles will be synced from your Lightspeed account");
+  return;
 
   // Seed demo admin user
   const users = [];

@@ -10,12 +10,16 @@ export default function Logout() {
     const performLogout = async () => {
       try {
         await logout();
-        // Redirect to login page after logout
-        router.replace('/login?reason=logged_out');
+        // Small delay to ensure logout is processed
+        setTimeout(() => {
+          router.replace('/login?reason=logged_out');
+        }, 100);
       } catch (error) {
         console.error('Logout error:', error);
         // Still redirect to login even if logout fails
-        router.replace('/login?reason=logout_error');
+        setTimeout(() => {
+          router.replace('/login?reason=logout_error');
+        }, 100);
       }
     };
 

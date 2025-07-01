@@ -101,12 +101,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function logout() {
     try {
+      // Call backend logout endpoint
       await api.post('/auth/logout');
+
+      // Clear local state
       setIsLightspeedConnected(false);
+
+      // Clear SWR cache and set user to null
       await mutate(null, false);
+
+      // Clear any local storage tokens (if any)
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
+
+      toastSuccess("Logged out successfully");
     } catch (err) {
       toastError("Logout failed. Please try again.");
       console.error(err);
+
+      // Even if logout fails, clear local state and redirect
+      setIsLightspeedConnected(false);
+      await mutate(null, false);
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
     }
   }
 

@@ -44,7 +44,7 @@ function InnerApp({ Component, pageProps }: AppProps) {
   }, []);
 
   useEffect(() => {
-    fetch('http://localhost:3000/api/health').then(res => res.json()).then(setHealth).catch(() => setHealth({ status: 'error' }));
+    fetch('/api/health').then(res => res.json()).then(setHealth).catch(() => setHealth({ status: 'error' }));
   }, []);
 
   useEffect(() => {

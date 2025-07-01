@@ -204,10 +204,10 @@ export const getHealthCheck = async (req: Request, res: Response): Promise<void>
     const issues: string[] = [];
     
     if (currentMetrics) {
-      if (currentMetrics.memory.usagePercentage > 90) {
+      if (currentMetrics.memory.usagePercentage > 85) {
         status = 'unhealthy';
         issues.push('High memory usage');
-      } else if (currentMetrics.memory.usagePercentage > 80) {
+      } else if (currentMetrics.memory.usagePercentage > 70) {
         status = 'degraded';
         issues.push('Elevated memory usage');
       }

@@ -56,8 +56,10 @@ export const Appbar: React.FC = () => {
         .then(res => {
           if (Array.isArray(res.data)) {
             setAllUsers(res.data);
-          } else if (res.data && typeof res.data === 'object' && Array.isArray((res.data as any).lightspeedUsers)) {
-            setAllUsers((res.data as any).lightspeedUsers);
+          } else if (res.data && typeof res.data === 'object') {
+            // Use the combined users array that includes both local and Lightspeed-only users
+            const allUsers = (res.data as any).users || [...((res.data as any).localUsers || []), ...((res.data as any).lightspeedUsers || [])];
+            setAllUsers(allUsers);
           } else {
             setAllUsers([]);
           }
@@ -145,6 +147,7 @@ export const Appbar: React.FC = () => {
               alt="SuitSync Logo"
               width={120}
               height={28}
+              style={{ width: '120px', height: 'auto' }}
               className="h-6 sm:h-7 w-auto drop-shadow dark:drop-shadow-[0_2px_8px_rgba(255,255,255,0.7)]"
               priority
             />

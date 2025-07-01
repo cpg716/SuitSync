@@ -120,14 +120,14 @@ export const userSchemas = {
   create: z.object({
     name: commonSchemas.name,
     email: commonSchemas.email,
-    role: z.enum(['admin', 'manager', 'tailor', 'sales']),
+    role: z.enum(['admin', 'sales_management', 'sales_support', 'tailor', 'sales']),
     commissionRate: z.number().min(0).max(1).optional(),
     lightspeedEmployeeId: z.string().max(50).optional(),
   }),
   update: z.object({
     name: commonSchemas.name.optional(),
     email: commonSchemas.email.optional(),
-    role: z.enum(['admin', 'manager', 'tailor', 'sales']).optional(),
+    role: z.enum(['admin', 'sales_management', 'sales_support', 'tailor', 'sales']).optional(),
     commissionRate: z.number().min(0).max(1).optional(),
     lightspeedEmployeeId: z.string().max(50).optional(),
   }),

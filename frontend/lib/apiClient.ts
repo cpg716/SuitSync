@@ -4,11 +4,11 @@ import type { LightspeedHealth } from '../components/LightspeedStatus';
 // Get backend URL from environment or default to localhost
 const getBackendUrl = () => {
   if (typeof window !== 'undefined') {
-    // Client-side: use environment variable or default
-    return process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3000';
+    // Client-side: always use relative URLs to go through Next.js proxy
+    return '';
   }
-  // Server-side: use environment variable or default
-  return process.env.BACKEND_URL || 'http://localhost:3000';
+  // Server-side: use environment variable for direct backend access
+  return process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3000';
 };
 
 const BACKEND_URL = getBackendUrl();
@@ -79,9 +79,14 @@ export const fetcher = (url: string) => api.get(url).then(res => res.data);
 export const swrConfig = {
   // Global SWR configuration
   fetcher,
-  refreshInterval: 30_000, // Refresh every 30 seconds
+  refreshInterval: 60_000, // Refresh every 60 seconds (reduced frequency for better performance)
   revalidateOnFocus: false, // Don't revalidate on window focus
-  dedupingInterval: 5_000, // Dedupe requests within 5 seconds
+  revalidateOnReconnect: true, // Revalidate when network reconnects
+  dedupingInterval: 10_000, // Dedupe requests within 10 seconds (increased for better caching)
+  focusThrottleInterval: 5_000, // Throttle focus revalidation
+  errorRetryInterval: 5_000, // Retry failed requests every 5 seconds
+  errorRetryCount: 3, // Maximum retry attempts
+  keepPreviousData: true, // Keep previous data while fetching new data (smoother UX)
   shouldRetryOnError: (error: any) => {
     // Don't retry on authentication errors (401) or client errors (4xx)
     if (error?.response?.status >= 400 && error?.response?.status < 500) {
@@ -130,6 +135,11 @@ export const getLightspeedHealth = async (): Promise<LightspeedHealth> => {
 // Helper function for fetch calls that need to use the same base URL
 export const getApiUrl = (path: string): string => {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  if (typeof window !== 'undefined') {
+    // Client-side: use relative URLs to go through Next.js proxy
+    return cleanPath;
+  }
+  // Server-side: use full backend URL
   return `${BACKEND_URL}${cleanPath}`;
 };
 
