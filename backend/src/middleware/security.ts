@@ -145,7 +145,7 @@ export const requestSizeLimit = (maxSize: number = 10 * 1024 * 1024) => { // 10M
 };
 
 // Session size limiting middleware to prevent 431 errors
-export const sessionSizeLimit = (maxSessionSize: number = 4 * 1024) => { // 4KB default (safe for most browsers)
+export const sessionSizeLimit = (maxSessionSize: number = 2 * 1024) => { // 2KB default (more conservative for memory)
   return (req: Request, res: Response, next: NextFunction) => {
     // Check if session exists and estimate its size
     if (req.session && Object.keys(req.session).length > 0) {

@@ -36,6 +36,8 @@ coverage/
 # Ignore session and cookies
 cookies.txt
 sessions.sqlite
+backend/sessions/
+sessions/
 
 # Ignore local backups
 suitsync_full_backup_*

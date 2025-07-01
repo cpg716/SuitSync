@@ -14,4 +14,4 @@ router.get('/:id', asyncHandler(getUser));
 router.put('/:id', asyncHandler(updateUser));
 router.delete('/:id', asyncHandler(deleteUser));
 
-export default router; 
+export default router;

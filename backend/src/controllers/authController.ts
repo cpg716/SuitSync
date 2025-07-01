@@ -103,28 +103,19 @@ export const getSession = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-      // Include Lightspeed connection status
-      const lightspeedStatus = {
-        connected: !!req.session?.lsAccessToken,
-        domain: req.session?.lsDomainPrefix || null,
-        lastSync: req.session?.lastLightspeedSync || null
-      };
+    // Include Lightspeed connection status
+    const lightspeedStatus = {
+      connected: !!req.session?.lsAccessToken,
+      domain: req.session?.lsDomainPrefix || null,
+      lastSync: req.session?.lastLightspeedSync || null
+    };
 
-      res.json({
-        ...dbUser,
-        lightspeed: lightspeedStatus
-      });
-      return;
-    } catch (error) {
-      console.error('Error fetching user session data:', error);
-      res.status(500).json({ error: 'Failed to fetch user data' });
-      return;
-    }
-  } else {
-    res.status(401).json({
-      error: 'Not authenticated. Please sign in with Lightspeed.',
-      redirectTo: '/login'
+    res.json({
+      ...dbUser,
+      lightspeed: lightspeedStatus
     });
-    return;
+  } catch (error) {
+    console.error('Error fetching user session data:', error);
+    res.status(500).json({ error: 'Failed to fetch user data' });
   }
 };

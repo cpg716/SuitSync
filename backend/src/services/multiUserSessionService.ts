@@ -24,9 +24,9 @@ interface CachedUserInfo {
 }
 
 export class MultiUserSessionService {
-  private static readonly MAX_CACHED_USERS = 3; // Reduced from 10 to prevent large sessions
+  private static readonly MAX_CACHED_USERS = 2; // Further reduced to prevent memory issues
   private static readonly SESSION_CLEANUP_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
-  private static readonly MAX_SESSION_SIZE = 3 * 1024; // 3KB limit for session data
+  private static readonly MAX_SESSION_SIZE = 1.5 * 1024; // 1.5KB limit for session data
 
   /**
    * Add or update a user session in the multi-user cache

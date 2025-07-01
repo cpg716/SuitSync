@@ -9,6 +9,8 @@ const DEMO = process.env.DEMO === 'true';
 
 export async function authMiddleware(req: Request, res: Response, next: NextFunction) {
   try {
+
+
     // Check for session-based authentication (both legacy and multi-user)
     const activeUserId = req.session?.activeUserId || req.session?.userId;
 

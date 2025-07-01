@@ -53,18 +53,28 @@ app.use(express.json());
 app.use(cookieParser());
 
 // Session typing is handled via src/types/express-session/index.d.ts
-// Using default memory store for now - TODO: Fix PrismaSessionStore configuration
+// Enhanced session configuration with better persistence and memory management
 app.use(
   session({
     secret: config.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
+    rolling: true, // Reset expiration on activity
     cookie: {
       secure: process.env.NODE_ENV === 'production',
       httpOnly: true,
       sameSite: 'lax',
       maxAge: 1000 * 60 * 60 * 24 * 7, // 1 week
     },
+    // Use file store for development to persist sessions across restarts
+    ...(process.env.NODE_ENV === 'development' && {
+      store: new (require('session-file-store')(session))({
+        path: './sessions',
+        ttl: 60 * 60 * 24 * 7, // 1 week
+        retries: 3,
+        reapInterval: 60 * 60, // Clean up expired sessions every hour
+      })
+    })
   })
 );
 
