@@ -12,12 +12,24 @@ interface UserSessionData {
 declare module 'express-session' {
   interface SessionData {
     // Current active user (for backward compatibility)
-    userId?: number;
+    userId?: number | string; // Support both number (legacy) and string (Lightspeed IDs)
     lsAccessToken?: string;
     lsRefreshToken?: string;
     lsDomainPrefix?: string;
+    lsTokenExpiresAt?: Date;
 
-    // Multi-user session support
+    // Pure Lightspeed user data (no local database)
+    lightspeedUser?: {
+      id: string;
+      name: string;
+      email: string;
+      role: string;
+      photoUrl?: string;
+      lightspeedEmployeeId: string;
+      isLightspeedUser: boolean;
+    };
+
+    // Multi-user session support (legacy)
     activeUserId?: number;
     userSessions?: {
       [userId: number]: UserSessionData;

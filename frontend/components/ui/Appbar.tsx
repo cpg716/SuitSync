@@ -81,7 +81,7 @@ export const Appbar: React.FC = () => {
   useEffect(() => {
     const loadSessionStatus = async () => {
       try {
-        const response = await axios.get('http://localhost:3000/api/user-switch/session-status', { withCredentials: true });
+        const response = await api.get('/api/user-switch/session-status');
         if (response.data && (response.data as any).success) {
           setSessionStatus(response.data);
           setCachedUsersCount((response.data as any).totalCached || 0);
@@ -117,7 +117,7 @@ export const Appbar: React.FC = () => {
   const handleClearAllSessions = async () => {
     if (confirm('Are you sure you want to clear all cached user sessions? This will log out all users.')) {
       try {
-        await axios.delete('/api/user-switch/cached-users');
+        await api.delete('/api/user-switch/cached-users');
         toast.success('All user sessions cleared');
         setSessionStatus(null);
         setCachedUsersCount(0);

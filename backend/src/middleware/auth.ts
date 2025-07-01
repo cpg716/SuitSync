@@ -9,39 +9,22 @@ const DEMO = process.env.DEMO === 'true';
 
 export async function authMiddleware(req: Request, res: Response, next: NextFunction) {
   try {
+    // PURE LIGHTSPEED AUTHENTICATION ONLY - NO LEGACY FALLBACK
 
+    // Check for pure Lightspeed user authentication (no database)
+    if (req.session?.lightspeedUser) {
+      const lightspeedUser = req.session.lightspeedUser;
 
-    // Check for session-based authentication (both legacy and multi-user)
-    const activeUserId = req.session?.activeUserId || req.session?.userId;
-
-    if (activeUserId && typeof activeUserId === 'number') {
-      const user = await prisma.user.findUnique({
-        where: { id: activeUserId },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: true,
-          lightspeedEmployeeId: true
-        }
-      });
-
-      if (!user) {
-        return res.status(401).json({ error: 'User not found' });
-      }
-
-      (req as any).user = user;
-
-      // Ensure session tokens are available for multi-user session
-      if (req.session?.activeUserId && req.session?.userSessions) {
-        const userSession = req.session.userSessions[activeUserId];
-        if (userSession) {
-          // Update legacy session properties for backward compatibility
-          req.session.lsAccessToken = userSession.lsAccessToken;
-          req.session.lsRefreshToken = userSession.lsRefreshToken;
-          req.session.lsDomainPrefix = userSession.lsDomainPrefix;
-        }
-      }
+      // Convert Lightspeed user to expected format for backward compatibility
+      (req as any).user = {
+        id: lightspeedUser.id,
+        email: lightspeedUser.email,
+        name: lightspeedUser.name,
+        role: lightspeedUser.role,
+        lightspeedEmployeeId: lightspeedUser.lightspeedEmployeeId,
+        photoUrl: lightspeedUser.photoUrl,
+        isLightspeedUser: true
+      };
 
       // Check if Lightspeed connection is required and available
       const requiresLightspeed = ['/api/customers', '/api/sales', '/api/sync'].some(p => req.originalUrl.startsWith(p));
@@ -56,67 +39,24 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       return next();
     }
 
-    // Legacy session check for backward compatibility
-    if (req.session?.userId && typeof req.session.userId === 'number') {
-      const userId: number = req.session.userId;
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: true,
-          lightspeedEmployeeId: true
-        }
-      });
+    // NO LEGACY AUTHENTICATION - Clear any old session data and require Lightspeed auth
+    if (req.session && (req.session.activeUserId || req.session.userId || req.session.userSessions)) {
+      // Clear legacy session data
+      delete req.session.activeUserId;
+      delete req.session.userId;
+      delete req.session.userSessions;
+      delete req.session.maxCachedUsers;
 
-      if (!user) {
-        return res.status(401).json({ error: 'User not found' });
-      }
-
-      (req as any).user = user;
-
-      // Check if Lightspeed connection is required and available
-      const requiresLightspeed = ['/api/customers', '/api/sales', '/api/sync'].some(p => req.originalUrl.startsWith(p));
-      if (requiresLightspeed && !req.session?.lsAccessToken) {
-        return res.status(401).json({
-          error: 'Lightspeed connection required for this action.',
-          errorCode: 'LS_AUTH_REQUIRED',
-          redirectTo: '/auth/start-lightspeed'
+      // Save the cleared session
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err) => {
+          if (err) reject(err);
+          else resolve();
         });
-      }
-
-      return next();
-    }
-
-    // Fallback: Check for JWT token (for API access)
-    let token = req.cookies.token;
-    if (!token && req.headers.authorization?.startsWith('Bearer ')) {
-      token = req.headers.authorization.split(' ')[1];
-    }
-
-    if (token) {
-      const secret = process.env.JWT_SECRET || process.env.SESSION_SECRET || 'changeme';
-      const decoded = jwt.verify(token, secret) as { id: string };
-      const userId = typeof decoded.id === 'string' ? parseInt(decoded.id, 10) : decoded.id;
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: true,
-          lightspeedEmployeeId: true
-        }
       });
-
-      if (!user) {
-        return res.status(401).json({ error: 'User not found' });
-      }
-
-      (req as any).user = user;
-      return next();
     }
+
+    // NO LEGACY AUTHENTICATION - Only pure Lightspeed authentication allowed
 
     // No authentication found
     return res.status(401).json({

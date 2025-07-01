@@ -67,52 +67,68 @@ export const clearSession = async (req: Request, res: Response): Promise<void> =
 
 export const getSession = async (req: Request, res: Response): Promise<void> => {
   try {
-    // Check for session-based authentication (same logic as auth middleware)
-    const activeUserId = req.session?.activeUserId || req.session?.userId;
+    logger.info('[AuthController] getSession called');
+    logger.info('[AuthController] Session keys:', req.session ? Object.keys(req.session) : 'No session');
 
-    if (!activeUserId || typeof activeUserId !== 'number') {
-      // No valid session
-      res.status(401).json({
-        error: 'Authentication required. Please sign in with Lightspeed.',
-        errorCode: 'AUTH_REQUIRED',
-        redirectTo: '/login'
+    // Check for pure Lightspeed user authentication first
+    if (req.session?.lightspeedUser) {
+      const lightspeedUser = req.session.lightspeedUser;
+
+      logger.info('[AuthController] Found lightspeedUser in session:', {
+        id: lightspeedUser.id,
+        name: lightspeedUser.name,
+        email: lightspeedUser.email,
+        role: lightspeedUser.role
       });
+
+      // Include Lightspeed connection status
+      const lightspeedStatus = {
+        connected: !!req.session?.lsAccessToken,
+        domain: req.session?.lsDomainPrefix || null,
+        lastSync: req.session?.lastLightspeedSync || null
+      };
+
+      const sessionResponse = {
+        id: lightspeedUser.id,
+        name: lightspeedUser.name,
+        email: lightspeedUser.email,
+        role: lightspeedUser.role,
+        photoUrl: lightspeedUser.photoUrl,
+        lightspeedEmployeeId: lightspeedUser.lightspeedEmployeeId,
+        isLightspeedUser: true,
+        lightspeed: lightspeedStatus
+      };
+
+      logger.info('[AuthController] Returning lightspeedUser session response:', sessionResponse);
+      res.json(sessionResponse);
       return;
     }
 
-    const dbUser = await prisma.user.findUnique({
-      where: { id: activeUserId },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        photoUrl: true,
-        lightspeedEmployeeId: true,
-        createdAt: true,
-        updatedAt: true
-      }
-    });
+    // NO LEGACY AUTHENTICATION - Clear any old session data and require Lightspeed auth
+    if (req.session && (req.session.activeUserId || req.session.userId || req.session.userSessions)) {
+      logger.info('[AuthController] Found legacy session data, clearing and requiring re-authentication');
 
-    if (!dbUser) {
-      res.status(401).json({
-        error: 'User not found',
-        errorCode: 'USER_NOT_FOUND',
-        redirectTo: '/login'
+      // Clear legacy session data
+      delete req.session.activeUserId;
+      delete req.session.userId;
+      delete req.session.userSessions;
+      delete req.session.maxCachedUsers;
+
+      // Save the cleared session
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err) => {
+          if (err) reject(err);
+          else resolve();
+        });
       });
-      return;
     }
 
-    // Include Lightspeed connection status
-    const lightspeedStatus = {
-      connected: !!req.session?.lsAccessToken,
-      domain: req.session?.lsDomainPrefix || null,
-      lastSync: req.session?.lastLightspeedSync || null
-    };
-
-    res.json({
-      ...dbUser,
-      lightspeed: lightspeedStatus
+    // No valid Lightspeed session - require authentication
+    logger.info('[AuthController] No lightspeedUser in session - requiring Lightspeed authentication');
+    res.status(401).json({
+      error: 'Lightspeed authentication required. Please sign in with Lightspeed.',
+      errorCode: 'LS_AUTH_REQUIRED',
+      redirectTo: '/auth/start-lightspeed'
     });
   } catch (error) {
     console.error('Error fetching user session data:', error);

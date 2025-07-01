@@ -69,10 +69,11 @@ app.use(
     // Use file store for development to persist sessions across restarts
     ...(process.env.NODE_ENV === 'development' && {
       store: new (require('session-file-store')(session))({
-        path: './sessions',
+        path: '/app/sessions', // Use absolute path for Docker
         ttl: 60 * 60 * 24 * 7, // 1 week
         retries: 3,
         reapInterval: 60 * 60, // Clean up expired sessions every hour
+        logFn: () => {}, // Suppress session file store logs
       })
     })
   })

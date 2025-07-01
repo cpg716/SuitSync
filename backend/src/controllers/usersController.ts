@@ -9,66 +9,40 @@ const prisma = new PrismaClient().$extends(withAccelerate());
 
 export const getUsers = async (req: Request, res: Response) => {
   try {
-    logger.info('[UsersController] Starting getUsers request');
+    logger.info('[UsersController] Starting getUsers request - PURE LIGHTSPEED MODE (NO LOCAL USERS)');
 
-    // Fetch local users for reference/matching
-    const localUsers = await prisma.user.findMany({
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        photoUrl: true,
-        lightspeedEmployeeId: true,
-        createdAt: true,
-        updatedAt: true
-      }
-    });
-    logger.info(`[UsersController] Found ${localUsers.length} local users`);
+    // For pure Lightspeed authentication, return only the current authenticated user
+    if (req.session?.lightspeedUser) {
+      const lightspeedUser = req.session.lightspeedUser;
 
-    // Fetch Lightspeed users (employees/staff) if Lightspeed connection is available
-    let lightspeedUsers: any[] = [];
+      logger.info(`[UsersController] Returning current authenticated Lightspeed user: ${lightspeedUser.name}`);
 
-    if (req.session?.lsAccessToken) {
-      logger.info('[UsersController] Lightspeed access token found, attempting to fetch users');
-      try {
-        const lightspeedClient = createLightspeedClient(req);
-        logger.info('[UsersController] Created Lightspeed client, calling fetchAllWithPagination for /users');
-        lightspeedUsers = await lightspeedClient.fetchAllWithPagination('/users');
-        logger.info(`[UsersController] Successfully fetched ${lightspeedUsers.length} users from Lightspeed`);
+      const formattedUser = {
+        id: lightspeedUser.id,
+        name: lightspeedUser.name,
+        email: lightspeedUser.email,
+        role: lightspeedUser.role,
+        photoUrl: lightspeedUser.photoUrl,
+        lightspeedEmployeeId: lightspeedUser.lightspeedEmployeeId,
+        source: 'lightspeed',
+        isLightspeedUser: true,
+        isCurrentUser: true
+      };
 
-        // Log first user for debugging
-        if (lightspeedUsers.length > 0) {
-          logger.info('[UsersController] Sample Lightspeed user:', {
-            id: lightspeedUsers[0].id,
-            display_name: lightspeedUsers[0].display_name,
-            email: lightspeedUsers[0].email,
-            account_type: lightspeedUsers[0].account_type
-          });
-        }
-      } catch (error: any) {
-        logger.error('[UsersController] Failed to fetch Lightspeed users:', {
-          message: error.message,
-          status: error.response?.status,
-          data: error.response?.data,
-          stack: error.stack
-        });
-        // Don't fail the entire request if Lightspeed is unavailable
-        // Just return empty lightspeedUsers array
-      }
-    } else {
-      logger.warn('[UsersController] No Lightspeed access token available, returning only local users');
-      logger.info('[UsersController] Session info:', {
-        hasSession: !!req.session,
-        sessionKeys: req.session ? Object.keys(req.session) : [],
-        hasLsAccessToken: !!req.session?.lsAccessToken
+      res.json({
+        users: [formattedUser],
+        total: 1,
+        source: 'lightspeed',
+        message: 'Pure Lightspeed authentication - showing current user only'
       });
+      return;
     }
 
-    logger.info(`[UsersController] Returning response with ${localUsers.length} local users and ${lightspeedUsers.length} Lightspeed users`);
-    res.json({
-      localUsers,
-      lightspeedUsers
+    // If no Lightspeed user in session, return empty
+    logger.warn('[UsersController] No Lightspeed user in session - authentication required');
+    res.status(401).json({
+      error: 'Lightspeed authentication required',
+      redirectTo: '/auth/start-lightspeed'
     });
   } catch (err) {
     logger.error('[UsersController] Failed to fetch users:', err);

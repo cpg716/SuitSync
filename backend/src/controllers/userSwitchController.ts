@@ -137,11 +137,30 @@ export const removeUserFromCache = async (req: Request, res: Response): Promise<
  */
 export const getSessionStatus = async (req: Request, res: Response): Promise<void> => {
   try {
+    // For pure Lightspeed authentication, return simple session status
+    if (req.session?.lightspeedUser) {
+      const lightspeedUser = req.session.lightspeedUser;
+      res.json({
+        success: true,
+        activeUser: {
+          id: lightspeedUser.id,
+          name: lightspeedUser.name,
+          email: lightspeedUser.email,
+          role: lightspeedUser.role,
+          photoUrl: lightspeedUser.photoUrl,
+        },
+        totalCached: 1, // Only one user (current Lightspeed user)
+        cachedUsers: [lightspeedUser]
+      });
+      return;
+    }
+
+    // Legacy: Database user session
     const activeUserId = req.session.activeUserId || req.session.userId;
     const cachedUsers = await MultiUserSessionService.getCachedUsers(req);
-    
+
     let activeUser = null;
-    if (activeUserId) {
+    if (activeUserId && typeof activeUserId === 'number') {
       activeUser = await prisma.user.findUnique({
         where: { id: activeUserId },
         select: {
@@ -217,12 +236,22 @@ export const clearAllCachedUsers = async (req: Request, res: Response): Promise<
  */
 export const refreshUserSession = async (req: Request, res: Response): Promise<void> => {
   try {
+    // For pure Lightspeed authentication, token refresh is handled automatically
+    if (req.session?.lightspeedUser) {
+      res.json({
+        success: true,
+        message: 'Lightspeed tokens are refreshed automatically'
+      });
+      return;
+    }
+
+    // Legacy: Database user session refresh
     const { userId } = req.body;
 
     if (!userId || typeof userId !== 'number') {
-      res.status(400).json({ 
+      res.status(400).json({
         error: 'Invalid userId provided',
-        success: false 
+        success: false
       });
       return;
     }
@@ -255,8 +284,8 @@ export const refreshUserSession = async (req: Request, res: Response): Promise<v
     // For now, just update the last active time
     const currentSession = MultiUserSessionService.getCurrentUserSession(req);
     
-    // Switch back to original user if different
-    if (currentActiveUserId && currentActiveUserId !== userId) {
+    // Switch back to original user if different (legacy only)
+    if (currentActiveUserId && typeof currentActiveUserId === 'number' && typeof userId === 'number' && currentActiveUserId !== userId) {
       await MultiUserSessionService.switchToUser(req, currentActiveUserId);
     }
 

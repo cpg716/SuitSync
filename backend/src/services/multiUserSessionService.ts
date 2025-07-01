@@ -369,7 +369,11 @@ export class MultiUserSessionService {
       return null;
     }
 
-    return req.session.userSessions[activeUserId] || null;
+    // Only work with number user IDs for legacy database users
+    if (typeof activeUserId === 'number') {
+      return req.session.userSessions[activeUserId] || null;
+    }
+    return null;
   }
 
   /**

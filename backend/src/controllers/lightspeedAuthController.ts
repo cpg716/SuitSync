@@ -7,7 +7,7 @@ import { withAccelerate } from '@prisma/extension-accelerate';
 import { createLightspeedClient } from '../lightspeedClient'; // TODO: migrate this as well
 import logger from '../utils/logger'; // TODO: migrate this as well
 import querystring from 'querystring';
-import { MultiUserSessionService } from '../services/multiUserSessionService';
+// import { MultiUserSessionService } from '../services/multiUserSessionService'; // Disabled for pure Lightspeed auth
 
 const prisma = new PrismaClient().$extends(withAccelerate());
 const LS_CLIENT_ID = process.env.LS_CLIENT_ID || '';
@@ -38,6 +38,7 @@ export const redirectToLightspeed = async (req: Request, res: Response): Promise
 
 export const handleCallback = async (req: Request, res: Response): Promise<void> => {
   logger.info("Handling Lightspeed callback...");
+  logger.info("Callback query parameters:", req.query);
   const { code, domain_prefix, state, error, error_description, user_id } = req.query as any;
   const { lsAuthState } = req.session;
   if (error) {
@@ -70,6 +71,7 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
     );
     logger.info('Lightspeed token response:', tokenResponse.data);
     const { access_token, refresh_token, expires_in } = tokenResponse.data;
+    logger.info(`Successfully obtained tokens. Now attempting to fetch user details for user_id: ${user_id}`);
     const expiresAt = new Date(Date.now() + expires_in * 1000);
     await prisma.apiToken.upsert({
       where: { service: 'lightspeed' },
@@ -95,22 +97,23 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
       return;
     }
     const lightspeedClient = createLightspeedClient(req);
-    logger.info(`Fetching user details for user_id: ${user_id}`);
+    logger.info(`Fetching user details from Lightspeed for user_id: ${user_id}`);
     let userResponse;
     try {
+      // Fetch the specific user who authenticated using their user_id
       userResponse = await lightspeedClient.get(`/users/${user_id}`);
       if (!userResponse) throw new Error('No response from Lightspeed');
     } catch (error: any) {
-      logger.error(`Failed to fetch user details for ID ${user_id} from Lightspeed.`, { 
+      logger.error(`Failed to fetch current user details from Lightspeed.`, {
         status: error.response?.status,
         data: error.response?.data,
-        message: error.message 
+        message: error.message
       });
       const err = new Error('Could not retrieve user details from Lightspeed. Please ensure the app has permissions to read user data.');
       res.redirect(`${FRONTEND_URL}/login?error=callback_failed&details=${encodeURIComponent(err.message)}`);
       return;
     }
-    logger.info(`Lightspeed /users/${user_id} response: ${JSON.stringify(userResponse.data)}`);
+    logger.info(`Lightspeed current user response: ${JSON.stringify(userResponse.data)}`);
     let userPayload: any = userResponse.data.data;
     if (
       !userPayload ||
@@ -127,52 +130,34 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
     }
     const lightspeedId = String(userPayload.id);
     const name = userPayload.display_name;
-    const email = userPayload.email;
+    // Handle null email from Lightspeed - create a fallback email using username
+    const email = userPayload.email || `${userPayload.username}@lightspeed.local`;
     const isAdmin = userPayload.account_type === 'admin';
     const role = isAdmin ? 'admin' : 'user';
-    logger.info(`Found user: ${name}, Role: ${role}`);
-    let user = await prisma.user.findUnique({
-      where: { lightspeedEmployeeId: lightspeedId },
-    });
-    let photoUrl = userPayload.image_source;
-    if (user) {
-      logger.info(`User ${user.id} found in local DB. Updating details...`);
-      if (!photoUrl || photoUrl.trim() === '') {
-        photoUrl = user.photoUrl;
-      }
-      user = await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          name,
-          email,
-          role,
-          photoUrl,
-        },
-      });
-    } else {
-      logger.info(`User with Lightspeed ID ${lightspeedId} not found. Creating new user...`);
-      if (!photoUrl || photoUrl.trim() === '') {
-        photoUrl = undefined;
-      }
-      user = await prisma.user.create({
-        data: {
-          name,
-          email,
-          lightspeedEmployeeId: lightspeedId,
-          role,
-          photoUrl,
-        },
-      });
-    }
-    // Add user to multi-user session cache
-    await MultiUserSessionService.addUserSession(req, user.id, {
-      lsAccessToken: access_token,
-      lsRefreshToken: refresh_token,
-      lsDomainPrefix: domain_prefix,
-      expiresAt: expiresAt,
-    });
+    logger.info(`Authenticated Lightspeed user: ${name}, Role: ${role}`);
 
-    logger.info(`User ${user.id} (${user.email}) successfully authenticated and added to session cache`);
+    // Store Lightspeed user data directly in session (NO local database storage)
+    const lightspeedUser = {
+      id: lightspeedId, // Use Lightspeed ID as the user ID
+      name,
+      email,
+      role,
+      photoUrl: userPayload.image_source || undefined,
+      lightspeedEmployeeId: lightspeedId,
+      isLightspeedUser: true // Flag to indicate this is a pure Lightspeed user
+    };
+
+    logger.info(`Pure Lightspeed authentication - no local user storage`);
+
+    // Store Lightspeed user and tokens directly in session (no database)
+    req.session.lightspeedUser = lightspeedUser;
+    req.session.lsAccessToken = access_token;
+    req.session.lsRefreshToken = refresh_token;
+    req.session.lsDomainPrefix = domain_prefix;
+    req.session.lsTokenExpiresAt = expiresAt;
+    req.session.userId = lightspeedId; // Store as string for Lightspeed user ID
+
+    logger.info(`Lightspeed user ${lightspeedUser.name} (${lightspeedUser.email}) successfully authenticated - session-only storage`);
     res.redirect(`${FRONTEND_URL}/`);
     return;
   } catch (error: unknown) {
