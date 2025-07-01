@@ -18,7 +18,7 @@ import {
 } from './dropdown-menu';
 import ThemeToggle from '../ThemeToggle';
 import { SwitchUserModal } from './SwitchUserModal';
-import axios from 'axios';
+import { api } from '../../lib/apiClient';
 import { useToast } from '../ToastContext';
 
 const routeTitles = {
@@ -52,7 +52,7 @@ export const Appbar: React.FC = () => {
   useEffect(() => {
     if (showSwitchUser && allUsers.length === 0) {
       setLoadingUsers(true);
-      axios.get('/api/users', { withCredentials: true })
+      api.get('/api/users')
         .then(res => {
           if (Array.isArray(res.data)) {
             setAllUsers(res.data);

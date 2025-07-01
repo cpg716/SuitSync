@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { useToast } from '../components/ToastContext';
 import { Card } from '@/components/ui/Card';
 import { SwitchUserModal } from '@/components/ui/SwitchUserModal';
-import axios from 'axios';
+import { api } from '../lib/apiClient';
 
 export default function LoginPage() {
   const { user, loading: authLoading } = useAuth();
@@ -30,7 +30,7 @@ export default function LoginPage() {
     if (urlParams.get('switch') === '1') {
       setShowSwitchUser(true);
       setLoadingUsers(true);
-      axios.get('/api/users')
+      api.get('/api/users')
         .then(res => {
           if (Array.isArray(res.data)) {
             setAllUsers(res.data);

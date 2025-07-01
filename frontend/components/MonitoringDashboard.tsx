@@ -8,6 +8,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { RefreshCw, Download, Trash2, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
 import useSWR from 'swr';
 import { useToast } from './ToastContext';
+import { apiFetch } from '../lib/apiClient';
 
 interface SystemMetrics {
   timestamp: string;
@@ -79,11 +80,10 @@ export default function MonitoringDashboard() {
 
   const handleClearCache = async () => {
     try {
-      const response = await fetch('/api/performance/cache/clear', {
+      const response = await apiFetch('/api/performance/cache/clear', {
         method: 'POST',
-        credentials: 'include',
       });
-      
+
       if (response.ok) {
         toastSuccess('Cache cleared successfully');
         refreshMetrics();

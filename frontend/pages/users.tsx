@@ -7,6 +7,7 @@ import { Badge } from '../components/ui/Badge';
 import { useToast } from '../components/ToastContext';
 import { User, RefreshCw, Download } from 'lucide-react';
 import { Modal } from '../components/ui/Modal';
+import { apiFetch } from '../lib/apiClient';
 
 interface User {
   id: number;
@@ -37,9 +38,7 @@ export default function UsersPage() {
   // Fetch users function
   const fetchUsers = async () => {
     try {
-      const response = await fetch('/api/users', {
-        credentials: 'include'
-      });
+      const response = await apiFetch('/api/users');
       if (response.ok) {
         const data = await response.json();
         setUsers(data);
