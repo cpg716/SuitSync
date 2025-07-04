@@ -9,7 +9,10 @@ const router = express.Router();
 router.get('/lightspeed', asyncHandler(customersController.listLightspeedCustomers));
 
 // List customers with search and pagination
-router.get('/', asyncHandler(customersController.listCustomers));
+router.get('/', (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+}, asyncHandler(customersController.listCustomers));
 
 // Get single customer
 router.get('/:id', asyncHandler(customersController.getCustomer));

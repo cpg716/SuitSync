@@ -4,7 +4,6 @@ import { Input } from './Input';
 import { Button } from './Button';
 import { Badge } from './Badge';
 import { UserAvatar } from './UserAvatar';
-import { cn } from '../../lib/utils';
 
 interface Customer {
   id: number;
@@ -225,10 +224,9 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
       return (
         <div
           key={`customer-${customer.id}`}
-          className={cn(
-            "flex items-center gap-2 sm:gap-3 p-2 sm:p-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors",
-            isSelected && "bg-blue-50 dark:bg-blue-900/20"
-          )}
+          className={`flex items-center gap-2 sm:gap-3 p-2 sm:p-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
+            isSelected ? "bg-blue-50 dark:bg-blue-900/20" : ""
+          }`}
           onClick={() => handleResultSelect(result)}
         >
           <User className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400 flex-shrink-0" />

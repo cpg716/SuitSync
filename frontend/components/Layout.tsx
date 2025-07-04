@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/router';
-import { Home, Users, Calendar, Scissors, Printer, BarChart, Settings, Sun, Moon, Menu } from 'lucide-react';
+import { Home, Users, Calendar, Scissors, Printer, BarChart, Settings, Sun, Moon, Menu, ListChecks, ListTodo, BookOpen, Target, Clock } from 'lucide-react';
 import { useState, useEffect, ReactNode } from 'react';
 import { Appbar } from './ui/Appbar';
 import ThemeToggle from './ThemeToggle';
@@ -15,10 +15,11 @@ interface LayoutProps {
 const nav = [
   { href: '/', label: 'Dashboard', icon: Home },
   { href: '/customers', label: 'Customers', icon: Users },
-  { href: '/appointments', label: 'Appointments', icon: Calendar },
   { href: '/parties', label: 'Parties', icon: Users },
+  { href: '/appointments', label: 'Appointments', icon: Calendar },
   { href: '/alterations', label: 'Alterations', icon: Scissors },
   { href: '/sales', label: 'Sales', icon: BarChart },
+  { href: '/checklists', label: 'Checklists', icon: ListChecks },
   { href: '/admin', label: 'Settings', icon: Settings },
 ];
 
@@ -115,8 +116,7 @@ export default function Layout({ children, title }: LayoutProps) {
                 alt="Riverside Icon"
                 width={64}
                 height={64}
-                className={`w-auto transition-all duration-300 ${collapsed ? 'h-8' : 'h-16'}`}
-                style={{ width: 'auto', height: 'auto' }}
+                style={{ width: 64, height: 'auto' }}
               />
             </div>
             <div className={`flex items-center ${collapsed ? 'justify-center' : 'justify-between'} w-full`}>

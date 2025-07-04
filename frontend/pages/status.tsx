@@ -53,7 +53,7 @@ export default function StatusPage() {
   }, [toastSuccess, toastError]);
 
   const handleLightspeedLogin = () => {
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || '/api';
     window.location.href = `${backendUrl}/auth/start-lightspeed`;
   };
 

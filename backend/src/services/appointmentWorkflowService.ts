@@ -263,7 +263,6 @@ async function createAlterationCard(appointment: any): Promise<WorkflowTriggerRe
         partyId: appointment.partyId,
         partyMemberId: appointment.memberId,
         status: 'pending',
-        priority: 'normal',
         notes: `Auto-created from ${appointment.type} appointment`,
         receivedDate: new Date(),
         // Set due date based on pickup appointment or event date

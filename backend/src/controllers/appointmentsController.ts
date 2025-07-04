@@ -7,6 +7,7 @@ import logger from '../utils/logger'; // TODO: migrate this as well
 import { processWebhook } from '../services/webhookService';
 import { executeWorkflowTriggers } from '../services/appointmentWorkflowService';
 import { scheduleAppointmentReminders } from '../services/notificationSchedulingService';
+import { lightspeedCustomFieldsService } from '../services/lightspeedCustomFieldsService';
 
 const prisma = new PrismaClient().$extends(withAccelerate());
 
@@ -138,7 +139,16 @@ export const createAppointment = async (req: Request, res: Response): Promise<vo
       }
     });
 
-    // Sync to Lightspeed if it's a party appointment
+    // Sync to Lightspeed custom fields
+    try {
+      await lightspeedCustomFieldsService.syncAppointmentToLightspeed(req, appointment.id);
+      logger.info(`Synced appointment ${appointment.id} to Lightspeed custom fields`);
+    } catch (syncError: any) {
+      logger.error('Error syncing to Lightspeed custom fields:', syncError);
+      // Don't fail appointment creation if sync fails
+    }
+
+    // Legacy sync to Lightspeed if it's a party appointment
     if (partyId) {
       await syncAppointmentsToLightspeed(req, partyId);
     }
@@ -216,7 +226,9 @@ export const updateAppointment = async (req: Request, res: Response): Promise<vo
         });
       }
     } else {
+      if (updatedAppointment.partyId) {
       await syncAppointmentsToLightspeed(req, updatedAppointment.partyId);
+    }
       res.json(updatedAppointment);
     }
 
@@ -237,7 +249,9 @@ export const deleteAppointment = async (req: Request, res: Response): Promise<vo
       return;
     }
     await prisma.appointment.delete({ where: { id: appointmentId } });
-    await syncAppointmentsToLightspeed(req, appointment.partyId);
+    if (appointment.partyId) {
+      await syncAppointmentsToLightspeed(req, appointment.partyId);
+    }
     res.status(204).send();
     return;
   } catch (err: any) {

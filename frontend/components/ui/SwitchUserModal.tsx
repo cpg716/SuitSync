@@ -54,7 +54,7 @@ export const SwitchUserModal: React.FC<SwitchUserModalProps> = ({
   const loadCachedUsers = async () => {
     setLoadingCached(true);
     try {
-      const response = await axios.get('http://localhost:3000/api/user-switch/cached-users', { withCredentials: true });
+      const response = await axios.get('/api/user-switch/cached-users', { withCredentials: true });
       if (response.data && (response.data as any).success) {
         setCachedUsers((response.data as any).users);
         setActiveUserId((response.data as any).activeUserId);
@@ -87,7 +87,7 @@ export const SwitchUserModal: React.FC<SwitchUserModalProps> = ({
     setSwitchMessage('Switching user...');
 
     try {
-      const response = await axios.post('http://localhost:3000/api/user-switch/switch-user', {
+      const response = await axios.post('/api/user-switch/switch-user', {
         userId: user.id
       }, { withCredentials: true });
 
@@ -135,7 +135,7 @@ export const SwitchUserModal: React.FC<SwitchUserModalProps> = ({
     }
 
     try {
-      await axios.delete(`http://localhost:3000/api/user-switch/cached-users/${user.id}`, { withCredentials: true });
+      await axios.delete(`/api/user-switch/cached-users/${user.id}`, { withCredentials: true });
       // Reload cached users
       await loadCachedUsers();
     } catch (error) {

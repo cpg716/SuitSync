@@ -16,7 +16,8 @@ export const getSyncStatus = async (req: Request, res: Response) => {
       createdAt: s.createdAt?.toISOString() || null,
       updatedAt: s.updatedAt?.toISOString() || null,
     }));
-    res.status(200).json(sanitizedStatuses);
+    const errors = statuses.filter(s => s.status === 'FAILED' && s.errorMessage).map(s => `${s.resource}: ${s.errorMessage}`);
+    res.status(200).json({ statuses: sanitizedStatuses, errors });
   } catch (error: any) {
     logger.error('Failed to get sync statuses:', { message: error.message, stack: error.stack });
     res.status(500).json({ message: 'Failed to retrieve sync statuses.' });
@@ -24,6 +25,12 @@ export const getSyncStatus = async (req: Request, res: Response) => {
 };
 
 export const triggerSync = async (req: Request, res: Response) => {
+  logger.info('[SyncController] Trigger sync called', {
+    user: req.user || null,
+    sessionId: req.sessionID,
+    resource: req.params.resource,
+    time: new Date().toISOString()
+  });
   const { resource } = req.params;
   const userId = (req as any).user.id;
   const syncFunctions: Record<string, (req: Request) => Promise<void>> = {
@@ -41,7 +48,7 @@ export const triggerSync = async (req: Request, res: Response) => {
     logger.info(`Manual sync triggered for '${resource}' by user ${userId}`);
     res.status(202).json({ message: `Synchronization for ${resource} has been initiated.` });
   } catch (error: any) {
-    logger.error(`Failed to trigger sync for '${resource}':`, error);
+    logger.error('[SyncController] Sync error', { error: error, resource: req.params.resource, user: req.user, sessionId: req.sessionID });
     res.status(500).json({ message: `Failed to start synchronization for ${resource}.` });
   }
 };

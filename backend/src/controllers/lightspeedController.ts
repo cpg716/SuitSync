@@ -64,4 +64,26 @@ export const deleteLightspeedUserSessions = async (req: Request, res: Response) 
     logger.error(`[Lightspeed] Failed to delete sessions for user ${userId}:`, error.response?.data || error.message);
     res.status(500).json({ error: 'Failed to delete user sessions', details: error.response?.data || error.message });
   }
+};
+
+// Debug: List all Lightspeed users for current session token or provided token
+export const debugListLightspeedUsers = async (req, res) => {
+  try {
+    // Allow token via query param or header for unauthenticated debug
+    const token = req.query.token || req.headers['x-ls-access-token'] || req.session?.lsAccessToken;
+    const domain = req.query.domain || req.headers['x-ls-domain'] || req.session?.lsDomainPrefix || process.env.LS_DOMAIN;
+    if (!token || !domain) {
+      return res.status(400).json({ error: 'Missing access token or domain. Provide ?token= and ?domain= or use session.' });
+    }
+    const axios = require('axios');
+    const url = `https://${domain}.retail.lightspeed.app/api/2.0/users`;
+    const response = await axios.get(url, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return res.json(response.data);
+  } catch (err) {
+    const status = err.response?.status || 500;
+    const data = err.response?.data || err.message;
+    return res.status(status).json({ error: 'Failed to fetch users', details: data });
+  }
 }; 

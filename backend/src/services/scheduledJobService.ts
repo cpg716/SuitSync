@@ -1,10 +1,11 @@
 import cron from 'node-cron';
+import type { ScheduledTask } from 'node-cron';
 import logger from '../utils/logger';
 import { processPendingNotifications } from './notificationSchedulingService';
 
 export class ScheduledJobService {
   private static instance: ScheduledJobService;
-  private jobs: Map<string, cron.ScheduledTask> = new Map();
+  private jobs: Map<string, ScheduledTask> = new Map();
 
   private constructor() {}
 
@@ -61,7 +62,6 @@ export class ScheduledJobService {
     }
 
     const job = cron.schedule(schedule, task, {
-      scheduled: true,
       timezone: 'America/New_York' // Adjust timezone as needed
     });
 

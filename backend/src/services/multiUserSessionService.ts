@@ -105,6 +105,36 @@ export class MultiUserSessionService {
       });
 
       logger.info(`Added user session for user ${userId} to multi-user cache`);
+
+      // In addUserSession, after updating session fields:
+      req.session.lightspeedUser = {
+        id: userId,
+        name: localUser?.name || '',
+        email: localUser?.email || '',
+        role: localUser?.role || '',
+        photoUrl: localUser?.photoUrl || null,
+        lightspeedEmployeeId: localUser?.lightspeedEmployeeId || null,
+        isLightspeedUser: true,
+        hasLocalRecord: !!localUser,
+        localUserId: userId
+      };
+      req.session.userId = userId;
+      req.session.activeUserId = userId;
+      req.session.lsAccessToken = sessionData.lsAccessToken;
+      req.session.lsRefreshToken = sessionData.lsRefreshToken;
+      req.session.lsDomainPrefix = sessionData.lsDomainPrefix;
+      if (!req.session.userSessions) req.session.userSessions = {};
+      req.session.userSessions[userId] = {
+        lsAccessToken: sessionData.lsAccessToken,
+        lsRefreshToken: sessionData.lsRefreshToken,
+        lsDomainPrefix: sessionData.lsDomainPrefix,
+        expiresAt: sessionData.expiresAt,
+        lastActive: new Date(),
+        loginTime: new Date()
+      };
+      logger.info('[MultiUserSession] Session fields synchronized for user', { userId });
+      await new Promise((resolve, reject) => req.session.save(err => err ? reject(err) : resolve()));
+      logger.info('[MultiUserSession] Session saved for user', { userId });
     } catch (error) {
       logger.error('Error adding user session:', error);
       throw error;
@@ -324,7 +354,8 @@ export class MultiUserSessionService {
 
       if (userSessions.length > maxUsers) {
         // Sort by last active time (oldest first)
-        userSessions.sort(([, a], [, b]) => a.lastActive.getTime() - b.lastActive.getTime());
+        const typedSessions = userSessions as [string, UserSessionData][];
+        typedSessions.sort(([, a], [, b]) => a.lastActive.getTime() - b.lastActive.getTime());
 
         // Remove oldest sessions
         const sessionsToRemove = userSessions.slice(0, userSessions.length - maxUsers);
@@ -438,7 +469,8 @@ export class MultiUserSessionService {
         const userSessions = Object.entries(req.session.userSessions);
         if (userSessions.length > 1) {
           // Keep only the most recently active session
-          userSessions.sort(([, a], [, b]) => b.lastActive.getTime() - a.lastActive.getTime());
+          const typedSessions = userSessions as [string, UserSessionData][];
+          typedSessions.sort(([, a], [, b]) => b.lastActive.getTime() - a.lastActive.getTime());
           const sessionToKeep = userSessions[0];
 
           // Remove all other sessions

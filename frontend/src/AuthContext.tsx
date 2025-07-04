@@ -102,7 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function logout() {
     try {
       // Call backend logout endpoint
-      await api.post('/auth/logout');
+      await api.post('/api/auth/logout');
 
       // Clear local state
       setIsLightspeedConnected(false);

@@ -43,6 +43,16 @@ export function ResourceSyncStatus({ resource }: ResourceSyncStatusProps) {
     return null; // Hide the component entirely for non-admin users
   }
 
+  // If user is not authenticated, show a friendly message
+  if (!user) {
+    return (
+      <div className="flex items-center gap-2 text-yellow-600 dark:text-yellow-400">
+        <Info size={16} />
+        <span className="text-sm">Please log in to sync {resource}.</span>
+      </div>
+    );
+  }
+
   const status = data?.syncStatuses?.find(s => s.resource === resource);
   const isSyncing = status?.status === 'SYNCING';
 

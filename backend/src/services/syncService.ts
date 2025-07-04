@@ -2,6 +2,8 @@ import { PrismaClient } from '@prisma/client';
 import { withAccelerate } from '@prisma/extension-accelerate';
 import logger from '../utils/logger';
 import { createLightspeedClient } from '../lightspeedClient';
+import pLimit from 'p-limit';
+import schedule from 'node-schedule';
 
 const prisma = new PrismaClient().$extends(withAccelerate());
 
@@ -40,7 +42,7 @@ async function syncResource<T>(req: any, resourceName: string, endpoint: string,
       logger.info(`[SyncService] No new or updated ${resourceName} to sync.`);
       await prisma.syncStatus.update({
         where: { resource: resourceName },
-        data: { status: 'SUCCESS', lastSyncedAt: new Date() },
+        data: { status: 'SUCCESS', lastSyncedAt: new Date(), errorMessage: null },
       });
       return;
     }
@@ -52,33 +54,106 @@ async function syncResource<T>(req: any, resourceName: string, endpoint: string,
     let failedCount = 0;
     const failedItems: any[] = [];
 
-    for (const i of allItems) {
-      const item: any = i;
-      try {
-        if (!item.id) {
-          logger.warn(`[SyncService] Skipping item in ${resourceName} with missing ID.`, { item });
+    // Limit concurrency for external API calls (e.g., 5 at a time)
+    const limit = pLimit(5);
+
+    // Upsert all customers in parallel (with concurrency limit)
+    await Promise.all(
+      allItems.map(item => limit(async () => {
+        try {
+          if (!item.id) {
+            logger.warn(`[SyncService] Skipping item in ${resourceName} with missing ID.`, { item });
+            failedCount++;
+            failedItems.push({ item, error: 'Missing ID' });
+            return;
+          }
+          const version = BigInt(item.version || 0);
+          if (version > maxVersion) {
+            maxVersion = version;
+          }
+          const mappedData = mapper(item);
+          // Upsert main customer
+          const customer = await model.upsert({
+            where: { lightspeedId: item.id.toString() },
+            update: mappedData,
+            create: mappedData,
+          });
+          // --- GOLD STANDARD: Sync tags, custom fields, groups ---
+          await Promise.all([
+            // Tags
+            limit(async () => {
+              try {
+                const tagsResp = await lightspeedClient.get(`/customers/${item.id}/tags`);
+                const tags = tagsResp?.data?.data || [];
+                if (Array.isArray(tags)) {
+                  await Promise.all(tags.map(tag =>
+                    prisma.customerTag.upsert({
+                      where: { name: tag.name },
+                      update: {},
+                      create: { name: tag.name },
+                    }).then(tagRec =>
+                      prisma.customer.update({
+                        where: { id: customer.id },
+                        data: { tags: { connect: { id: tagRec.id } } },
+                      })
+                    )
+                  ));
+                }
+              } catch (err) {
+                logger.error(`[SyncService] Failed to sync tags for customer ${item.id}:`, err.message);
+              }
+            }),
+            // Custom Fields
+            limit(async () => {
+              try {
+                const fieldsResp = await lightspeedClient.get(`/customers/${item.id}/CustomFieldValues`);
+                const fields = fieldsResp?.data?.data || [];
+                if (Array.isArray(fields)) {
+                  await Promise.all(fields.map(field =>
+                    prisma.customerCustomField.upsert({
+                      where: { customerId_key: { customerId: customer.id, key: field.customFieldName } },
+                      update: { value: field.value },
+                      create: { customerId: customer.id, key: field.customFieldName, value: field.value },
+                    })
+                  ));
+                }
+              } catch (err) {
+                logger.error(`[SyncService] Failed to sync custom fields for customer ${item.id}:`, err.message);
+              }
+            }),
+            // Groups
+            limit(async () => {
+              try {
+                const groupsResp = await lightspeedClient.get(`/customer_groups`);
+                const groups = groupsResp?.data?.data || [];
+                await Promise.all(groups.map(async (group: any) => {
+                  if (Array.isArray(group.customers) && group.customers.some((c: any) => c.id == item.id)) {
+                    const groupRec = await prisma.customerGroup.upsert({
+                      where: { name_externalId: { name: group.name, externalId: group.id.toString() } },
+                      update: {},
+                      create: { name: group.name, externalId: group.id.toString() },
+                    });
+                    await prisma.customer.update({
+                      where: { id: customer.id },
+                      data: { groups: { connect: { id: groupRec.id } } },
+                    });
+                  }
+                }));
+              } catch (err) {
+                logger.error(`[SyncService] Failed to sync groups for customer ${item.id}:`, err.message);
+              }
+            })
+          ]);
+          // --- END GOLD STANDARD ---
+          upsertedCount++;
+        } catch (loopError: any) {
           failedCount++;
-          failedItems.push({ item, error: 'Missing ID' });
-          continue;
+          const itemIdentifier = item.id || JSON.stringify(item);
+          logger.error(`[SyncService] Failed to process item ${itemIdentifier} for ${resourceName}.`, { error: loopError.message, item });
+          failedItems.push({ item, error: loopError.message });
         }
-        const version = BigInt(item.version || 0);
-        if (version > maxVersion) {
-          maxVersion = version;
-        }
-        const mappedData = mapper(item);
-        await model.upsert({
-          where: { lightspeedId: item.id.toString() },
-          update: mappedData,
-          create: mappedData,
-        });
-        upsertedCount++;
-      } catch (loopError: any) {
-        failedCount++;
-        const itemIdentifier = item.id || JSON.stringify(item);
-        logger.error(`[SyncService] Failed to process item ${itemIdentifier} for ${resourceName}.`, { error: loopError.message, item });
-        failedItems.push({ item, error: loopError.message });
-      }
-    }
+      }))
+    );
 
     const finalErrorMessage = failedCount > 0
       ? `Sync completed with ${failedCount} error(s). First error on item ID ${failedItems[0]?.item?.id}: ${failedItems[0]?.error}`
@@ -87,7 +162,7 @@ async function syncResource<T>(req: any, resourceName: string, endpoint: string,
     await prisma.syncStatus.update({
       where: { resource: resourceName },
       data: {
-        status: 'SUCCESS',
+        status: failedCount > 0 ? 'FAILED' : 'SUCCESS',
         lastSyncedVersion: maxVersion,
         lastSyncedAt: new Date(),
         errorMessage: finalErrorMessage,
@@ -95,22 +170,18 @@ async function syncResource<T>(req: any, resourceName: string, endpoint: string,
     });
 
     logger.info(`[SyncService] ${resourceName} synchronization complete. Upserted: ${upsertedCount}, Failed: ${failedCount}. New version: ${maxVersion}`);
+    if (failedCount > 0) {
+      logger.error(`[SyncService] ${resourceName} sync completed with errors: ${finalErrorMessage}`);
+    }
   } catch (error: any) {
-    const errorMessage = error.response?.data?.message || error.message || 'An unknown error occurred during sync.';
-    logger.error(`[SyncService] Critical error during ${resourceName} synchronization: ${errorMessage}`, {
-      fullError: error.stack,
-    });
-    await prisma.syncStatus.upsert({
+    logger.error(`[SyncService] Sync for ${resourceName} failed:`, error);
+    await prisma.syncStatus.update({
       where: { resource: resourceName },
-      update: {
+      data: {
         status: 'FAILED',
-        errorMessage: errorMessage,
+        lastSyncedAt: new Date(),
+        errorMessage: error.message || 'Unknown error',
       },
-      create: {
-        resource: resourceName,
-        status: 'FAILED',
-        errorMessage: errorMessage,
-      }
     });
   }
 }
@@ -197,4 +268,14 @@ export async function syncUserPhotos(req: any): Promise<void> {
   } catch (error: any) {
     logger.error('[SyncService] Error during user photo sync:', error);
   }
-} 
+}
+
+// Schedule auto-sync for customers every 5 minutes
+schedule.scheduleJob('*/5 * * * *', async () => {
+  try {
+    logger.info('[AutoSync] Running scheduled customer sync...');
+    await syncCustomers({ system: true });
+  } catch (err) {
+    logger.error('[AutoSync] Scheduled customer sync failed:', err);
+  }
+}); 

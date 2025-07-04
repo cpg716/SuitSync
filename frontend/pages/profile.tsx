@@ -263,7 +263,7 @@ export default function ProfilePage() {
               <div className="flex flex-col items-center mb-4 gap-2">
                 <div className="relative group">
                   {(photoPreview || user.photoUrl) ? (
-                    <img src={photoPreview || user.photoUrl} alt="Profile" className="w-24 h-24 rounded-full object-cover mb-2 border-4 border-primary shadow-md" />
+                    <img src={photoPreview || user.photoUrl} alt="Profile" style={{ width: 96, height: 'auto' }} className="w-24 h-auto rounded-full object-cover mb-2 border-4 border-primary shadow-md" />
                   ) : (
                     <div className="w-24 h-24 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center mb-2">
                       <UserCircle className="w-16 h-16 text-gray-400" />

@@ -14,12 +14,15 @@ import printRoutes from './print';
 import statsRoutes from './stats';
 import notificationsRoutes from './notifications';
 import lightspeedRoutes from './lightspeed';
+import lightspeedSyncRoutes from './lightspeedSync';
 import webhooksRoutes from './webhooks';
 import performanceRoutes from './performance';
 import monitoringRoutes from './monitoring';
 import salesRoutes from './sales';
 import userSwitchRoutes from './userSwitch';
 import progressRoutes from './progress';
+import checklistsRoutes from './checklists';
+import tasksRoutes from './tasks';
 
 // Register all API routes on the app
 export function initRoutes(app: Express) {
@@ -38,10 +41,13 @@ export function initRoutes(app: Express) {
   app.use('/api/stats', statsRoutes);
   app.use('/api/notifications', notificationsRoutes);
   app.use('/api/lightspeed', lightspeedRoutes);
+  app.use('/api/lightspeed-sync', lightspeedSyncRoutes);
   app.use('/api/webhooks', webhooksRoutes);
   app.use('/api/performance', performanceRoutes);
   app.use('/api/monitoring', monitoringRoutes);
   app.use('/api/sales', salesRoutes);
   app.use('/api/user-switch', userSwitchRoutes);
   app.use('/api/progress', progressRoutes);
+  app.use('/api/checklists', checklistsRoutes);
+  app.use('/api/tasks', tasksRoutes);
 }

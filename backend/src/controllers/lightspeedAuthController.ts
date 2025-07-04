@@ -17,6 +17,9 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3001';
 const JWT_SECRET = process.env.JWT_SECRET || '';
 const LS_DOMAIN = process.env.LS_DOMAIN || '';
 
+// Lightspeed OAuth Authorization URL (per official docs, do not change)
+const LIGHTSPEED_OAUTH_URL = 'https://secure.retail.lightspeed.app/connect';
+
 /**
  * Map Lightspeed account types to SuitSync roles
  * This provides a default mapping that can be overridden in the admin interface
@@ -42,12 +45,12 @@ export const redirectToLightspeed = async (req: Request, res: Response): Promise
   try {
     const state = crypto.randomBytes(16).toString('hex');
     req.session.lsAuthState = state;
-    const authUrl = new URL('https://cloud.lightspeedapp.com/oauth/authorize.php');
+    const authUrl = new URL(LIGHTSPEED_OAUTH_URL);
     authUrl.searchParams.set('response_type', 'code');
     authUrl.searchParams.set('client_id', LS_CLIENT_ID);
     authUrl.searchParams.set('redirect_uri', LS_REDIRECT_URI);
     authUrl.searchParams.set('state', state);
-    authUrl.searchParams.set('scope', 'employee:all');
+    logger.info(`[OAuth] Using authorization URL: ${authUrl.toString()}`);
     logger.info('Redirecting to Lightspeed for authorization...');
     res.redirect(authUrl.toString());
     return;
@@ -61,6 +64,7 @@ export const redirectToLightspeed = async (req: Request, res: Response): Promise
 export const handleCallback = async (req: Request, res: Response): Promise<void> => {
   logger.info("Handling Lightspeed callback...");
   logger.info("Callback query parameters:", req.query);
+  logger.info("Session before callback:", req.session);
   const { code, domain_prefix, state, error, error_description, user_id } = req.query as any;
   const { lsAuthState } = req.session;
   if (error) {
@@ -80,9 +84,11 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
   }
   req.session.lsAuthState = undefined;
   try {
-    logger.info('Exchanging authorization code for tokens...');
+    const tokenUrl = `https://${domain_prefix}.retail.lightspeed.app/api/1.0/token`;
+    logger.info('[OAuth] Exchanging code for tokens at', tokenUrl);
+    logger.info('[OAuth] Token request params:', { client_id: LS_CLIENT_ID, redirect_uri: LS_REDIRECT_URI, code });
     const tokenResponse = await axios.post(
-      'https://cloud.lightspeedapp.com/oauth/access_token.php',
+      tokenUrl,
       querystring.stringify({
         client_id: LS_CLIENT_ID,
         client_secret: LS_CLIENT_SECRET,
@@ -97,7 +103,7 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
         } 
       }
     );
-    logger.info('Lightspeed token response:', tokenResponse.data);
+    logger.info('[OAuth] Token response:', tokenResponse.data);
     const { access_token, refresh_token, expires_in } = tokenResponse.data;
     logger.info(`Successfully obtained tokens. Now attempting to fetch user details for user_id: ${user_id}`);
     const expiresAt = new Date(Date.now() + expires_in * 1000);
@@ -118,6 +124,9 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
     req.session.lsAccessToken = access_token;
     req.session.lsRefreshToken = refresh_token;
     req.session.lsDomainPrefix = domain_prefix;
+    req.session.lsTokenExpiresAt = expiresAt;
+    req.session.userId = user_id;
+
     if (!user_id) {
       logger.error('Lightspeed callback is missing user_id query parameter.');
       const err = new Error('Could not determine user from Lightspeed callback.');
@@ -125,13 +134,21 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
       return;
     }
     const lightspeedClient = createLightspeedClient(req);
-    logger.info(`Fetching user details from Lightspeed for user_id: ${user_id}`);
+    logger.info(`[DEBUG] About to fetch user details: domain=${domain_prefix}, user_id=${user_id}, token=${access_token.slice(0,8)}...`);
     let userResponse;
     try {
       // Fetch the specific user who authenticated using their user_id
+      logger.info(`[DEBUG] Requesting: GET https://${domain_prefix}.retail.lightspeed.app/api/2.0/users/${user_id}`);
       userResponse = await lightspeedClient.get(`/users/${user_id}`);
+      logger.info(`[DEBUG] User fetch response:`, { status: userResponse.status, data: userResponse.data });
       if (!userResponse) throw new Error('No response from Lightspeed');
     } catch (error: any) {
+      logger.error(`[DEBUG] User fetch failed:`, {
+        status: error.response?.status,
+        data: error.response?.data,
+        headers: error.response?.headers,
+        message: error.message
+      });
       logger.error(`Failed to fetch current user details from Lightspeed.`, {
         status: error.response?.status,
         data: error.response?.data,
@@ -229,47 +246,36 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
     logger.info(`Hybrid authentication - ${localUser ? 'with' : 'without'} local user storage`);
 
     // Store hybrid user and tokens in session
-    req.session.lightspeedUser = lightspeedUser;
+    req.session.lightspeedUser = {
+      id: localUser.id,
+      name: localUser.name,
+      email: localUser.email,
+      role: localUser.role,
+      photoUrl: localUser.photoUrl,
+      lightspeedEmployeeId: localUser.lightspeedEmployeeId,
+      isLightspeedUser: true,
+      hasLocalRecord: true,
+      localUserId: localUser.id
+    };
+    req.session.userId = localUser.id;
+    req.session.activeUserId = localUser.id;
     req.session.lsAccessToken = access_token;
     req.session.lsRefreshToken = refresh_token;
     req.session.lsDomainPrefix = domain_prefix;
     req.session.lsTokenExpiresAt = expiresAt;
-    req.session.userId = localUser?.id || lightspeedId; // Use local DB ID if available
-
-    // If we have a local user, also store the session in the database for multi-user support
-    if (localUser) {
-      try {
-        await prisma.userSession.upsert({
-          where: {
-            userId_browserSessionId: {
-              userId: localUser.id,
-              browserSessionId: req.sessionID
-            }
-          },
-          update: {
-            lsAccessToken: access_token,
-            lsRefreshToken: refresh_token,
-            lsDomainPrefix: domain_prefix,
-            expiresAt: expiresAt,
-            lastActive: new Date(),
-          },
-          create: {
-            userId: localUser.id,
-            browserSessionId: req.sessionID,
-            lsAccessToken: access_token,
-            lsRefreshToken: refresh_token,
-            lsDomainPrefix: domain_prefix,
-            expiresAt: expiresAt,
-          }
-        });
-        logger.info(`Stored user session in database for multi-user support`);
-      } catch (error) {
-        logger.error('Error storing user session in database:', error);
-        // Continue without database session storage
-      }
-    }
-
-    logger.info(`Hybrid user ${lightspeedUser.name} (${lightspeedUser.email}) successfully authenticated`);
+    if (!req.session.userSessions) req.session.userSessions = {};
+    req.session.userSessions[localUser.id] = {
+      lsAccessToken: access_token,
+      lsRefreshToken: refresh_token,
+      lsDomainPrefix: domain_prefix,
+      expiresAt: expiresAt,
+      lastActive: new Date(),
+      loginTime: new Date()
+    };
+    logger.info('[Auth] Session fields set for user', { userId: localUser.id });
+    await new Promise((resolve, reject) => req.session.save(err => err ? reject(err) : resolve()));
+    logger.info('[Auth] Session saved for user', { userId: localUser.id });
+    logger.info('[OAuth] Session state after login:', req.session);
 
     // Check if user needs to set up PIN (first time authentication or no PIN set)
     let needsPinSetup = false;
@@ -290,15 +296,13 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
 
     res.redirect(redirectUrl);
     return;
-  } catch (error: unknown) {
-    let errorMsg = 'Unknown error';
-    if (typeof error === 'object' && error && 'message' in error) {
-      errorMsg = (error as { message?: string }).message || 'Unknown error';
-    }
-    logger.error('Error handling Lightspeed callback:', error);
-    res.redirect(`${FRONTEND_URL}/login?error=callback_failed&details=${encodeURIComponent(errorMsg)}`);
+  } catch (err) {
+    logger.error('Error in handleCallback:', err);
+    logger.info("Session after callback error:", req.session);
+    res.redirect(`${FRONTEND_URL}/login?error=callback_failed&details=${encodeURIComponent(JSON.stringify(err.response?.data || err.message))}`);
     return;
   }
+  logger.info("Session after callback:", req.session);
 };
 
 export const refreshToken = async (req: Request, res: Response) => {
@@ -309,8 +313,9 @@ export const refreshToken = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Missing required session data for token refresh.' });
     }
     logger.info('Refreshing Lightspeed token...');
+    const tokenUrl = `https://${lsDomainPrefix}.retail.lightspeed.app/api/1.0/token`;
     const tokenResponse = await axios.post(
-      `https://${lsDomainPrefix}.retail.lightspeed.app/api/1.0/token`,
+      tokenUrl,
       querystring.stringify({
         grant_type: 'refresh_token',
         refresh_token: lsRefreshToken,

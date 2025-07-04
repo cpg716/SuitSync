@@ -11,8 +11,18 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
   try {
     // HYBRID AUTHENTICATION: Lightspeed + Local User Support
 
+    // Defensive: check for session existence
+    if (!req.session) {
+      console.error('No session found on request');
+      return res.status(401).json({
+        error: 'Session missing. Please log in again.',
+        errorCode: 'SESSION_MISSING',
+        redirectTo: '/login'
+      });
+    }
+
     // Check for Lightspeed user authentication with optional local user data
-    if (req.session?.lightspeedUser) {
+    if (req.session.lightspeedUser) {
       const lightspeedUser = req.session.lightspeedUser;
       let localUser = null;
 
@@ -63,10 +73,11 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
 
       // Check if Lightspeed connection is required and available
       const requiresLightspeed = ['/api/customers', '/api/sales', '/api/sync'].some(p => req.originalUrl.startsWith(p));
-      if (requiresLightspeed && !req.session?.lsAccessToken) {
+      if (requiresLightspeed && !req.session.lsAccessToken) {
+        console.error('Lightspeed token missing or expired for user', lightspeedUser.id);
         return res.status(401).json({
-          error: 'Lightspeed connection required for this action.',
-          errorCode: 'LS_AUTH_REQUIRED',
+          error: 'Session expired or Lightspeed connection required. Please log in again.',
+          errorCode: 'LS_AUTH_EXPIRED',
           redirectTo: '/auth/start-lightspeed'
         });
       }
@@ -75,9 +86,9 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     }
 
     // Check for multi-user session (legacy support for user switching)
-    if (req.session?.userSessions && req.session?.activeUserId) {
+    if (req.session.userSessions && req.session.activeUserId) {
       try {
-        const activeUserId = req.session.activeUserId;
+        const activeUserId = typeof req.session.activeUserId === 'string' ? parseInt(req.session.activeUserId, 10) : req.session.activeUserId;
         const userSession = req.session.userSessions[activeUserId];
 
         if (userSession) {
@@ -126,12 +137,13 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
           }
         }
       } catch (error) {
-        console.error('Error handling multi-user session:', error);
+        console.error('Error handling multi-user session:', error, { sessionId: req.sessionID });
         // Continue to require fresh authentication
       }
     }
 
     // No valid authentication found
+    console.error('Authentication required. No valid session found.', { sessionId: req.sessionID, ip: req.ip });
     return res.status(401).json({
       error: 'Authentication required. Please sign in with Lightspeed.',
       errorCode: 'AUTH_REQUIRED',
@@ -139,7 +151,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     });
 
   } catch (err) {
-    console.error('Auth error:', err);
+    console.error('Auth error:', err, { sessionId: req.sessionID, ip: req.ip });
     return res.status(401).json({ error: 'Invalid authentication' });
   }
 }

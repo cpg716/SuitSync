@@ -45,7 +45,7 @@ async function refreshAccessToken(req: any) {
   const LS_CLIENT_ID = process.env.LS_CLIENT_ID || '';
   const LS_CLIENT_SECRET = process.env.LS_CLIENT_SECRET || '';
   if (!domainPrefix || !refreshToken) throw new Error('Missing domain or refresh token for Lightspeed refresh');
-  const tokenUrl = `https://${domainPrefix}.retail.lightspeed.app/api/1.0/token`;
+  const tokenUrl = 'https://x-series-api.lightspeedhq.com/oauth/token';
   const response = await axios.post(
     tokenUrl,
     querystring.stringify({
@@ -79,13 +79,12 @@ async function refreshAccessToken(req: any) {
 
 function createAxiosInstance(req: any): AxiosInstance {
   const accessToken = getAccessToken(req);
-  const accountID = req.session?.lsAccountID || process.env.LS_ACCOUNT_ID;
-  
+  const domainPrefix = getDomainPrefix(req);
   if (!accessToken) throw new Error('No Lightspeed access token');
-  if (!accountID) throw new Error('No Lightspeed account ID');
-  
+  if (!domainPrefix) throw new Error('No Lightspeed domain prefix');
+  console.info(`[LightspeedClient] Using domain: ${domainPrefix}, token: ${accessToken.slice(0, 8)}...`);
   return axios.create({
-    baseURL: `https://api.lightspeedapp.com/API/V3/Account/${accountID}`,
+    baseURL: `https://${domainPrefix}.retail.lightspeed.app/api/2.0`,
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
@@ -109,41 +108,39 @@ export function createLightspeedClient(req: any) {
           response = await client.put(endpoint, data);
         }
 
-      // Log rate limit headers for monitoring
-      if (response?.headers['x-ratelimit-remaining']) {
-        const remaining = response.headers['x-ratelimit-remaining'];
-        const limit = response.headers['x-ratelimit-limit'];
-        console.debug(`Rate limit: ${remaining}/${limit} remaining`);
-      }
-
-      return response;
-    } catch (error) {
-      const err = error as AxiosError;
-
-      // Handle rate limiting with exponential backoff
-      if (err.response?.status === 429) {
-        try {
-          await handleRateLimit(err, retryCount);
-          return await requestWithRefresh(method, endpoint, data, params, retryCount + 1);
-        } catch (rateLimitError) {
-          throw rateLimitError;
+        // Log rate limit headers for monitoring
+        if (response?.headers['x-ratelimit-remaining']) {
+          const remaining = response.headers['x-ratelimit-remaining'];
+          const limit = response.headers['x-ratelimit-limit'];
+          console.debug(`Rate limit: ${remaining}/${limit} remaining`);
         }
-      }
 
-      if (err.response?.status === 401 && !req._retry) {
-        req._retry = true;
-        const newToken = await refreshAccessToken(req);
-        client = createAxiosInstance(req); // update client with new token
-        if (method === 'get') {
-          return await client.get(endpoint, { params });
-        } else if (method === 'post') {
-          return await client.post(endpoint, data);
-        } else if (method === 'put') {
-          return await client.put(endpoint, data);
-        }
-      }
-      throw error;
+        return response;
       } catch (error) {
+        const err = error as AxiosError;
+
+        // Handle rate limiting with exponential backoff
+        if (err.response?.status === 429) {
+          try {
+            await handleRateLimit(err, retryCount);
+            return await requestWithRefresh(method, endpoint, data, params, retryCount + 1);
+          } catch (rateLimitError) {
+            throw rateLimitError;
+          }
+        }
+
+        if (err.response?.status === 401 && !req._retry) {
+          req._retry = true;
+          const newToken = await refreshAccessToken(req);
+          client = createAxiosInstance(req); // update client with new token
+          if (method === 'get') {
+            return await client.get(endpoint, { params });
+          } else if (method === 'post') {
+            return await client.post(endpoint, data);
+          } else if (method === 'put') {
+            return await client.put(endpoint, data);
+          }
+        }
         throw error;
       }
     });

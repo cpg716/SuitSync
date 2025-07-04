@@ -167,7 +167,7 @@ export const sessionSizeLimit = (maxSessionSize: number = 2 * 1024) => { // 2KB 
             const userSessions = Object.entries(req.session.userSessions);
             if (userSessions.length > 3) {
               // Keep only the 3 most recently active sessions
-              userSessions.sort(([, a], [, b]) => b.lastActive.getTime() - a.lastActive.getTime());
+              userSessions.sort(([, a], [, b]: [string, any]) => (b as any).lastActive.getTime() - (a as any).lastActive.getTime());
               const sessionsToKeep = userSessions.slice(0, 3);
               req.session.userSessions = Object.fromEntries(sessionsToKeep);
 

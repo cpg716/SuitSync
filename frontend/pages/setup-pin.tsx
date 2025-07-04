@@ -86,7 +86,7 @@ export default function SetupPinPage() {
         toastSuccess('PIN set successfully! You can now use quick user switching.');
         
         // Redirect to dashboard
-        router.push('/dashboard');
+        router.push('/');
       } else {
         const errorData = await response.json();
         toastError(errorData.error || 'Failed to set PIN');
@@ -101,7 +101,7 @@ export default function SetupPinPage() {
 
   const handleSkip = () => {
     // Allow user to skip PIN setup and go to dashboard
-    router.push('/dashboard');
+    router.push('/');
   };
 
   if (!user) {

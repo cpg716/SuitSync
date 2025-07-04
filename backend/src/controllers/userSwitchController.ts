@@ -44,12 +44,33 @@ export const switchUser = async (req: Request, res: Response): Promise<void> => 
     const success = await MultiUserSessionService.switchToUser(req, userId);
 
     if (success) {
+      // Fetch the new user from DB for session update
+      const switchedUser = await prisma.user.findUnique({ where: { id: userId } });
+      if (switchedUser) {
+        req.session.lightspeedUser = {
+          id: switchedUser.id,
+          name: switchedUser.name,
+          email: switchedUser.email,
+          role: switchedUser.role,
+          photoUrl: switchedUser.photoUrl,
+          lightspeedEmployeeId: switchedUser.lightspeedEmployeeId,
+          isLightspeedUser: true,
+          hasLocalRecord: true,
+          localUserId: switchedUser.id
+        };
+        req.session.userId = switchedUser.id;
+        req.session.activeUserId = switchedUser.id;
+        // Tokens and domain are already set by MultiUserSessionService.switchToUser
+        await new Promise((resolve, reject) => req.session.save(err => err ? reject(err) : resolve()));
+        logger.info('[UserSwitch] Session fields updated and saved for user', { userId: switchedUser.id });
+      }
       logger.info(`Successfully switched to user ${userId} (${targetUser.email})`);
       res.json({
         success: true,
         message: `Switched to ${targetUser.name}`,
         user: targetUser,
       });
+      return;
     } else {
       logger.warn(`Failed to switch to user ${userId} - not in cache`);
       res.status(401).json({

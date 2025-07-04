@@ -38,6 +38,9 @@ router.get('/scan-logs', asyncHandler(alterationsController.getScanLogs));
 // Dashboard stats
 router.get('/dashboard-stats', asyncHandler(alterationsController.getDashboardStats));
 
+// Alias for legacy frontend path
+router.get('/dashboard/stats', asyncHandler(alterationsController.getDashboardStats));
+
 // Workflow management
 router.put('/jobs/:jobId/workflow/:stepId', asyncHandler(alterationsController.updateWorkflowStep));
 

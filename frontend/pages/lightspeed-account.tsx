@@ -61,7 +61,7 @@ export default function LightspeedAccountPage() {
         {linked ? (
           <div className="flex items-center gap-3 mb-4 p-3 bg-blue-50 dark:bg-blue-900 rounded">
             {hasPhotoUrl ? (
-              <img src={String(linked.photoUrl)} alt="LS avatar" className="w-12 h-12 rounded-full object-cover" />
+              <img src={String(linked.photoUrl)} alt="LS avatar" style={{ width: 48, height: 'auto' }} className="w-12 h-auto rounded-full object-cover" />
             ) : (
               <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-gray-400">
                 <User className="w-8 h-8" />
@@ -94,7 +94,7 @@ export default function LightspeedAccountPage() {
                 onClick={() => setSelected(e)}
               >
                 {e.photoUrl ? (
-                  <img src={e.photoUrl} alt="LS avatar" className="w-8 h-8 rounded-full object-cover" />
+                  <img src={e.photoUrl} alt="LS avatar" style={{ width: 32, height: 'auto' }} className="w-8 h-auto rounded-full object-cover" />
                 ) : (
                   <div className="w-8 h-8 rounded-full bg-blue-200 flex items-center justify-center">
                     <span className="text-blue-500">LS</span>

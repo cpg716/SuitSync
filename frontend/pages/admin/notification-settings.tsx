@@ -38,7 +38,7 @@ export default function NotificationSettings() {
   // Check admin access
   useEffect(() => {
     if (user && user.role !== 'admin') {
-      router.push('/dashboard');
+      router.push('/');
     }
   }, [user, router]);
 

@@ -13,7 +13,7 @@ export default function MonitoringPage() {
 
   useEffect(() => {
     if (!loading && (!user || user.role !== 'admin')) {
-      router.push('/dashboard');
+      router.push('/');
     }
   }, [user, loading, router]);
 

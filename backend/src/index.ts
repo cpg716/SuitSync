@@ -10,6 +10,8 @@ import { withAccelerate } from '@prisma/extension-accelerate';
 import { securityHeaders, rateLimits, speedLimiter, requestSizeLimit, sessionSizeLimit, headerSizeMonitor } from './middleware/security';
 import { sessionSizeManager } from './middleware/sessionManager';
 import { scheduledJobService } from './services/scheduledJobService';
+import Redis from 'redis';
+import connectRedis from 'connect-redis';
 
 // Load environment variables and validate
 // (dotenv/config is loaded in config.ts)
@@ -42,6 +44,13 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
+console.log('CORS origin:', corsOptions.origin);
+console.log('Session cookie config:', {
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax',
+  maxAge: 1000 * 60 * 60 * 24 * 7
+});
+
 // Special middleware for webhooks to capture raw body for signature verification
 app.use('/api/webhooks', express.raw({ type: 'application/x-www-form-urlencoded' }), (req: any, res, next) => {
   req.rawBody = req.body;
@@ -56,6 +65,33 @@ app.use(cookieParser());
 
 // Session typing is handled via src/types/express-session/index.d.ts
 // Enhanced session configuration with better persistence and memory management
+let sessionStore;
+try {
+  const RedisStore = connectRedis(session);
+  const redisClient = Redis.createClient({
+    url: process.env.REDIS_URL || 'redis://redis:6379',
+    legacyMode: true,
+  });
+  redisClient.connect().catch(console.error);
+  sessionStore = new RedisStore({ client: redisClient });
+  console.log('Using Redis for session storage');
+} catch (err) {
+  // Fallback to file store for local dev if Redis is unavailable
+  sessionStore = process.env.NODE_ENV === 'development'
+    ? new (require('session-file-store')(session))({
+        path: '/app/sessions',
+        ttl: 60 * 60 * 24 * 7,
+        retries: 3,
+        reapInterval: 60 * 60,
+        logFn: () => {},
+      })
+    : undefined;
+  if (sessionStore) {
+    console.log('Using file store for session storage (development fallback)');
+  } else {
+    console.warn('No session store configured!');
+  }
+}
 app.use(
   session({
     secret: config.SESSION_SECRET,
@@ -68,16 +104,7 @@ app.use(
       sameSite: 'lax',
       maxAge: 1000 * 60 * 60 * 24 * 7, // 1 week
     },
-    // Use file store for development to persist sessions across restarts
-    ...(process.env.NODE_ENV === 'development' && {
-      store: new (require('session-file-store')(session))({
-        path: '/app/sessions', // Use absolute path for Docker
-        ttl: 60 * 60 * 24 * 7, // 1 week
-        retries: 3,
-        reapInterval: 60 * 60, // Clean up expired sessions every hour
-        logFn: () => {}, // Suppress session file store logs
-      })
-    })
+    store: sessionStore,
   })
 );
 
@@ -97,6 +124,13 @@ app.use(express.static(path.join(__dirname, '../../frontend/out')));
 // Healthcheck
 app.get('/api/health', (_req, res) => {
   res.status(200).json({ status: 'ok' });
+});
+
+app.get('/api/auth/health', (req, res) => {
+  res.json({
+    session: req.session,
+    user: req.session?.lightspeedUser || null
+  });
 });
 
 // Global error handler

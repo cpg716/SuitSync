@@ -360,7 +360,7 @@ async function getNotificationSettings(): Promise<NotificationSettings> {
   
   return {
     reminderIntervals: settings?.reminderIntervals || '24,3',
-    earlyMorningCutoff: settings?.earlyMorningCutoff || '09:30',
+    earlyMorningCutoff: typeof settings?.earlyMorningCutoff === 'string' ? settings.earlyMorningCutoff : settings?.earlyMorningCutoff?.toISOString() || '09:30',
     emailSubject: settings?.emailSubject || 'Reminder: Your appointment at {shopName}',
     emailBody: settings?.emailBody || 'Hi {customerName},\nThis is a reminder for your appointment with {partyName} on {dateTime}.',
     smsBody: settings?.smsBody || 'Reminder: {partyName} appointment on {dateTime} at {shopName}.',

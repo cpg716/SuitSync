@@ -176,6 +176,7 @@ export const Appbar: React.FC = () => {
                     src={user.photoUrl}
                     alt={user.name}
                     className="h-6 w-6 sm:h-7 sm:w-7 md:h-8 md:w-8 rounded-full object-cover transition-opacity group-hover:opacity-80"
+                    style={{ width: 32, height: 'auto' }}
                     onError={(e) => {
                       console.error('Failed to load user photo:', user.photoUrl);
                       // Fallback to user icon if image fails to load

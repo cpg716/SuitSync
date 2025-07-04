@@ -33,11 +33,11 @@ const statusCols = [
 export default function AlterationsPage() {
   const router = useRouter();
   const [tab, setTab] = useState<'list' | 'calendar'>('list');
-  const { data: jobs = [], error, isLoading, mutate } = useSWR('/api/alterations', fetcher, { refreshInterval: 60_000 });
+  const { data: jobsData, error, isLoading, mutate } = useSWR('/api/alterations', fetcher, { refreshInterval: 60_000 });
   
   // Fetch customers and parties for job creation
-  const { data: customers = [] } = useSWR('/api/customers', fetcher);
-  const { data: parties = [] } = useSWR('/api/parties', fetcher);
+  const { data: customersData } = useSWR('/api/customers', fetcher);
+  const { data: partiesData } = useSWR('/api/parties', fetcher);
   const [selectedJob, setSelectedJob] = useState(null);
   const [alterations, setAlterations] = useState<any[]>([]);
   const [search, setSearch] = useState('');
@@ -59,13 +59,14 @@ export default function AlterationsPage() {
   const pageSize = 10;
 
   // Get unique tailors from data
-  const tailorOptions: string[] = Array.isArray(jobs.map(j => j.tailor?.name).filter(Boolean)) ? jobs.map(j => j.tailor?.name).filter(Boolean) : [];
+  const safeJobs: any[] = Array.isArray(jobsData?.jobs) ? jobsData.jobs : [];
+  const tailorOptions: string[] = safeJobs.map(j => j.tailor?.name).filter(Boolean);
 
   // Tailor time tracking for today
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
-  const tailorTimeToday = {};
-  jobs.forEach(j => {
+  const tailorTimeToday: Record<string, { time: number; jobs: number; jobList: any[] }> = {};
+  safeJobs.forEach(j => {
     if (j.scheduledDateTime && j.scheduledDateTime.slice(0, 10) === todayStr && j.tailor?.name) {
       if (!tailorTimeToday[j.tailor.name]) {
         tailorTimeToday[j.tailor.name] = { time: 0, jobs: 0, jobList: [] };
@@ -75,6 +76,10 @@ export default function AlterationsPage() {
       tailorTimeToday[j.tailor.name].jobList.push(j);
     }
   });
+
+  const jobs = safeJobs;
+  const parties = partiesData && typeof partiesData === 'object' && Array.isArray(partiesData.parties) ? partiesData.parties : [];
+  const customers = customersData && typeof customersData === 'object' && Array.isArray(customersData.customers) ? customersData.customers : [];
 
   const filtered = (Array.isArray(jobs) ? jobs : []).filter(j => {
     if (jobTab === 'party' && !j.party) return false;
@@ -223,7 +228,7 @@ export default function AlterationsPage() {
   if (isLoading) return <Skeleton className="h-screen w-full" />;
   if (error) return <div>Error loading jobs. Please try again later.</div>;
   if (!Array.isArray(jobs)) {
-    return <div>No jobs found or not authorized.</div>;
+    return <div className="text-center text-red-500 py-12">No jobs found or invalid response from server.</div>;
   }
 
   return (
@@ -556,7 +561,7 @@ export default function AlterationsPage() {
         title="Delete Alteration"
         message="Are you sure you want to delete this alteration? This cannot be undone."
       />
-      <AlterationJobModal open={createJobOpen} onClose={() => setCreateJobOpen(false)} onSubmit={handleCreateJobSubmit} customers={Array.isArray(customers) ? customers : []} parties={parties} />
+      <AlterationJobModal open={createJobOpen} onClose={() => setCreateJobOpen(false)} onSubmit={handleCreateJobSubmit} customers={customers} parties={parties} />
 
     </div>
   );

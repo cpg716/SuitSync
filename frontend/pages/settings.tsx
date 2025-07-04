@@ -1,14 +1,22 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/router';
+import { useAuth } from '../src/AuthContext';
 import { Skeleton } from '../components/ui/Skeleton';
 
 export default function SettingsRedirect() {
   const router = useRouter();
+  const { user, loading } = useAuth();
 
   useEffect(() => {
-    // Redirect to admin page which contains the settings
-    router.replace('/admin');
-  }, [router]);
+    if (loading) return;
+    if (!user) {
+      router.replace('/login');
+    } else if (user.role === 'admin') {
+      router.replace('/admin');
+    } else {
+      router.replace('/UserSettings');
+    }
+  }, [router, user, loading]);
 
   return (
     <div className="w-full space-y-6">

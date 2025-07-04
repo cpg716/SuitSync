@@ -331,7 +331,7 @@ export default function UserSettings({ userId, adminView }: { userId?: number, a
       <Card className="w-full max-w-2xl p-8 bg-white dark:bg-gray-800 shadow-lg border border-accent mb-8">
         <div className="flex items-center gap-4 mb-6">
           {user.photoUrl ? (
-            <img src={user.photoUrl} alt={user.name} className="h-16 w-16 rounded-full object-cover" />
+            <img src={user.photoUrl} alt={user.name} style={{ height: 64, width: 'auto' }} className="h-16 w-auto rounded-full object-cover" />
           ) : (
             <UserCircle className="h-16 w-16 text-gray-400" />
           )}

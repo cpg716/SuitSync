@@ -111,7 +111,7 @@ export default function LoginPage() {
   const handleLightspeedLogin = () => {
     // Simply redirect to the backend endpoint that starts the OAuth flow.
     // The backend will handle the redirect to Lightspeed's authorization page.
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || '/api';
     window.location.href = `${backendUrl}/auth/start-lightspeed`;
   };
 
@@ -131,8 +131,8 @@ export default function LoginPage() {
             alt="SuitSync Logo"
             width={200}
             height={80}
-            className="h-20 w-auto mb-2 drop-shadow-lg"
-            style={{ width: 'auto', height: 'auto' }}
+            className="mb-2 drop-shadow-lg"
+            style={{ width: 200, height: 'auto' }}
             priority
           />
           <Image
@@ -140,8 +140,8 @@ export default function LoginPage() {
             alt="Riverside Logo"
             width={120}
             height={40}
-            className="h-10 w-auto mb-2"
-            style={{ width: 'auto', height: 'auto' }}
+            className="mb-2"
+            style={{ width: 120, height: 'auto' }}
           />
           <h1 className="text-2xl font-bold mb-2 text-primary">Sign in to SuitSync</h1>
           <p className="text-sm text-gray-600 text-center">

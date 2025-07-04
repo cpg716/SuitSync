@@ -28,6 +28,9 @@ model Customer {
   createdByUser     User?           @relation("CustomerCreator", fields: [createdBy], references: [id])
   sales             Sale[]
   individualAppointments Appointment[] @relation("IndividualCustomerAppointments")
+  tags              CustomerTag[]     @relation("CustomerTags")
+  customFields      CustomerCustomField[]
+  groups            CustomerGroup[]   @relation("CustomerGroups")
 
   @@index([lightspeedId])
   @@index([email])
@@ -89,10 +92,18 @@ model User {
   taskLogs             AlterationTaskLog[] @relation("TaskLogUser")
   qrScans              QRScanLog[]         @relation("QRScanUser")
   workflowStepsCompleted AlterationWorkflowStep[] @relation("WorkflowStepUser")
-  assignedTasks        AlterationTask[]    @relation("TaskAssignedUser")
+  assignedAlterationTasks AlterationTask[]    @relation("TaskAssignedUser")
   assignmentLogs       AssignmentLog[]
   userSchedules        UserSchedule[]
   userSessions         UserSession[]       @relation("UserSessions")
+  
+  // Checklists & Tasks relations
+  createdChecklists    Checklist[]         @relation("ChecklistCreator")
+  assignedChecklists   ChecklistAssignment[] @relation("ChecklistAssignee")
+  assignedChecklistsBy ChecklistAssignment[] @relation("ChecklistAssigner")
+  checklistExecutions  ChecklistExecution[] @relation("ChecklistExecutor")
+  assignedTasks        Task[]              @relation("TaskAssignee")
+  assignedTasksBy      Task[]              @relation("TaskAssigner")
 
   // PIN-based user switching
   pinHash              String?
@@ -175,7 +186,7 @@ model AlterationJob {
   customer                 Customer?           @relation(fields: [customerId], references: [id])
   tailor                   User?               @relation(fields: [tailorId], references: [id])
   jobParts                 AlterationJobPart[] @relation("JobParts")
-  qrCode                   String              @unique // Main job QR code
+  qrCode                   String?             @unique // Main job QR code
   workflowSteps            AlterationWorkflowStep[]
   assignmentLogs           AssignmentLog[]
 
@@ -203,6 +214,7 @@ enum AlterationJobStatus {
   COMPLETE
   PICKED_UP
   ON_HOLD
+  pending
 }
 
 enum OrderStatus {
@@ -355,8 +367,8 @@ enum QRScanType {
 
 model Appointment {
   id                 Int               @id @default(autoincrement())
-  partyId            Int
-  party              Party             @relation(fields: [partyId], references: [id])
+  partyId            Int?
+  party              Party?            @relation(fields: [partyId], references: [id])
   customerId         String?
   saleId             String?
   dateTime           DateTime
@@ -419,6 +431,7 @@ enum AppointmentStatus {
   rescheduled
   canceled
   completed
+  confirmed
 }
 
 model SyncLog {
@@ -501,7 +514,9 @@ model Settings {
   emailBody         String   @default("Hi {customerName},\nThis is a reminder for your appointment with {partyName} on {dateTime}.")
   smsBody           String   @default("Reminder: {partyName} appointment on {dateTime} at {shopName}.")
   // Enhanced notification settings
-  earlyMorningCutoff String  @default("09:30") // Time before which to send 1h instead of 3h reminder
+  earlyMorningCutoff String? // Time before which to send 1h instead of 3h reminder
+  lateMorningCutoff  String?
+  afternoonCutoff    String?
   pickupReadySubject String  @default("Your garment is ready for pickup!")
   pickupReadyEmail   String  @default("Hi {customerName},\nYour garment for {partyName} is ready for pickup!")
   pickupReadySms     String  @default("Your garment for {partyName} is ready for pickup at {shopName}!")
@@ -680,4 +695,178 @@ model UserSession {
   @@index([userId])
   @@index([expiresAt])
   @@index([lastActive])
+}
+
+// Checklists & Tasks System
+model Checklist {
+  id               Int                   @id @default(autoincrement())
+  title            String
+  description      String?
+  frequency        ChecklistFrequency
+  isRequired       Boolean               @default(false)
+  estimatedMinutes Int?
+  createdById      Int
+  createdBy        User                  @relation("ChecklistCreator", fields: [createdById], references: [id])
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  isActive         Boolean               @default(true)
+  items            ChecklistItem[]
+  assignments      ChecklistAssignment[]
+
+  @@index([createdById])
+  @@index([frequency])
+  @@index([isActive])
+}
+
+model ChecklistItem {
+  id          Int      @id @default(autoincrement())
+  checklistId Int
+  checklist   Checklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  isRequired  Boolean  @default(false)
+  order       Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  executions  ChecklistItemExecution[]
+
+  @@index([checklistId])
+  @@index([order])
+}
+
+model ChecklistAssignment {
+  id           Int      @id @default(autoincrement())
+  checklistId  Int
+  checklist    Checklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  assignedToId Int
+  assignedTo   User     @relation("ChecklistAssignee", fields: [assignedToId], references: [id], onDelete: Cascade)
+  assignedById Int
+  assignedBy   User     @relation("ChecklistAssigner", fields: [assignedById], references: [id])
+  dueDate      DateTime?
+  assignedAt   DateTime @default(now())
+  isActive     Boolean  @default(true)
+  executions   ChecklistExecution[]
+
+  @@index([assignedToId])
+  @@index([checklistId])
+  @@index([assignedById])
+}
+
+model ChecklistExecution {
+  id           Int                      @id @default(autoincrement())
+  assignmentId Int
+  assignment   ChecklistAssignment      @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  userId       Int
+  user         User                     @relation("ChecklistExecutor", fields: [userId], references: [id], onDelete: Cascade)
+  status       ChecklistStatus          @default(NOT_STARTED)
+  startedAt    DateTime?
+  completedAt  DateTime?
+  notes        String?
+  scheduledFor DateTime
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+  itemExecutions ChecklistItemExecution[]
+
+  @@index([userId, scheduledFor])
+  @@index([assignmentId])
+  @@index([status])
+}
+
+model ChecklistItemExecution {
+  id          Int      @id @default(autoincrement())
+  executionId Int
+  execution   ChecklistExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  itemId      Int
+  item        ChecklistItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  isCompleted Boolean  @default(false)
+  completedAt DateTime?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([executionId, itemId])
+  @@index([executionId])
+  @@index([itemId])
+}
+
+model Task {
+  id               Int          @id @default(autoincrement())
+  title            String
+  description      String?
+  priority         TaskPriority @default(MEDIUM)
+  status           TaskStatus   @default(PENDING)
+  assignedToId     Int
+  assignedTo       User         @relation("TaskAssignee", fields: [assignedToId], references: [id], onDelete: Cascade)
+  assignedById     Int
+  assignedBy       User         @relation("TaskAssigner", fields: [assignedById], references: [id])
+  dueDate          DateTime?
+  estimatedMinutes Int?
+  completedAt      DateTime?
+  notes            String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@index([assignedToId, status])
+  @@index([assignedById])
+  @@index([status])
+  @@index([priority])
+  @@index([dueDate])
+}
+
+enum ChecklistFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  OVERDUE
+}
+
+enum ChecklistStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  OVERDUE
+}
+
+model CustomerTag {
+  id         Int       @id @default(autoincrement())
+  name       String
+  customers  Customer[] @relation("CustomerTags")
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  @@unique([name])
+}
+
+model CustomerCustomField {
+  id          Int      @id @default(autoincrement())
+  customer    Customer @relation(fields: [customerId], references: [id])
+  customerId  Int
+  key         String
+  value       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@unique([customerId, key])
+}
+
+model CustomerGroup {
+  id         Int       @id @default(autoincrement())
+  name       String
+  externalId String?   // Lightspeed group ID
+  customers  Customer[] @relation("CustomerGroups")
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  @@unique([name, externalId])
 }
