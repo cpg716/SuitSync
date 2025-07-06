@@ -43,6 +43,7 @@
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
     "node-cron": "^4.2.0",
+    "node-schedule": "^2.1.1",
     "p-limit": "^6.2.0",
     "react-big-calendar": "^1.19.4",
     "recharts": "^3.0.2",

@@ -19,6 +19,7 @@ class Logger {
   private readonly logDir = join(process.cwd(), 'logs');
   private readonly isDevelopment = process.env.NODE_ENV === 'development';
   private readonly logLevel = (process.env.LOG_LEVEL as LogLevel) || 'info';
+  private closed = false;
 
   private readonly levels: Record<LogLevel, number> = {
     debug: 0,
@@ -61,6 +62,7 @@ class Logger {
 
   private setupGracefulShutdown() {
     const cleanup = () => {
+      this.closed = true;
       this.logStreams.forEach(stream => {
         if (stream && typeof stream.end === 'function') {
           stream.end();
@@ -87,6 +89,7 @@ class Logger {
   }
 
   private writeToFile(level: LogLevel, entry: LogEntry) {
+    if (this.closed) return;
     const logLine = JSON.stringify(entry) + '\n';
 
     // Write to combined log
@@ -142,6 +145,7 @@ class Logger {
 
   // HTTP access logging
   access(req: any, res: any, responseTime: number) {
+    if (this.closed) return;
     const entry = {
       timestamp: new Date().toISOString(),
       method: req.method,
