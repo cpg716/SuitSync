@@ -464,3 +464,33 @@ customer = api.create_customer({
     'email': 'john@example.com'
 })
 ```
+
+## Backend Dashboard
+
+### GET /
+- Returns the backend dashboard as an HTML page.
+- Shows health/status for DB, Redis, Lightspeed, job scheduler, and app info.
+
+### GET /api/admin/dashboard
+- Returns the backend dashboard as an HTML page (same as `/`).
+
+### GET /api/admin/dashboard.json
+- Returns backend health/status as JSON for frontend or API use.
+
+#### Example response:
+```json
+{
+  "dbStatus": "ok",
+  "dbTables": [ ... ],
+  "redisStatus": "ok",
+  "redisInfo": { ... },
+  "lightspeed": { "status": "ok" },
+  "jobs": [ ... ],
+  "appInfo": { ... }
+}
+```
+
+## Session & Auth
+- Session cookies are `secure: false` in dev, `secure: true` in production.
+- CORS allows credentials and uses `CORS_ORIGIN`.
+- Frontend must send `credentials: 'include'` on all API requests.

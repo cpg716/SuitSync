@@ -35,7 +35,8 @@ const routeTitles = {
 
 export const Appbar: React.FC = () => {
   const { user, logout } = useAuth();
-  const router = useRouter();
+  const isClient = typeof window !== 'undefined';
+  const router = isClient ? useRouter() : null;
   const [currentTitle, setCurrentTitle] = useState('');
   const install = usePWAInstall();
   const [showSwitchUser, setShowSwitchUser] = useState(false);
@@ -46,8 +47,8 @@ export const Appbar: React.FC = () => {
   const toast = useToast();
 
   useEffect(() => {
-    setCurrentTitle(routeTitles[router.pathname] || '');
-  }, [router.pathname]);
+    setCurrentTitle(routeTitles[router?.pathname as keyof typeof routeTitles] || '');
+  }, [router?.pathname]);
 
   // Fetch all users for the modal
   useEffect(() => {
@@ -91,7 +92,15 @@ export const Appbar: React.FC = () => {
         }
       } catch (error) {
         // Only log non-401 errors (401 is expected when not authenticated)
-        if (error.response?.status !== 401) {
+        if (
+          error &&
+          typeof error === 'object' &&
+          'response' in error &&
+          error.response &&
+          typeof error.response === 'object' &&
+          'status' in error.response &&
+          (error.response as any).status !== 401
+        ) {
           console.error('Error loading session status:', error);
         }
       }
@@ -110,7 +119,7 @@ export const Appbar: React.FC = () => {
     }
   }, [user]);
 
-  const handleUserSelect = (user) => {
+  const handleUserSelect = (user: any) => {
     // Handle user selection - reload session status
     setTimeout(() => {
       window.location.reload();
@@ -148,7 +157,7 @@ export const Appbar: React.FC = () => {
               alt="SuitSync Logo"
               width={120}
               height={28}
-              style={{ width: 'auto', height: 'auto' }}
+              style={{ width: 120, height: 28 }}
               className="h-5 sm:h-6 md:h-7 w-auto max-w-[80px] sm:max-w-[100px] md:max-w-[120px] drop-shadow dark:drop-shadow-[0_2px_8px_rgba(255,255,255,0.7)]"
               priority
             />
@@ -176,7 +185,7 @@ export const Appbar: React.FC = () => {
                     src={user.photoUrl}
                     alt={user.name}
                     className="h-6 w-6 sm:h-7 sm:w-7 md:h-8 md:w-8 rounded-full object-cover transition-opacity group-hover:opacity-80"
-                    style={{ width: 32, height: 'auto' }}
+                    style={{ width: 32, height: 32 }}
                     onError={(e) => {
                       console.error('Failed to load user photo:', user.photoUrl);
                       // Fallback to user icon if image fails to load
@@ -235,11 +244,11 @@ export const Appbar: React.FC = () => {
               )}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => router.push('/profile')}>
+            <DropdownMenuItem onClick={() => router?.push('/profile')}>
               <User className="mr-2 h-4 w-4" />
               <span>My Profile</span>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => router.push('/admin')}>
+            <DropdownMenuItem onClick={() => router?.push('/admin')}>
               <Settings className="mr-2 h-4 w-4" />
               <span>Admin Settings</span>
             </DropdownMenuItem>
@@ -260,7 +269,7 @@ export const Appbar: React.FC = () => {
               </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => router.push('/logout')}>
+            <DropdownMenuItem onClick={() => router?.push('/logout')}>
               <LogOut className="mr-2 h-4 w-4" />
               <span>Logout</span>
             </DropdownMenuItem>

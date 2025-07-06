@@ -29,7 +29,8 @@ interface PaginationData {
 }
 
 export default function CustomersPage() {
-  const router = useRouter();
+  const isClient = typeof window !== 'undefined';
+  const router = isClient ? useRouter() : null;
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -68,10 +69,14 @@ export default function CustomersPage() {
       mutate();
       success('Customer created successfully');
       if (newCustomer && typeof newCustomer === 'object' && 'id' in newCustomer) {
-        router.push(`/customers/${newCustomer.id}`);
+        router?.push(`/customers/${newCustomer.id}`);
       }
     } catch (err) {
-      toastError(err.response?.data?.message || 'Could not create customer');
+      let message = 'Could not create customer';
+      if (err && typeof err === 'object' && 'response' in err && err.response && typeof err.response === 'object' && 'data' in err.response && err.response.data && typeof err.response.data === 'object' && 'message' in err.response.data && typeof err.response.data.message === 'string') {
+        message = err.response.data.message || message;
+      }
+      toastError(message);
     } finally {
       setSaving(false);
     }
@@ -176,7 +181,7 @@ export default function CustomersPage() {
                         <Button 
                           size="sm" 
                           variant="ghost"
-                          onClick={() => router.push(`/customers/${customer.id}`)}
+                          onClick={() => router?.push(`/customers/${customer.id}`)}
                           className="text-primary dark:text-accent hover:underline"
                         >
                           View
@@ -259,7 +264,7 @@ export default function CustomersPage() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => router.push(`/customers/${customer.id}`)}
+                        onClick={() => router?.push(`/customers/${customer.id}`)}
                         className="text-primary dark:text-accent min-h-[44px] px-4 touch-manipulation"
                       >
                         View Details

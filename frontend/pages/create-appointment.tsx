@@ -19,7 +19,8 @@ interface AppointmentFormData {
 }
 
 export default function CreateAppointment() {
-  const router = useRouter();
+  const isClient = typeof window !== 'undefined';
+  const router = isClient ? useRouter() : null;
   const { success, error } = useToast();
   const [tailors, setTailors] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -44,7 +45,7 @@ export default function CreateAppointment() {
   const fetchTailors = async () => {
     try {
       const response = await api.get('/api/users?role=tailor,sales_management,admin');
-      setTailors(response.data.filter((user: any) => 
+      setTailors((response.data as any[]).filter((user: any) => 
         ['tailor', 'sales_management', 'admin'].includes(user.role)
       ));
     } catch (err) {
@@ -93,21 +94,24 @@ export default function CreateAppointment() {
         partyId: formData.partyId ? parseInt(formData.partyId) : undefined,
         partyMemberId: formData.partyMemberId ? parseInt(formData.partyMemberId) : undefined,
         tailorId: formData.tailorId ? parseInt(formData.tailorId) : undefined,
-        durationMinutes: parseInt(formData.durationMinutes)
+        durationMinutes: typeof formData.durationMinutes === 'string' ? parseInt(formData.durationMinutes) : Number(formData.durationMinutes)
       };
       
       const response = await api.post('/api/appointments', submitData);
       
-      if (response.data.workflowTriggered) {
+      if ((response.data as any).workflowTriggered) {
         success('Appointment created successfully with automated workflow triggers');
       } else {
         success('Appointment created successfully');
       }
       
       router.push('/appointments');
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error creating appointment:', err);
-      const errorMessage = err.response?.data?.error || 'Failed to create appointment';
+      let errorMessage = 'Failed to create appointment';
+      if (err && typeof err === 'object' && 'response' in err && err.response && typeof err.response === 'object' && 'data' in err.response && err.response.data && typeof err.response.data === 'object' && 'error' in err.response.data) {
+        errorMessage = err.response.data.error || errorMessage;
+      }
       error(errorMessage);
     }
   };

@@ -122,98 +122,96 @@ export function GarmentAlterationTag({
   const partsToShow = part ? [part] : job.jobParts;
 
   const handlePrint = () => {
-    if (tagRef.current) {
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.write(`
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <title>Alteration Tag - ${job.jobNumber}</title>
-              <style>
-                body { 
-                  font-family: Arial, sans-serif; 
-                  margin: 0; 
-                  padding: 20px; 
-                  background: white;
-                  color: black;
-                  -webkit-print-color-adjust: exact;
-                }
-                .tag { 
-                  border: 3px solid #333; 
-                  padding: 20px; 
-                  max-width: 600px; 
-                  margin: 0 auto;
-                  background: white;
-                  page-break-inside: avoid;
-                }
-                .header { 
-                  text-align: center; 
-                  border-bottom: 2px solid #333; 
-                  padding-bottom: 15px; 
-                  margin-bottom: 20px; 
-                }
-                .qr-section { 
-                  display: flex; 
-                  justify-content: space-between; 
-                  align-items: center; 
-                  margin: 15px 0; 
-                }
-                .info-grid { 
-                  display: grid; 
-                  grid-template-columns: 1fr 1fr; 
-                  gap: 15px; 
-                  margin: 20px 0; 
-                }
-                .checkbox-grid { 
-                  display: grid; 
-                  grid-template-columns: repeat(3, 1fr); 
-                  gap: 10px; 
-                  margin: 15px 0; 
-                }
-                .checkbox-item { 
-                  display: flex; 
-                  align-items: center; 
-                  gap: 8px; 
-                }
-                .status-badge { 
-                  padding: 4px 12px; 
-                  border-radius: 12px; 
-                  font-size: 12px; 
-                  font-weight: bold; 
-                }
-                .priority-badge { 
-                  padding: 2px 8px; 
-                  border-radius: 8px; 
-                  font-size: 11px; 
-                  font-weight: bold; 
-                }
-                .fold-line { 
-                  border-top: 2px dashed #666; 
-                  margin: 20px 0; 
-                  text-align: center; 
-                  padding-top: 10px; 
-                }
-                @media print {
-                  body { margin: 0; padding: 10px; }
-                  .tag { border: 2px solid #000; max-width: none; }
-                }
-              </style>
-            </head>
-            <body>
-              ${tagRef.current.innerHTML}
-            </body>
-          </html>
-        `);
-        printWindow.document.close();
-        printWindow.print();
-      }
+    if (typeof window === 'undefined' || !tagRef.current) return;
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Alteration Tag - ${job.jobNumber}</title>
+            <style>
+              body { 
+                font-family: Arial, sans-serif; 
+                margin: 0; 
+                padding: 20px; 
+                background: white;
+                color: black;
+                -webkit-print-color-adjust: exact;
+              }
+              .tag { 
+                border: 3px solid #333; 
+                padding: 20px; 
+                max-width: 600px; 
+                margin: 0 auto;
+                background: white;
+                page-break-inside: avoid;
+              }
+              .header { 
+                text-align: center; 
+                border-bottom: 2px solid #333; 
+                padding-bottom: 15px; 
+                margin-bottom: 20px; 
+              }
+              .qr-section { 
+                display: flex; 
+                justify-content: space-between; 
+                align-items: center; 
+                margin: 15px 0; 
+              }
+              .info-grid { 
+                display: grid; 
+                grid-template-columns: 1fr 1fr; 
+                gap: 15px; 
+                margin: 20px 0; 
+              }
+              .checkbox-grid { 
+                display: grid; 
+                grid-template-columns: repeat(3, 1fr); 
+                gap: 10px; 
+                margin: 15px 0; 
+              }
+              .checkbox-item { 
+                display: flex; 
+                align-items: center; 
+                gap: 8px; 
+              }
+              .status-badge { 
+                padding: 4px 12px; 
+                border-radius: 12px; 
+                font-size: 12px; 
+                font-weight: bold; 
+              }
+              .priority-badge { 
+                padding: 2px 8px; 
+                border-radius: 8px; 
+                font-size: 11px; 
+                font-weight: bold; 
+              }
+              .fold-line { 
+                border-top: 2px dashed #666; 
+                margin: 20px 0; 
+                text-align: center; 
+                padding-top: 10px; 
+              }
+              @media print {
+                body { margin: 0; padding: 10px; }
+                .tag { border: 2px solid #000; max-width: none; }
+              }
+            </style>
+          </head>
+          <body>
+            ${tagRef.current.innerHTML}
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.print();
     }
   };
 
   const handleDownloadPDF = async () => {
-    // This would typically use a library like jsPDF or html2pdf
-    // For now, we'll use the browser's print to PDF functionality
+    if (typeof window === 'undefined') return;
     handlePrint();
   };
 

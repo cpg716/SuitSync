@@ -1,4 +1,4 @@
-# SuitSync Lightspeed X-Series Integration Guide
+# Lightspeed Integration Guide
 
 This document provides a definitive guide to the Lightspeed X-Series integration within the SuitSync application. It details the architecture, authentication flow, and best practices implemented in our system.
 

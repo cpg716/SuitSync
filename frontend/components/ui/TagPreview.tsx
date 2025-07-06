@@ -170,7 +170,11 @@ export default function TagPreview({ job }: { job: any }) {
 
               {/* QR Code */}
               <div className="flex justify-center mb-6">
-                <QRCode value={qrValue} size={100} />
+                <QRCode
+                  value={qrValue}
+                  size={100}
+                  title="SuitSync QR Code"
+                />
               </div>
 
               {/* Store Info */}

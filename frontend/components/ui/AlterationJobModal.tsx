@@ -341,7 +341,7 @@ export function AlterationJobModal({
                     <SelectContent>
                       {(Array.isArray(parties) ? parties : []).map(party => (
                         <SelectItem key={party.id} value={party.id.toString()}>
-                          {party.name} - {format(new Date(party.eventDate), 'MMM d, yyyy')}
+                          {party.name} - {party.eventDate ? format(new Date(party.eventDate), 'MMM d, yyyy') : 'Date unknown'}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -349,7 +349,7 @@ export function AlterationJobModal({
                 </div>
               </div>
 
-              {selectedParty && selectedParty.members.length > 0 && (
+              {selectedParty && Array.isArray(selectedParty.members) && selectedParty.members.length > 0 && (
                 <div>
                   <Label htmlFor="partyMemberId">Party Member (Optional)</Label>
                   <Select

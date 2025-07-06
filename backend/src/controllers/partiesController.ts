@@ -5,8 +5,31 @@ import logger from '../utils/logger'; // TODO: migrate this as well
 import { createLightspeedClient, searchLightspeed } from '../lightspeedClient'; // TODO: migrate this as well
 import { getOrCreateSuitSyncPartyField, verifyAndGetCustomField, createOrUpdateCustomField, initialize as initializeWorkflow } from '../services/workflowService';
 import { processWebhook } from '../services/webhookService';
+import { Route, Get, Path, Tags } from 'tsoa';
 
 const prisma = new PrismaClient().$extends(withAccelerate());
+
+@Route('parties')
+@Tags('Parties')
+export class PartyController {
+  /** List all parties */
+  @Get('/')
+  public async list(): Promise<any[]> {
+    return prisma.party.findMany({
+      include: { members: true, _count: { select: { members: true } } },
+      orderBy: { eventDate: 'desc' },
+    });
+  }
+
+  /** Get party by ID */
+  @Get('{id}')
+  public async getById(@Path() id: number): Promise<any | null> {
+    return prisma.party.findUnique({
+      where: { id },
+      include: { members: true, _count: { select: { members: true } } },
+    });
+  }
+}
 
 export const listParties = async (req: Request, res: Response): Promise<void> => {
   try {

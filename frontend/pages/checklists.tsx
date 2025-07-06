@@ -75,7 +75,7 @@ export default function ChecklistWorkspace() {
           <h1 className="text-4xl font-extrabold text-white mb-2 drop-shadow-lg">Checklist & Task Workspace</h1>
           <p className="text-lg text-blue-100 mb-4">Track, manage, and complete all your work in one place.</p>
           <div className="flex items-center gap-3">
-            <UserAvatar user={user} size="lg" showName showRole />
+            <UserAvatar user={user} size="lg" showName />
             <span className="text-white font-medium">{user?.name}</span>
           </div>
         </div>

@@ -9,7 +9,8 @@ import { useEffect } from 'react';
 
 export default function MonitoringPage() {
   const { user, loading } = useAuth();
-  const router = useRouter();
+  const isClient = typeof window !== 'undefined';
+  const router = isClient ? useRouter() : null;
 
   useEffect(() => {
     if (!loading && (!user || user.role !== 'admin')) {

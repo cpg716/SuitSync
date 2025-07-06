@@ -67,7 +67,7 @@ export const deleteLightspeedUserSessions = async (req: Request, res: Response) 
 };
 
 // Debug: List all Lightspeed users for current session token or provided token
-export const debugListLightspeedUsers = async (req, res) => {
+export const debugListLightspeedUsers = async (req: Request, res: Response) => {
   try {
     // Allow token via query param or header for unauthenticated debug
     const token = req.query.token || req.headers['x-ls-access-token'] || req.session?.lsAccessToken;
@@ -82,8 +82,8 @@ export const debugListLightspeedUsers = async (req, res) => {
     });
     return res.json(response.data);
   } catch (err) {
-    const status = err.response?.status || 500;
-    const data = err.response?.data || err.message;
+    const status = (typeof err === 'object' && err && 'response' in err && (err as any).response?.status) ? (err as any).response.status : 500;
+    const data = (typeof err === 'object' && err && 'response' in err && (err as any).response?.data) ? (err as any).response.data : (err as any)?.message || String(err);
     return res.status(status).json({ error: 'Failed to fetch users', details: data });
   }
 }; 

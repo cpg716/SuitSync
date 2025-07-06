@@ -146,7 +146,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       toastSuccess('Sync in progress. Data will update shortly.');
       mutateSyncStatus();
     } catch (err) {
-      toastError(err.response?.data?.error || 'Sync failed');
+      let message = 'Sync failed';
+      if (err && typeof err === 'object' && 'response' in err && err.response && typeof err.response === 'object' && 'data' in err.response && err.response.data && typeof err.response.data === 'object' && 'error' in err.response.data) {
+        message = err.response.data.error || message;
+      }
+      toastError(message);
     }
   }, [toastSuccess, toastError, mutateSyncStatus]);
 

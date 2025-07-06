@@ -61,7 +61,7 @@ export const switchUser = async (req: Request, res: Response): Promise<void> => 
         req.session.userId = switchedUser.id;
         req.session.activeUserId = switchedUser.id;
         // Tokens and domain are already set by MultiUserSessionService.switchToUser
-        await new Promise((resolve, reject) => req.session.save(err => err ? reject(err) : resolve()));
+        await new Promise<void>((resolve, reject) => req.session.save(err => err ? reject(err) : resolve()));
         logger.info('[UserSwitch] Session fields updated and saved for user', { userId: switchedUser.id });
       }
       logger.info(`Successfully switched to user ${userId} (${targetUser.email})`);

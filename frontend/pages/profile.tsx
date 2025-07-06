@@ -37,7 +37,7 @@ export default function ProfilePage() {
   // PIN management state
   const [pinInfo, setPinInfo] = useState<any>(null);
   const [pinLoading, setPinLoading] = useState(false);
-  const [pinForm, setPinForm] = useState({ new: '', confirm: '' });
+  const [pinForm, setPinForm] = useState<{ current: string; new: string; confirm: string }>({ current: '', new: '', confirm: '' });
   const [pinSaving, setPinSaving] = useState(false);
   const [showPinModal, setShowPinModal] = useState(false);
 
@@ -263,7 +263,7 @@ export default function ProfilePage() {
               <div className="flex flex-col items-center mb-4 gap-2">
                 <div className="relative group">
                   {(photoPreview || user.photoUrl) ? (
-                    <img src={photoPreview || user.photoUrl} alt="Profile" style={{ width: 96, height: 'auto' }} className="w-24 h-auto rounded-full object-cover mb-2 border-4 border-primary shadow-md" />
+                    <img src={photoPreview || user.photoUrl} alt="Profile" style={{ width: 96, height: 96 }} className="w-24 h-24 rounded-full object-cover mb-2 border-4 border-primary shadow-md" />
                   ) : (
                     <div className="w-24 h-24 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center mb-2">
                       <UserCircle className="w-16 h-16 text-gray-400" />
@@ -463,7 +463,7 @@ export default function ProfilePage() {
       </Card>
 
       {/* PIN Setup/Change Modal */}
-      <Modal isOpen={showPinModal} onClose={() => setShowPinModal(false)} title={pinInfo?.hasPin ? "Change PIN" : "Set Up PIN"}>
+      <Modal open={showPinModal} onClose={() => setShowPinModal(false)} title={pinInfo?.hasPin ? "Change PIN" : "Set Up PIN"}>
         <form onSubmit={handleSetPin} className="space-y-4">
           <div className="text-sm text-gray-600 mb-4">
             {pinInfo?.hasPin
@@ -516,7 +516,7 @@ export default function ProfilePage() {
               variant="outline"
               onClick={() => {
                 setShowPinModal(false);
-                setPinForm({ new: '', confirm: '' });
+                setPinForm({ current: '', new: '', confirm: '' });
               }}
               className="flex-1"
               disabled={pinSaving}

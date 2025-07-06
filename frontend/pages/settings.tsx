@@ -4,7 +4,8 @@ import { useAuth } from '../src/AuthContext';
 import { Skeleton } from '../components/ui/Skeleton';
 
 export default function SettingsRedirect() {
-  const router = useRouter();
+  const isClient = typeof window !== 'undefined';
+  const router = isClient ? useRouter() : null;
   const { user, loading } = useAuth();
 
   useEffect(() => {

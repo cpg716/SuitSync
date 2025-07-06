@@ -6,7 +6,7 @@ import { Modal } from './Modal';
 import { TailorSelect } from './UserSelect';
 import { api } from '../../lib/apiClient';
 import { format } from 'date-fns';
-import type { Party } from '../../src/types/parties';
+import type { Party, TailorsResponse } from '../../src/types/parties';
 
 // TypeScript interfaces
 interface Alteration {
@@ -69,7 +69,7 @@ export const AlterationModal = function({ open, onClose, onSubmit, alteration, l
   const [error, setError] = useState<string | null>(null);
   const [submitLoading, setSubmitLoading] = useState(false);
 
-  const [saleLineItems, setSaleLineItems] = useState([]);
+  const [saleLineItems, setSaleLineItems] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
 
   // Fetch required data on mount
@@ -79,7 +79,7 @@ export const AlterationModal = function({ open, onClose, onSubmit, alteration, l
         const [partiesRes, customersRes, tailorsRes] = await Promise.all([
           api.get('/api/parties'),
           api.get('/api/customers'),
-          api.get('/api/users')
+          api.get<TailorsResponse>('/api/users')
         ]);
 
         setParties(Array.isArray(partiesRes.data) ? partiesRes.data : []);

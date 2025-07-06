@@ -295,3 +295,24 @@ https://your-domain.com/monitoring
 ```
 
 This implementation provides a production-ready foundation for SuitSync with enterprise-grade monitoring, security, and performance capabilities.
+
+## Backend Dashboard
+- A comprehensive backend dashboard is now available at the root path (`/`) and at `/api/admin/dashboard` (HTML) and `/api/admin/dashboard.json` (JSON API).
+- The dashboard displays:
+  - Database health and table list
+  - Redis health and info
+  - Lightspeed integration status
+  - Job scheduler status
+  - App/server info (uptime, memory, node version, etc.)
+- The JSON API endpoint allows the frontend to consume and display backend health data.
+
+## Session, Cookie, and CORS Fixes
+- Session cookies are now set to `secure: false` in development (Docker/local), and `secure: true` in production (HTTPS).
+- CORS is configured to allow credentials and uses `CORS_ORIGIN` or defaults to `http://localhost:3001`.
+- The frontend API client always sends credentials with requests for session-based authentication.
+
+## Prisma Migrations
+- Migrations must be run in Docker before backend starts to ensure all tables (including ApiToken) exist.
+
+## Removed
+- The old root message at `/` has been replaced by the backend dashboard.

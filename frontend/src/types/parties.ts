@@ -16,4 +16,19 @@ export interface PartyMember {
   customerId: number;
   role?: string;
   measurements?: any;
+}
+
+export interface TailorsResponse {
+  users?: Array<{
+    id: string;
+    name: string;
+    role: string;
+    // Add other fields as needed
+  }>;
+  lightspeedUsers?: Array<{
+    id: string;
+    name: string;
+    role: string;
+    // Add other fields as needed
+  }>;
 } 

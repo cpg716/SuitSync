@@ -91,7 +91,8 @@ const fetcher = (url: string): Promise<{ parties: Party[], lightspeedGroups?: an
 export default function PartiesList() {
   const { data: partiesData, error, isLoading, mutate } = useSWR('/api/parties', fetcher);
   const { data: customersData } = useSWR('/api/customers', fetcher);
-  const router = useRouter();
+  const isClient = typeof window !== 'undefined';
+  const router = isClient ? useRouter() : null;
 
   const parties = partiesData && typeof partiesData === 'object' && 'parties' in partiesData ? partiesData.parties : [];
   const lightspeedGroups = partiesData && typeof partiesData === 'object' && 'lightspeedGroups' in partiesData ? partiesData.lightspeedGroups : [];
@@ -133,7 +134,11 @@ export default function PartiesList() {
         router.push(`/parties/${newParty.id}`);
       }
     } catch (err) {
-      toastError(err.response?.data?.error || 'Failed to save party');
+      let message = 'Failed to save party';
+      if (err && typeof err === 'object' && 'response' in err && err.response && typeof err.response === 'object' && 'data' in err.response && err.response.data && typeof err.response.data === 'object' && 'error' in err.response.data) {
+        message = err.response.data.error || message;
+      }
+      toastError(message);
     }
   };
 

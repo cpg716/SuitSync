@@ -180,7 +180,10 @@ export default function CustomerProfilePage() {
   const { id } = router.query;
   const { success, error: toastError } = useToast();
   
-  const { data: customer, error: customerError, mutate } = useSWR<Customer>(id ? `/api/customers/${id}` : null, fetcher);
+  const { data: customer, error: customerError, mutate } = useSWR<Customer>(
+    id ? `/api/customers/${id}` : null,
+    fetcher as (url: string) => Promise<Customer>
+  );
 
   const [isEditModalOpen, setEditModalOpen] = useState(false);
 

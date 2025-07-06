@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
+import { fetcher } from '@/lib/apiClient';
 
 const defaultMeasurements = {
   chest: '', waistJacket: '', hips: '', shoulderWidth: '', sleeveLength: '', jacketLength: '', overarm: '', neck: '',

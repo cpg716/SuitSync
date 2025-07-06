@@ -8,6 +8,7 @@ import { processWebhook } from '../services/webhookService';
 import { executeWorkflowTriggers } from '../services/appointmentWorkflowService';
 import { scheduleAppointmentReminders } from '../services/notificationSchedulingService';
 import { lightspeedCustomFieldsService } from '../services/lightspeedCustomFieldsService';
+import { Route, Get, Post, Body, Path, SuccessResponse, Tags, Controller } from 'tsoa';
 
 const prisma = new PrismaClient().$extends(withAccelerate());
 
@@ -62,6 +63,31 @@ const syncAppointmentsToLightspeed = async (req: any, partyId: number) => {
     logger.warn(`Could not sync appointments to Lightspeed for party ${partyId}:`, error.message);
   }
 };
+
+// TSOA-compliant controller for OpenAPI
+@Route('appointments')
+@Tags('Appointments')
+export class AppointmentController extends Controller {
+  /** List all appointments */
+  @Get('/')
+  public async list(): Promise<any[]> {
+    return prisma.appointment.findMany();
+  }
+
+  /** Get appointment by ID */
+  @Get('{id}')
+  public async getById(@Path() id: number): Promise<any | null> {
+    return prisma.appointment.findUnique({ where: { id } });
+  }
+
+  /** Create a new appointment */
+  @SuccessResponse('201', 'Created')
+  @Post('/')
+  public async create(@Body() dto: any): Promise<any> {
+    this.setStatus(201);
+    return prisma.appointment.create({ data: dto });
+  }
+}
 
 export const listAppointments = async (req: Request, res: Response): Promise<void> => {
   try {

@@ -3,7 +3,8 @@ import { useRouter } from 'next/router';
 
 // /tasks is unified with /checklists workspace
 export default function TasksRedirect() {
-  const router = useRouter();
+  const isClient = typeof window !== 'undefined';
+  const router = isClient ? useRouter() : null;
   useEffect(() => {
     router.replace('/checklists');
   }, [router]);

@@ -10,7 +10,8 @@
     "type-check": "tsc --noEmit",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "gen:openapi-types": "npx openapi-typescript ../backend/src/docs/swagger.json --output src/types/openapi.d.ts"
   },
   "dependencies": {
     "@fullcalendar/core": "6.1.17",
@@ -50,13 +51,18 @@
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@types/node": "24.0.1",
+    "@types/react": "18.2.62",
     "autoprefixer": "10.4.21",
     "eslint": "^9.30.0",
     "eslint-config-next": "^15.3.4",
     "framer-motion": "10.12.4",
     "jest": "^30.0.3",
     "jest-environment-jsdom": "^30.0.2",
+    "openapi-typescript": "^7.8.0",
     "postcss": "8.5.5",
     "tailwindcss": "3.4.17"
+  },
+  "resolutions": {
+    "@types/react": "18.2.62"
   }
 }

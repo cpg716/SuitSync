@@ -302,4 +302,31 @@ docker-compose -f docker-compose.dev.yml exec backend npm run prisma:studio
 docker stats
 ```
 
+## Running SuitSync in Docker
+
+- Use `docker-compose.yml` for production-like environments.
+- Use `docker-compose.dev.yml` for hot-reloading local development.
+
+## Backend Dashboard
+- HTML: `http://localhost:3000/` or `/api/admin/dashboard`
+- JSON: `/api/admin/dashboard.json`
+- Shows health/status for DB, Redis, Lightspeed, jobs, and app info.
+
+## Session, Cookie, and CORS
+- Session cookies are `secure: false` in dev, `secure: true` in production.
+- CORS allows credentials and uses `CORS_ORIGIN` (default: `http://localhost:3001`).
+- Frontend API client must send `credentials: 'include'` on all requests.
+
+## Prisma Migrations
+- After building containers, run:
+  ```sh
+  docker-compose exec backend pnpm prisma migrate deploy
+  ```
+- This ensures all tables (including `ApiToken`) exist before backend starts.
+
+## Troubleshooting
+- Use the backend dashboard for live health checks.
+- For session/auth issues, check CORS, cookie, and frontend credentials settings.
+- For DB errors, ensure migrations are applied and `DATABASE_URL` matches your db service.
+
 For more information, see the main [README.md](../README.md) and [DEPLOYMENT_GUIDE.md](../DEPLOYMENT_GUIDE.md).

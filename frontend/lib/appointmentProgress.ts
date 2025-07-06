@@ -113,7 +113,17 @@ export function getProgressStatus(completedStages: string[] = [], scheduledStage
 export async function getCustomerProgress(customerId: number): Promise<AppointmentProgress | null> {
   try {
     const response = await api.get(`/api/customers/${customerId}/progress`);
-    return response.data;
+    if (
+      response.data &&
+      typeof response.data === 'object' &&
+      'currentStage' in response.data &&
+      'completedStages' in response.data &&
+      'isComplete' in response.data &&
+      'appointments' in response.data
+    ) {
+      return response.data as AppointmentProgress;
+    }
+    return null;
   } catch (error) {
     console.error('Error fetching customer progress:', error);
     return null;
@@ -126,7 +136,17 @@ export async function getCustomerProgress(customerId: number): Promise<Appointme
 export async function getPartyMemberProgress(partyMemberId: number): Promise<AppointmentProgress | null> {
   try {
     const response = await api.get(`/api/party-members/${partyMemberId}/progress`);
-    return response.data;
+    if (
+      response.data &&
+      typeof response.data === 'object' &&
+      'currentStage' in response.data &&
+      'completedStages' in response.data &&
+      'isComplete' in response.data &&
+      'appointments' in response.data
+    ) {
+      return response.data as AppointmentProgress;
+    }
+    return null;
   } catch (error) {
     console.error('Error fetching party member progress:', error);
     return null;

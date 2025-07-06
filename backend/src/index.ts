@@ -10,8 +10,10 @@ import { withAccelerate } from '@prisma/extension-accelerate';
 import { securityHeaders, rateLimits, speedLimiter, requestSizeLimit, sessionSizeLimit, headerSizeMonitor } from './middleware/security';
 import { sessionSizeManager } from './middleware/sessionManager';
 import { scheduledJobService } from './services/scheduledJobService';
-import Redis from 'redis';
-import connectRedis from 'connect-redis';
+import { createClient } from 'redis';
+import RedisStore from 'connect-redis';
+import { RegisterRoutes } from './routes/initRoutes'; // ensure this file exists!
+import { adminDashboard } from './controllers/adminController';
 
 // Load environment variables and validate
 // (dotenv/config is loaded in config.ts)
@@ -35,8 +37,9 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // CORS
+const isProd = process.env.NODE_ENV === 'production';
 const corsOptions = {
-  origin: config.FRONTEND_URL,
+  origin: process.env.CORS_ORIGIN || 'http://localhost:3001',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -46,9 +49,9 @@ app.use(cors(corsOptions));
 
 console.log('CORS origin:', corsOptions.origin);
 console.log('Session cookie config:', {
-  secure: process.env.NODE_ENV === 'production',
+  secure: false,
   sameSite: 'lax',
-  maxAge: 1000 * 60 * 60 * 24 * 7
+  maxAge: 7 * 24 * 60 * 60 * 1000
 });
 
 // Special middleware for webhooks to capture raw body for signature verification
@@ -65,129 +68,122 @@ app.use(cookieParser());
 
 // Session typing is handled via src/types/express-session/index.d.ts
 // Enhanced session configuration with better persistence and memory management
-let sessionStore;
-try {
-  const RedisStore = connectRedis(session);
-  const redisClient = Redis.createClient({
-    url: process.env.REDIS_URL || 'redis://redis:6379',
-    legacyMode: true,
+async function bootstrap() {
+  const redisClient = createClient({ url: process.env.REDIS_URL || 'redis://redis:6379' });
+  redisClient.on('error', console.error);
+  await redisClient.connect();
+  const sessionStore = new RedisStore({
+    client: redisClient,
+    prefix: 'sess:',
   });
-  redisClient.connect().catch(console.error);
-  sessionStore = new RedisStore({ client: redisClient });
-  console.log('Using Redis for session storage');
-} catch (err) {
-  // Fallback to file store for local dev if Redis is unavailable
-  sessionStore = process.env.NODE_ENV === 'development'
-    ? new (require('session-file-store')(session))({
-        path: '/app/sessions',
-        ttl: 60 * 60 * 24 * 7,
-        retries: 3,
-        reapInterval: 60 * 60,
-        logFn: () => {},
-      })
-    : undefined;
-  if (sessionStore) {
-    console.log('Using file store for session storage (development fallback)');
-  } else {
-    console.warn('No session store configured!');
-  }
-}
-app.use(
-  session({
-    secret: config.SESSION_SECRET,
-    resave: false,
-    saveUninitialized: false,
-    rolling: true, // Reset expiration on activity
-    cookie: {
-      secure: process.env.NODE_ENV === 'production',
-      httpOnly: true,
-      sameSite: 'lax',
-      maxAge: 1000 * 60 * 60 * 24 * 7, // 1 week
-    },
-    store: sessionStore,
-  })
-);
+  app.use(
+    session({
+      store: sessionStore,
+      secret: process.env.SESSION_SECRET!,
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        secure: false,
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      },
+    })
+  );
 
-// Add session size limiting to prevent 431 errors
-app.use(sessionSizeLimit());
-app.use(sessionSizeManager());
-
-// Register all API routes
-import { initRoutes } from './routes/initRoutes';
-initRoutes(app);
-
-// Serve uploads
-app.use('/uploads', express.static(path.join(__dirname, '../../public/uploads')));
-// Serve static frontend (after API routes)
-app.use(express.static(path.join(__dirname, '../../frontend/out')));
-
-// Healthcheck
-app.get('/api/health', (_req, res) => {
-  res.status(200).json({ status: 'ok' });
-});
-
-app.get('/api/auth/health', (req, res) => {
-  res.json({
-    session: req.session,
-    user: req.session?.lightspeedUser || null
+  // Log incoming Cookie header and parsed session for every request
+  app.use((req, res, next) => {
+    console.log('→ Incoming request:', req.method, req.url);
+    console.log('   Cookie header:', req.headers.cookie);
+    console.log('   Parsed session:', JSON.stringify(req.session, null, 2));
+    next();
   });
-});
 
-// Global error handler
-app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  // Error already logged by errorLogger middleware
-  const statusCode = err.statusCode || 500;
-  const message = process.env.NODE_ENV === 'production'
-    ? 'Internal Server Error'
-    : err.message || 'Internal Server Error';
+  // Add session size limiting to prevent 431 errors
+  app.use(sessionSizeLimit());
+  app.use(sessionSizeManager());
 
-  res.status(statusCode).json({
-    error: message,
-    ...(process.env.NODE_ENV !== 'production' && { stack: err.stack })
+  // Register all API routes
+  RegisterRoutes(app);
+
+  // Serve uploads
+  app.use('/uploads', express.static(path.join(__dirname, '../../public/uploads')));
+  // Serve static frontend (after API routes)
+  app.use(express.static(path.join(__dirname, '../../frontend/out')));
+
+  // Healthcheck
+  app.get('/api/health', (_req, res) => {
+    res.status(200).json({ status: 'ok' });
   });
-});
 
-const PORT = config.PORT;
-const server = app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
+  app.get('/api/auth/health', (req, res) => {
+    res.json({
+      session: req.session,
+      user: req.session?.lightspeedUser || null
+    });
+  });
 
-  // Initialize scheduled jobs after server starts
-  try {
-    scheduledJobService.initialize();
-    console.log('Scheduled jobs initialized successfully');
-  } catch (error) {
-    console.error('Error initializing scheduled jobs:', error);
-  }
-});
+  // Global error handler
+  app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    // Error already logged by errorLogger middleware
+    const statusCode = err.statusCode || 500;
+    const message = process.env.NODE_ENV === 'production'
+      ? 'Internal Server Error'
+      : err.message || 'Internal Server Error';
 
-const shutdown = async (signal: string) => {
-  console.log(`Received ${signal}. Shutting down gracefully...`);
+    res.status(statusCode).json({
+      error: message,
+      ...(process.env.NODE_ENV !== 'production' && { stack: err.stack })
+    });
+  });
 
-  // Stop scheduled jobs first
-  try {
-    scheduledJobService.stopAll();
-    console.log('Scheduled jobs stopped');
-  } catch (error) {
-    console.error('Error stopping scheduled jobs:', error);
-  }
+  const PORT = config.PORT;
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server listening on port ${PORT}`);
 
-  server.close(async (err?: Error) => {
-    if (err) {
-      console.error('Error during server shutdown:', err);
-      process.exit(1);
+    // Initialize scheduled jobs after server starts
+    try {
+      scheduledJobService.initialize();
+      console.log('Scheduled jobs initialized successfully');
+    } catch (error) {
+      console.error('Error initializing scheduled jobs:', error);
     }
-    // Disconnect Prisma
-    await prisma.$disconnect();
-    console.log('Server closed. Prisma disconnected.');
-    process.exit(0);
   });
-  setTimeout(() => {
-    console.error('Could not close connections in time, forcefully shutting down');
-    process.exit(1);
-  }, 10000);
-};
 
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
+  const shutdown = async (signal: string) => {
+    console.log(`Received ${signal}. Shutting down gracefully...`);
+
+    // Stop scheduled jobs first
+    try {
+      scheduledJobService.stopAll();
+      console.log('Scheduled jobs stopped');
+    } catch (error) {
+      console.error('Error stopping scheduled jobs:', error);
+    }
+
+    server.close(async (err?: Error) => {
+      if (err) {
+        console.error('Error during server shutdown:', err);
+        process.exit(1);
+      }
+      // Disconnect Prisma
+      await prisma.$disconnect();
+      console.log('Server closed. Prisma disconnected.');
+      process.exit(0);
+    });
+    setTimeout(() => {
+      console.error('Could not close connections in time, forcefully shutting down');
+      process.exit(1);
+    }, 10000);
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+}
+
+bootstrap().catch((err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
+});
 
 export default app; 

@@ -142,7 +142,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <span className="text-sm text-gray-500">Assigned to:</span>
-              <UserAvatar user={assignedTo} size="sm" showName showRole />
+              <UserAvatar user={assignedTo} size="sm" showName />
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm text-gray-500">By:</span>

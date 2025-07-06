@@ -1,57 +1,45 @@
-# Node modules
+# Dependency directories
 node_modules/
-
-# Environment variables
-.env
-.env.*
-
-# OS/system files
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-logs/
-
-# Database
-*.sqlite
-*.db
+.pnpm-store/
 
 # Build output
 .next/
 dist/
-build/
+out/
+coverage/
 
-# Backups and archives
-*.zip
-*.tar.gz
-*.bak
-*.backup
+# Logs
+*.log
+
+# TypeScript
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.*
+
+# Lockfiles
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# OS files
+.DS_Store
+Thumbs.db
 
 # Misc
-coverage/
-.vscode/
-.cursor/
+*.swp
+*.swo
 
-# Ignore session and cookies
-cookies.txt
-sessions.sqlite
-backend/sessions/
-sessions/
-
-# Ignore local backups
-suitsync_full_backup_*
-
-# Ignore frontend build artifacts
+# Ignore backend and frontend build/deps explicitly
+backend/node_modules/
+backend/dist/
+backend/.env
+backend/pnpm-lock.yaml
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/pnpm-lock.yaml
 frontend/.next/
 frontend/out/
-frontend 2/.next/
-frontend 2/out/
-
-# Ignore server build artifacts
-server/.next/
-server/out/
-
-# Ignore test output
-*.test.js
-*.spec.js
+frontend/.pnpm-store/

@@ -50,7 +50,10 @@ export function LightspeedStatus() {
       toastSuccess(`Sync started for ${resource}. Status will update shortly.`);
       mutate();
     } catch (err) {
-      const message = err.response?.data?.message || `Failed to start sync for ${resource}.`;
+      let message = `Failed to start sync for ${resource}.`;
+      if (err && typeof err === 'object' && 'response' in err && err.response && typeof err.response === 'object' && 'data' in err.response && err.response.data && typeof err.response.data === 'object' && 'message' in err.response.data && typeof err.response.data.message === 'string') {
+        message = err.response.data.message || message;
+      }
       toastError(message);
     }
   };
@@ -61,7 +64,11 @@ export function LightspeedStatus() {
       await mutate(); // Refresh the health data
       toastSuccess('Health check completed!');
     } catch (err) {
-      toastError('Failed to perform health check');
+      let message = 'Failed to perform health check';
+      if (err && typeof err === 'object' && 'response' in err && err.response && typeof err.response === 'object' && 'data' in err.response && err.response.data && typeof err.response.data === 'object' && 'message' in err.response.data && typeof err.response.data.message === 'string') {
+        message = err.response.data.message || message;
+      }
+      toastError(message);
     }
   };
 

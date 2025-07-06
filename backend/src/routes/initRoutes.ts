@@ -51,3 +51,6 @@ export function initRoutes(app: Express) {
   app.use('/api/checklists', checklistsRoutes);
   app.use('/api/tasks', tasksRoutes);
 }
+
+// TSOA expects RegisterRoutes export
+export const RegisterRoutes = initRoutes;

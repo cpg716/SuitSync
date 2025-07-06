@@ -16,7 +16,9 @@ import {
   getTaskTypes,
   getNotificationSettings,
   updateNotificationSettings,
-  getScheduledJobsStatus
+  getScheduledJobsStatus,
+  adminDashboard,
+  adminDashboardJson
 } from '../controllers/adminController';
 import { authMiddleware, requireAdmin } from '../middleware/auth';
 import { asyncHandler } from '../utils/asyncHandler';
@@ -51,5 +53,8 @@ router.put('/notification-settings', asyncHandler(updateNotificationSettings));
 
 // Scheduled jobs status
 router.get('/scheduled-jobs', asyncHandler(getScheduledJobsStatus));
+
+router.get('/dashboard', adminDashboard);
+router.get('/dashboard.json', adminDashboardJson);
 
 export default router;

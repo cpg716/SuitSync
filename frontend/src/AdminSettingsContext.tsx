@@ -67,7 +67,11 @@ export const AdminSettingsProvider = ({ children }: { children: ReactNode }) => 
             setSettings({ ...defaultSettings, ...(typeof res.data === 'object' && res.data !== null ? res.data : {}) });
             setOriginal({ ...defaultSettings, ...(typeof res.data === 'object' && res.data !== null ? res.data : {}) });
         } catch (err) {
-            error(err.response?.data?.error || 'Failed to fetch settings');
+            let errorMsg = 'Failed to fetch settings';
+            if (err && typeof err === 'object' && 'response' in err && err.response && typeof err.response === 'object' && 'data' in err.response && err.response.data && typeof err.response.data === 'object' && 'error' in err.response.data) {
+                errorMsg = err.response.data.error || errorMsg;
+            }
+            error(errorMsg);
         } finally {
             setLoading(false);
         }
@@ -91,7 +95,11 @@ export const AdminSettingsProvider = ({ children }: { children: ReactNode }) => 
             setOriginal({ ...defaultSettings, ...(typeof res.data === 'object' && res.data !== null ? res.data : {}) });
             success('Settings saved!');
         } catch (err) {
-            error(err.response?.data?.error || 'Failed to save settings');
+            let errorMsg = 'Failed to save settings';
+            if (err && typeof err === 'object' && 'response' in err && err.response && typeof err.response === 'object' && 'data' in err.response && err.response.data && typeof err.response.data === 'object' && 'error' in err.response.data) {
+                errorMsg = err.response.data.error || errorMsg;
+            }
+            error(errorMsg);
         } finally {
             setLoading(false);
         }

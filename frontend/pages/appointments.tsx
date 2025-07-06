@@ -138,10 +138,10 @@ export default function AppointmentsPage() {
   });
 
   // List view logic
-  const filtered = (Array.isArray(appointments) ? appointments : []).filter(a =>
+  const filtered = (Array.isArray(appointments) ? appointments : []).filter((a: any) =>
     (a.party?.name || '').toLowerCase().includes(search.toLowerCase()) ||
     (a.tailor?.name || '').toLowerCase().includes(search.toLowerCase())
-  ).filter(a =>
+  ).filter((a: any) =>
     (!statusFilter || a.status === statusFilter) &&
     (!typeFilter || a.type === typeFilter)
   );
@@ -225,7 +225,7 @@ export default function AppointmentsPage() {
     try {
       await api.delete(`/api/appointments/${deleteAppt.id}`);
       success('Appointment deleted successfully');
-      mutate(appointments.filter(a => a.id !== deleteAppt.id));
+      mutate(appointments.filter((a: any) => a.id !== deleteAppt.id));
       setDeleteAppt(null);
     } catch (err) {
       toastError('Error deleting appointment: ' + err.message);
@@ -295,12 +295,12 @@ export default function AppointmentsPage() {
               type="text"
               placeholder="Search appointments..."
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
               className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-gray-800 text-black dark:text-white"
             />
             <select
               value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value)}
+              onChange={(e: any) => setStatusFilter(e.target.value)}
               className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-gray-800 text-black dark:text-white"
             >
               <option value="">All Status</option>
@@ -310,7 +310,7 @@ export default function AppointmentsPage() {
             </select>
             <select
               value={typeFilter}
-              onChange={e => setTypeFilter(e.target.value)}
+              onChange={(e: any) => setTypeFilter(e.target.value)}
               className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-gray-800 text-black dark:text-white"
             >
               <option value="">All Types</option>
@@ -375,7 +375,7 @@ export default function AppointmentsPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                        {paginated.map(appt => (
+                        {paginated.map((appt: any) => (
                           <tr key={appt.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                             <td className="px-6 py-4">
                               <div className="font-medium text-gray-900 dark:text-gray-100">
@@ -441,7 +441,7 @@ export default function AppointmentsPage() {
                   {/* Mobile Card View */}
                   <div className="lg:hidden">
                     <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                      {paginated.map(appt => (
+                      {paginated.map((appt: any) => (
                         <div key={appt.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                           <div className="flex items-start justify-between mb-3">
                             <div className="flex-1 min-w-0">

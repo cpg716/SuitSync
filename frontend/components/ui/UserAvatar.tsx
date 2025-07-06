@@ -80,6 +80,9 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
           src={user.photoUrl}
           alt={user.name}
           className="h-full w-full object-cover"
+          style={{ width: '100%', height: '100%' }}
+          width={sizeConfig.avatar.includes('w-16') ? 64 : sizeConfig.avatar.includes('w-12') ? 48 : sizeConfig.avatar.includes('w-10') ? 40 : sizeConfig.avatar.includes('w-8') ? 32 : 24}
+          height={sizeConfig.avatar.includes('h-16') ? 64 : sizeConfig.avatar.includes('h-12') ? 48 : sizeConfig.avatar.includes('h-10') ? 40 : sizeConfig.avatar.includes('h-8') ? 32 : 24}
           onError={(e) => {
             // Fallback to icon if image fails to load
             e.currentTarget.style.display = 'none';

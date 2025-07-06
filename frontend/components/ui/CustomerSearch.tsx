@@ -4,6 +4,7 @@ import { Input } from './Input';
 import { Button } from './Button';
 import { Badge } from './Badge';
 import { UserAvatar } from './UserAvatar';
+import { cn } from '@/lib/utils';
 
 interface Customer {
   id: number;

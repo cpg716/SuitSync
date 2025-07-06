@@ -2,7 +2,8 @@ import AlterationTagEditor from '../components/AlterationTagEditor';
 import { useRouter } from 'next/router';
 
 export default function CreateAlterationPage() {
-  const router = useRouter();
+  const isClient = typeof window !== 'undefined';
+  const router = isClient ? useRouter() : null;
 
   return (
     <div className="p-6">

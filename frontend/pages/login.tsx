@@ -10,7 +10,8 @@ import { api } from '../lib/apiClient';
 
 export default function LoginPage() {
   const { user, loading: authLoading } = useAuth();
-  const router = useRouter();
+  const isClient = typeof window !== 'undefined';
+  const router = isClient ? useRouter() : null;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const { error: toastError, success } = useToast();
@@ -132,7 +133,7 @@ export default function LoginPage() {
             width={200}
             height={80}
             className="mb-2 drop-shadow-lg"
-            style={{ width: 200, height: 'auto' }}
+            style={{ width: 200, height: 80 }}
             priority
           />
           <Image
@@ -141,7 +142,7 @@ export default function LoginPage() {
             width={120}
             height={40}
             className="mb-2"
-            style={{ width: 120, height: 'auto' }}
+            style={{ width: 120, height: 40 }}
           />
           <h1 className="text-2xl font-bold mb-2 text-primary">Sign in to SuitSync</h1>
           <p className="text-sm text-gray-600 text-center">

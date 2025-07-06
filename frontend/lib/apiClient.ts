@@ -22,6 +22,7 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
   if (token) {
+    if (!config.headers) config.headers = {};
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
@@ -96,7 +97,6 @@ export const swrConfig = {
     }
     return true;
   },
-  errorRetryCount: 2, // Only retry twice for server errors
   onError: (error: any) => {
     // Global error handler for SWR - suppress 401 errors as they're expected when not authenticated
     if (error?.response?.status === 401) {
@@ -146,15 +146,17 @@ export const getApiUrl = (path: string): string => {
 };
 
 // Helper function for fetch calls with proper credentials
-export const apiFetch = (path: string, options: RequestInit = {}): Promise<Response> => {
-  return fetch(getApiUrl(path), {
+export async function apiFetch(path: string, options: Record<string, any> = {}) {
+  const res = await fetch(`http://localhost:3000${path}`, {
+    ...options,
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...options.headers,
+      ...(options.headers || {}),
     },
-    ...options,
   });
-};
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
 
 export { api };

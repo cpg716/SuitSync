@@ -3,9 +3,21 @@ import type { ScheduledTask } from 'node-cron';
 import logger from '../utils/logger';
 import { processPendingNotifications } from './notificationSchedulingService';
 
+/**
+ * Detailed info for each scheduled job.
+ */
+export interface JobInfo {
+  name: string;
+  running: boolean;
+  status: string;           // e.g. 'idle' | 'in-progress' | 'error'
+  lastRun: Date | null;     // timestamp of the last execution
+  error: string | null;     // error message if the job failed
+}
+
 export class ScheduledJobService {
   private static instance: ScheduledJobService;
   private jobs: Map<string, ScheduledTask> = new Map();
+  private jobMeta: Map<string, { lastRun: Date | null; status: string; error: string | null }> = new Map();
 
   private constructor() {}
 
@@ -59,9 +71,34 @@ export class ScheduledJobService {
     if (this.jobs.has(name)) {
       logger.warn(`Job ${name} already exists, stopping previous instance`);
       this.jobs.get(name)?.stop();
+      this.jobMeta.delete(name);
     }
 
-    const job = cron.schedule(schedule, task, {
+    this.jobMeta.set(name, { lastRun: null, status: 'idle', error: null });
+
+    const wrappedTask = async () => {
+      const meta = this.jobMeta.get(name);
+      if (meta) {
+        meta.status = 'in-progress';
+        meta.error = null;
+      }
+      try {
+        await task();
+        if (meta) {
+          meta.lastRun = new Date();
+          meta.status = 'idle';
+        }
+      } catch (error: any) {
+        if (meta) {
+          meta.lastRun = new Date();
+          meta.status = 'error';
+          meta.error = error && error.message ? error.message : String(error);
+        }
+        logger.error(`Error in scheduled job ${name}:`, error);
+      }
+    };
+
+    const job = cron.schedule(schedule, wrappedTask, {
       timezone: 'America/New_York' // Adjust timezone as needed
     });
 
@@ -77,6 +114,7 @@ export class ScheduledJobService {
     if (job) {
       job.stop();
       this.jobs.delete(name);
+      this.jobMeta.delete(name);
       logger.info(`Stopped job: ${name}`);
     }
   }
@@ -87,20 +125,29 @@ export class ScheduledJobService {
   public stopAll(): void {
     for (const [name, job] of this.jobs) {
       job.stop();
+      this.jobs.delete(name);
+      this.jobMeta.delete(name);
       logger.info(`Stopped job: ${name}`);
     }
     this.jobs.clear();
+    this.jobMeta.clear();
     logger.info('Stopped all scheduled jobs');
   }
 
   /**
    * Get job status
    */
-  public getJobStatus(): { name: string; running: boolean }[] {
-    return Array.from(this.jobs.entries()).map(([name, job]) => ({
-      name,
-      running: job.getStatus() === 'scheduled'
-    }));
+  public getJobStatus(): JobInfo[] {
+    return Array.from(this.jobs.entries()).map(([name, job]) => {
+      const meta = this.jobMeta.get(name);
+      return {
+        name,
+        running: job.getStatus() === 'scheduled',
+        status: meta?.status || 'idle',
+        lastRun: meta?.lastRun || null,
+        error: meta?.error || null,
+      };
+    });
   }
 
   /**

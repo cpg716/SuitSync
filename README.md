@@ -5,6 +5,9 @@
 **SuitSync** is a production-ready, full-stack retail management system specifically designed for men's suit shops. It provides seamless integration with **Lightspeed X-Series** retail platform, featuring QR-based alteration tracking, party management, appointment scheduling, and comprehensive analytics.
 
 ## 🚀 Recent Updates (v2.0)
+- ✅ **Backend Dashboard** — Real-time health/status dashboard at `/`, `/api/admin/dashboard`, and `/api/admin/dashboard.json` (HTML & JSON)
+- ✅ **Session/Cookie/CORS Fixes** — Secure, persistent sessions in Docker/local and production
+- ✅ **Prisma Migration Requirement** — Migrations must be run in Docker before backend starts
 - ✅ **Fixed Lightspeed X-Series Integration** - Corrected API endpoints and OAuth flow
 - ✅ **Enhanced Session Management** - Prevents 431 header size errors
 - ✅ **Added Circuit Breaker Pattern** - Improved API reliability
@@ -15,11 +18,22 @@
 - [Technology Stack](#technology-stack)
 - [Application Architecture](#application-architecture)
 - [Key Features](#key-features)
+- [Backend Dashboard & Monitoring](#backend-dashboard--monitoring)
 - [Local Development Setup](#local-development-setup)
 - [Docker Usage](#docker-usage)
 - [AI-Augmented Workflow](#ai-augmented-workflow)
 - [Scripts and Tooling](#scripts-and-tooling)
 - [Contributing](#contributing)
+- [OpenAPI-Driven Type Safety for Frontend](#openapi-driven-type-safety-for-frontend)
+
+---
+
+## Backend Dashboard & Monitoring
+
+- **HTML Dashboard:** `GET /` or `GET /api/admin/dashboard`
+- **JSON API:** `GET /api/admin/dashboard.json`
+- Shows health/status for DB, Redis, Lightspeed, job scheduler, and app info.
+- Use the JSON API for frontend or external monitoring integrations.
 
 ---
 
@@ -74,12 +88,20 @@ The project is organized as a monorepo to streamline development and deployment.
 
 ## Key Features
 
-- **Lightspeed Integration**: Bidirectional data sync for Customers, Products, and Sales. Automatically creates and manages custom fields in Lightspeed.
-- **Party & Appointment Management**: Group customers into parties (e.g., for a wedding) and schedule appointments like fittings and pickups.
-- **Alteration Job Tracking**: Create and manage alteration jobs linked to specific sale line items, assign them to tailors, and track their status.
-- **Automated Notifications**: Utilizes Twilio and SendGrid for sending SMS and email reminders for appointments or job status updates.
-- **Authentication**: Secure staff login via JWT and seamless, server-to-server Lightspeed API access via OAuth 2.0.
-- **Health & Sync Monitoring**: A dedicated UI in the admin panel to monitor the status of the Lightspeed connection and the health of background sync jobs.
+- **Backend Dashboard:** Real-time health/status dashboard at `/`, `/api/admin/dashboard`, and `/api/admin/dashboard.json` (HTML & JSON)
+- **Lightspeed Integration:** Bidirectional data sync for Customers, Products, and Sales. Automatically creates and manages custom fields in Lightspeed.
+- **Party & Appointment Management:** Group customers into parties (e.g., for a wedding) and schedule appointments like fittings and pickups.
+- **Alteration Job Tracking:** Create and manage alteration jobs linked to specific sale line items, assign them to tailors, and track their status.
+- **Automated Notifications:** Utilizes Twilio and SendGrid for sending SMS and email reminders for appointments or job status updates.
+- **Authentication:** Secure staff login via JWT and seamless, server-to-server Lightspeed API access via OAuth 2.0.
+- **Health & Sync Monitoring:** A dedicated UI in the admin panel to monitor the status of the Lightspeed connection and the health of background sync jobs.
+
+---
+
+## Session, Cookie, and CORS Configuration
+- Session cookies are `secure: false` in development (Docker/local), and `secure: true` in production (HTTPS).
+- CORS is configured to allow credentials and uses `CORS_ORIGIN` or defaults to `http://localhost:3001`.
+- The frontend API client always sends credentials with requests for session-based authentication (`credentials: 'include'`).
 
 ---
 
@@ -129,6 +151,7 @@ DATABASE_URL="postgresql://postgres:postgres@db:5432/suitsync_prod"
 FRONTEND_URL=http://localhost:3001
 SESSION_SECRET=your-32-char-secret-here
 JWT_SECRET=your-32-char-secret-here
+CORS_ORIGIN=http://localhost:3001
 
 # Lightspeed X-Series API
 LS_CLIENT_ID=your_client_id
@@ -138,10 +161,11 @@ LS_REDIRECT_URI=http://localhost:3000/api/auth/callback
 ```
 
 ### 5. Initialize the Database
-This command runs Prisma migrations to set up your database schema and then runs the seed script to populate it with initial data.
+**IMPORTANT:** After building containers, run Prisma migrations in Docker:
 ```sh
-pnpm db:init
+docker-compose exec backend pnpm prisma migrate deploy
 ```
+This ensures all tables (including `ApiToken`) exist before backend starts.
 
 ### 6. Run the Development Servers
 You can run the backend and frontend separately, or use Docker Compose for a fully containerized environment.
@@ -169,6 +193,10 @@ docker-compose -f docker-compose.dev.yml up --build
 - **Production:**
   - Use `docker-compose.yml` for a production-like environment. This builds and runs optimized containers for backend, frontend, and database.
   - Ensure all environment variables are set in `.env` and secrets are managed securely.
+  - **Prisma Migrations:** After building, run:
+    ```sh
+    docker-compose exec backend pnpm prisma migrate deploy
+    ```
 - **Troubleshooting:**
   - Use `docker-compose logs` to view service logs.
   - If you see migration or session issues, check backend logs and Prisma migration state.
@@ -197,6 +225,27 @@ See [docs/AI_WORKFLOW.md](docs/AI_WORKFLOW.md) for best practices on using AI to
 
 ## Contributing
 Pull requests are welcome! For major changes, please open an issue first to discuss what you would like to change. Please ensure to update tests and run the linter before submitting a PR.
+
+---
+
+## OpenAPI-Driven Type Safety for Frontend
+
+SuitSync uses an automated workflow to keep frontend TypeScript types in sync with backend API responses:
+
+1. The backend (Node.js/Express) uses tsoa to generate an OpenAPI (Swagger) spec from TypeScript controllers.
+2. The frontend runs `pnpm run gen:openapi-types` to generate TypeScript types from the OpenAPI spec using [openapi-typescript](https://github.com/drwpow/openapi-typescript).
+3. These types are used in API calls for full type safety and autocompletion.
+
+**Workflow:**
+- After backend changes, run `pnpm run tsoa:spec` in `backend/`.
+- Then run `pnpm run gen:openapi-types` in `frontend/`.
+
+**Benefits:**
+- No manual drift between backend and frontend types
+- Type errors surface immediately if the API changes
+- Easy onboarding for new developers
+
+See [`docs/DEVELOPER_GUIDE.md`](docs/DEVELOPER_GUIDE.md#using-openapi-generated-types-in-the-frontend) for full details and usage examples.
 
 ---
 

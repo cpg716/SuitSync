@@ -231,40 +231,40 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
 
     // Create hybrid user object for session
     const lightspeedUser = {
-      id: localUser?.id || lightspeedId, // Use local DB ID if available, fallback to Lightspeed ID
+      id: localUser?.id ?? lightspeedId,
       lightspeedId: lightspeedId,
       name,
       email,
       role,
-      photoUrl: userPayload.image_source || undefined,
-      lightspeedEmployeeId: lightspeedId,
+      photoUrl: localUser?.photoUrl ?? userPayload.image_source ?? undefined,
+      lightspeedEmployeeId: localUser?.lightspeedEmployeeId ?? lightspeedId,
       isLightspeedUser: true,
       hasLocalRecord: !!localUser,
-      localUserId: localUser?.id
+      localUserId: localUser?.id ?? undefined
     };
 
     logger.info(`Hybrid authentication - ${localUser ? 'with' : 'without'} local user storage`);
 
     // Store hybrid user and tokens in session
     req.session.lightspeedUser = {
-      id: localUser.id,
-      name: localUser.name,
-      email: localUser.email,
-      role: localUser.role,
-      photoUrl: localUser.photoUrl,
-      lightspeedEmployeeId: localUser.lightspeedEmployeeId,
+      id: localUser?.id ?? lightspeedId,
+      name: localUser?.name ?? name,
+      email: localUser?.email ?? email,
+      role: localUser?.role ?? role,
+      photoUrl: localUser?.photoUrl ?? userPayload.image_source ?? undefined,
+      lightspeedEmployeeId: localUser?.lightspeedEmployeeId ?? lightspeedId,
       isLightspeedUser: true,
-      hasLocalRecord: true,
-      localUserId: localUser.id
+      hasLocalRecord: !!localUser,
+      localUserId: localUser?.id ?? undefined
     };
-    req.session.userId = localUser.id;
-    req.session.activeUserId = localUser.id;
+    req.session.userId = localUser?.id ?? lightspeedId;
+    req.session.activeUserId = localUser?.id ?? lightspeedId;
     req.session.lsAccessToken = access_token;
     req.session.lsRefreshToken = refresh_token;
     req.session.lsDomainPrefix = domain_prefix;
     req.session.lsTokenExpiresAt = expiresAt;
     if (!req.session.userSessions) req.session.userSessions = {};
-    req.session.userSessions[localUser.id] = {
+    req.session.userSessions[localUser?.id ?? lightspeedId] = {
       lsAccessToken: access_token,
       lsRefreshToken: refresh_token,
       lsDomainPrefix: domain_prefix,
@@ -272,9 +272,9 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
       lastActive: new Date(),
       loginTime: new Date()
     };
-    logger.info('[Auth] Session fields set for user', { userId: localUser.id });
-    await new Promise((resolve, reject) => req.session.save(err => err ? reject(err) : resolve()));
-    logger.info('[Auth] Session saved for user', { userId: localUser.id });
+    logger.info('[Auth] Session fields set for user', { userId: localUser?.id ?? lightspeedId });
+    await new Promise<void>((resolve, reject) => req.session.save(err => err ? reject(err) : resolve()));
+    logger.info('[Auth] Session saved for user', { userId: localUser?.id ?? lightspeedId });
     logger.info('[OAuth] Session state after login:', req.session);
 
     // Check if user needs to set up PIN (first time authentication or no PIN set)
@@ -297,9 +297,11 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
     res.redirect(redirectUrl);
     return;
   } catch (err) {
+    const errMsg = (typeof err === 'object' && err && 'message' in err) ? (err as any).message : String(err);
+    const errResp = (typeof err === 'object' && err && 'response' in err) ? (err as any).response?.data : undefined;
     logger.error('Error in handleCallback:', err);
     logger.info("Session after callback error:", req.session);
-    res.redirect(`${FRONTEND_URL}/login?error=callback_failed&details=${encodeURIComponent(JSON.stringify(err.response?.data || err.message))}`);
+    res.redirect(`${FRONTEND_URL}/login?error=callback_failed&details=${encodeURIComponent(JSON.stringify(errResp || errMsg))}`);
     return;
   }
   logger.info("Session after callback:", req.session);

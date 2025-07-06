@@ -17,7 +17,7 @@ function formatTime(minutes: number) {
   return `${h % 12 === 0 ? 12 : h % 12}:${m.toString().padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
 }
 
-function getBlocksForDay(day) {
+function getBlocksForDay(day: any) {
   if (!day || day.isOff) return [];
   return day.blocks || [];
 }
@@ -45,13 +45,13 @@ export default function ScheduleEditor({
 }) {
   const [drag, setDrag] = useState<{ day: number; start: number; end: number } | null>(null);
 
-  function handleCellClick(dayIdx, slotIdx) {
+  function handleCellClick(dayIdx: number, slotIdx: number) {
     if (readOnly) return;
     const minutes = TIME_SLOTS[slotIdx];
     const day = value[dayIdx];
     if (day.isOff) return;
     // Toggle this 30-min block in the day's blocks
-    let blocks = getBlocksForDay(day).map(b => ({ ...b }));
+    let blocks = getBlocksForDay(day).map((b: any) => ({ ...b }));
     const slotStart = minutes;
     const slotEnd = minutes + TIME_STEP;
     // Check if this block overlaps any existing
@@ -74,22 +74,22 @@ export default function ScheduleEditor({
     updateDay(dayIdx, { ...day, blocks });
   }
 
-  function updateDay(dayIdx, newDay) {
+  function updateDay(dayIdx: number, newDay: any) {
     const days = value.map((d, i) => (i === dayIdx ? newDay : d));
     onChange && onChange(days);
   }
 
-  function handleOffToggle(dayIdx) {
+  function handleOffToggle(dayIdx: number) {
     if (readOnly) return;
     const day = value[dayIdx];
     updateDay(dayIdx, { ...day, isOff: !day.isOff, blocks: day.isOff ? [] : day.blocks });
   }
 
-  function handleDragStart(dayIdx, slotIdx) {
+  function handleDragStart(dayIdx: number, slotIdx: number) {
     if (readOnly) return;
     setDrag({ day: dayIdx, start: slotIdx, end: slotIdx });
   }
-  function handleDragEnter(dayIdx, slotIdx) {
+  function handleDragEnter(dayIdx: number, slotIdx: number) {
     if (readOnly || !drag || drag.day !== dayIdx) return;
     setDrag({ ...drag, end: slotIdx });
   }
@@ -105,16 +105,16 @@ export default function ScheduleEditor({
     setDrag(null);
   }
 
-  function formatSlot(mins) {
+  function formatSlot(mins: number) {
     const h = Math.floor(mins / 60);
     const m = mins % 60;
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
   }
-  function parseTime(str) {
+  function parseTime(str: string) {
     const [h, m] = str.split(':').map(Number);
     return h * 60 + m;
   }
-  function mergeBlocks(blocks) {
+  function mergeBlocks(blocks: any[]) {
     // Merge overlapping/adjacent blocks
     const sorted = blocks.slice().sort((a, b) => parseTime(a.start) - parseTime(b.start));
     const merged = [];
@@ -131,7 +131,7 @@ export default function ScheduleEditor({
     }
     return merged;
   }
-  function splitBlock(blocks, idx, slotStart, slotEnd) {
+  function splitBlock(blocks: any[], idx: number, slotStart: number, slotEnd: number) {
     const b = blocks[idx];
     const bStart = parseTime(b.start);
     const bEnd = parseTime(b.end);
@@ -149,11 +149,23 @@ export default function ScheduleEditor({
           <span className="font-semibold text-lg">{isDefault ? 'Default Weekly Schedule' : weekStart ? `Week of ${weekStart.toLocaleDateString()}` : 'Schedule'}</span>
         </div>
         <div className="flex gap-2">
-          {onWeekChange && !isDefault && (
-            <>
-              <Button variant="outline" size="icon" onClick={() => onWeekChange(new Date(weekStart.getTime() - 7 * 86400000))}><ChevronLeft /></Button>
-              <Button variant="outline" size="icon" onClick={() => onWeekChange(new Date(weekStart.getTime() + 7 * 86400000))}><ChevronRight /></Button>
-            </>
+          {weekStart != null && typeof onWeekChange === 'function' && (
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => onWeekChange(new Date(weekStart.getTime() - 7 * 86400000))}
+              >
+                <ChevronLeft />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => onWeekChange(new Date(weekStart.getTime() + 7 * 86400000))}
+              >
+                <ChevronRight />
+              </Button>
+            </div>
           )}
           {onCopyToAll && <Button variant="outline" size="sm" onClick={onCopyToAll}><Copy className="w-4 h-4 mr-1" />Copy to All Days</Button>}
           {onCopyPrevWeek && <Button variant="outline" size="sm" onClick={onCopyPrevWeek}><Copy className="w-4 h-4 mr-1" />Copy Previous Week</Button>}
@@ -190,7 +202,7 @@ export default function ScheduleEditor({
                   const day = value[dayIdx];
                   const isOff = day?.isOff;
                   const blocks = getBlocksForDay(day);
-                  const inBlock = blocks.some(b => parseTime(b.start) <= mins && mins < parseTime(b.end));
+                  const inBlock = blocks.some((b: any) => parseTime(b.start) <= mins && mins < parseTime(b.end));
                   const conflict = conflicts.find(c => c.day === dayIdx && parseTime(c.start) <= mins && mins < parseTime(c.end));
                   return (
                     <td

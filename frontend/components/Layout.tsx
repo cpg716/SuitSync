@@ -24,14 +24,15 @@ const nav = [
 ];
 
 export default function Layout({ children, title }: LayoutProps) {
-  const router = useRouter();
+  const isClient = typeof window !== 'undefined';
+  const router = isClient ? useRouter() : null;
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
 
   // Close sidebar when route changes on mobile
   useEffect(() => {
     setSidebarOpen(false);
-  }, [router.pathname]);
+  }, [router?.pathname]);
 
   // Handle window resize
   useEffect(() => {
@@ -86,7 +87,7 @@ export default function Layout({ children, title }: LayoutProps) {
           <nav className="space-y-1 flex-1 px-2 py-4">
             {nav.map(item => {
               const Icon = item.icon;
-              const isActive = router.pathname === item.href;
+              const isActive = router?.pathname === item.href;
               return (
                 <Link
                   key={item.href}

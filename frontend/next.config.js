@@ -1,29 +1,8 @@
-const withPWA = require('next-pwa')({
-  dest: 'public',
-  register: true,
-  skipWaiting: true,
-  disable: process.env.NODE_ENV === 'development', // Disable PWA in development to prevent warnings
-  runtimeCaching: [
-    {
-      urlPattern: /^\/api\/.*$/,
-      handler: 'NetworkOnly', // Changed from NetworkFirst to NetworkOnly to prevent caching issues
-      options: {
-        cacheName: 'api-cache',
-        networkTimeoutSeconds: 10,
-        fetchOptions: { credentials: 'include' },
-      },
-    },
-    {
-      urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp)$/,
-      handler: 'StaleWhileRevalidate',
-      options: { cacheName: 'images' },
-    },
-    // ...other asset rules...
-  ],
-});
+const withPWA = require('next-pwa');
+const runtimeCaching = require('next-pwa/cache');
 
 /** @type {import('next').NextConfig} */
-module.exports = withPWA({
+const nextConfig = {
   reactStrictMode: true,
 
   // Performance optimizations
@@ -54,13 +33,33 @@ module.exports = withPWA({
   }),
 
   async rewrites() {
-    // Use environment variable for backend URL to support both local and Docker environments
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3000';
     return [
       {
         source: '/api/:path*',
-        destination: `${backendUrl}/api/:path*`,
+        destination: 'http://backend:3000/api/:path*',
       },
     ];
   },
-});
+};
+
+const pwaOptions = {
+  dest: 'public',
+  disable: process.env.NODE_ENV !== 'production',
+  register: true,
+  skipWaiting: true,
+  runtimeCaching: [
+    ...runtimeCaching,
+    {
+      urlPattern: /^\/_next\/static\/.*/i,
+      handler: 'NetworkFirst',
+      options: { cacheName: 'next-static-cache' },
+    },
+    {
+      urlPattern: /^\/_next\/image\?url=.*$/i,
+      handler: 'NetworkFirst',
+      options: { cacheName: 'next-image-cache' },
+    },
+  ],
+};
+
+module.exports = withPWA(pwaOptions)(nextConfig);

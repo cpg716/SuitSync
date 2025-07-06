@@ -42,6 +42,12 @@ PORT=3000
 
 # Node environment
 NODE_ENV="development"
+
+# Redis connection string (default: redis://redis:6379)
+REDIS_URL="redis://redis:6379"
+
+# CORS origin (default: http://localhost:3001)
+CORS_ORIGIN="http://localhost:3001"
 ```
 
 ## Optional Environment Variables
@@ -92,6 +98,8 @@ DATABASE_URL="file:./backend/prisma/dev.db"
 FRONTEND_URL="http://localhost:3001"
 NEXT_PUBLIC_API_URL="http://localhost:3000/api"
 LS_REDIRECT_URI="http://localhost:3000/api/auth/callback"
+REDIS_URL="redis://redis:6379"
+CORS_ORIGIN="http://localhost:3001"
 ```
 
 ### Production (.env.production)
@@ -101,6 +109,8 @@ DATABASE_URL="postgresql://user:pass@db:5432/suitsync"
 FRONTEND_URL="https://yourdomain.com"
 NEXT_PUBLIC_API_URL="https://api.yourdomain.com/api"
 LS_REDIRECT_URI="https://api.yourdomain.com/api/auth/callback"
+REDIS_URL="redis://redis:6379"
+CORS_ORIGIN="https://yourdomain.com"
 ```
 
 ### Docker Development (.env.docker)
@@ -109,6 +119,8 @@ NODE_ENV=development
 DATABASE_URL="postgresql://suitsync:supersecret@postgres:5432/suitsync"
 FRONTEND_URL="http://localhost:3001"
 NEXT_PUBLIC_API_URL="http://localhost:3000/api"
+REDIS_URL="redis://redis:6379"
+CORS_ORIGIN="http://localhost:3001"
 ```
 
 ## Security Guidelines
@@ -144,3 +156,11 @@ The backend uses Zod schemas to validate environment variables at startup. Missi
 - Check NEXT_PUBLIC_API_URL is accessible from the browser
 
 For more troubleshooting help, see the main [README.md](../README.md) and [DEPLOYMENT_GUIDE.md](../DEPLOYMENT_GUIDE.md).
+
+## Session, Cookie, and CORS
+- Session cookies are `secure: false` in dev, `secure: true` in production.
+- CORS allows credentials and uses `CORS_ORIGIN`.
+- Frontend API client must send `credentials: 'include'` on all requests.
+
+## Health Checks
+- Use the backend dashboard at `/` or `/api/admin/dashboard(.json)` for live health/status.

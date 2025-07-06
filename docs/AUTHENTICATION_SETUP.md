@@ -57,3 +57,11 @@ DATABASE_URL=postgresql://username:password@localhost:5432/suitsync
 - Test OAuth flow with real Lightspeed accounts before deployment
 
 For more, see [docs/ENVIRONMENT.md](ENVIRONMENT.md) and [README.md](../README.md)
+
+## Session, Cookie, and CORS
+- Session cookies are `secure: false` in development (Docker/local), and `secure: true` in production (HTTPS).
+- CORS is configured to allow credentials and uses `CORS_ORIGIN` or defaults to `http://localhost:3001`.
+- The frontend API client always sends credentials with requests for session-based authentication (`credentials: 'include'`).
+
+## Health & Debugging
+- Use the backend dashboard at `/` or `/api/admin/dashboard(.json)` to check session and authentication health.

@@ -206,7 +206,7 @@ export default function UserSettings({ userId, adminView }: { userId?: number, a
     }
   }
 
-  async function handleScheduleChange(days) {
+  async function handleScheduleChange(days: any) {
     if (!user) return;
     setSchedule(days);
     const id = user.id;

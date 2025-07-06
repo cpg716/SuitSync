@@ -28,8 +28,15 @@ const statusColors = {
   syncing: 'text-yellow-500',
 };
 
+interface StatCardProps {
+  title: string;
+  value: any;
+  link?: string;
+  icon?: React.ComponentType<any>;
+}
+
 // Memoized StatCard component to prevent unnecessary re-renders
-const StatCard = memo(({ title, value, link, icon: Icon }) => {
+const StatCard = memo(({ title, value, link, icon: Icon }: StatCardProps) => {
   const cardContent = useMemo(() => (
     <Card className={link ? "cursor-pointer hover:shadow-md transition-all duration-200 active:scale-95 touch-manipulation" : ""}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 sm:pb-3">
@@ -328,6 +335,6 @@ function Dashboard() {
 
 // Memoize the entire Dashboard component to prevent unnecessary re-renders
 const MemoizedDashboard = memo(Dashboard);
-MemoizedDashboard.title = 'Dashboard';
+// MemoizedDashboard.title = 'Dashboard';
 
 export default MemoizedDashboard;

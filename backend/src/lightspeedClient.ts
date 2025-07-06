@@ -2,6 +2,7 @@ import axios, { AxiosInstance, AxiosError } from 'axios';
 import querystring from 'querystring';
 import { MultiUserSessionService } from './services/multiUserSessionService';
 import { lightspeedCircuitBreaker } from './services/circuitBreaker';
+import { PrismaClient } from '@prisma/client';
 
 // Rate limiting helper
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -27,21 +28,48 @@ const handleRateLimit = async (error: any, retryCount: number = 0): Promise<void
   throw error; // Re-throw if not rate limit or max retries exceeded
 };
 
-function getDomainPrefix(req: any) {
-  return req?.session?.lsDomainPrefix || process.env.LS_DOMAIN;
+const prisma = new PrismaClient();
+
+async function getPersistentToken() {
+  // Always fetch the latest token for service 'lightspeed'
+  const token = await prisma.apiToken.findUnique({ where: { service: 'lightspeed' } });
+  return token;
 }
 
-function getAccessToken(req: any) {
-  return req?.session?.lsAccessToken;
+async function getDomainPrefix(req: any) {
+  if (req?.session?.lsDomainPrefix) return req.session.lsDomainPrefix;
+  if (req._lightspeedTokenCache) return process.env.LS_DOMAIN || null;
+  // No domain in session, fallback to env
+  return process.env.LS_DOMAIN || null;
 }
 
-function getRefreshToken(req: any) {
-  return req?.session?.lsRefreshToken;
+async function getAccessToken(req: any) {
+  if (req?.session?.lsAccessToken) return req.session.lsAccessToken;
+  if (req._lightspeedTokenCache) return req._lightspeedTokenCache.accessToken;
+  // Fallback: load from DB
+  const token = await getPersistentToken();
+  if (token) {
+    req._lightspeedTokenCache = token;
+    return token.accessToken;
+  }
+  return null;
+}
+
+async function getRefreshToken(req: any) {
+  if (req?.session?.lsRefreshToken) return req.session.lsRefreshToken;
+  if (req._lightspeedTokenCache) return req._lightspeedTokenCache.refreshToken;
+  // Fallback: load from DB
+  const token = await getPersistentToken();
+  if (token) {
+    req._lightspeedTokenCache = token;
+    return token.refreshToken;
+  }
+  return null;
 }
 
 async function refreshAccessToken(req: any) {
-  const domainPrefix = getDomainPrefix(req);
-  const refreshToken = getRefreshToken(req);
+  const domainPrefix = await getDomainPrefix(req);
+  const refreshToken = await getRefreshToken(req);
   const LS_CLIENT_ID = process.env.LS_CLIENT_ID || '';
   const LS_CLIENT_SECRET = process.env.LS_CLIENT_SECRET || '';
   if (!domainPrefix || !refreshToken) throw new Error('Missing domain or refresh token for Lightspeed refresh');
@@ -58,28 +86,35 @@ async function refreshAccessToken(req: any) {
   );
 
   // Update both legacy session and multi-user session cache
-  req.session.lsAccessToken = response.data.access_token;
-  req.session.lsRefreshToken = response.data.refresh_token;
-
-  // Update multi-user session if available
-  const activeUserId = req.session.activeUserId || req.session.userId;
-  if (activeUserId) {
-    const expiresAt = new Date(Date.now() + (response.data.expires_in * 1000));
-    await MultiUserSessionService.updateUserTokens(
-      req,
-      activeUserId,
-      response.data.access_token,
-      response.data.refresh_token,
-      expiresAt
-    );
+  if (req.session) {
+    req.session.lsAccessToken = response.data.access_token;
+    req.session.lsRefreshToken = response.data.refresh_token;
   }
-
+  // Update persistent token in DB
+  await prisma.apiToken.upsert({
+    where: { service: 'lightspeed' },
+    update: {
+      accessToken: response.data.access_token,
+      refreshToken: response.data.refresh_token,
+      expiresAt: new Date(Date.now() + (response.data.expires_in * 1000)),
+    },
+    create: {
+      service: 'lightspeed',
+      accessToken: response.data.access_token,
+      refreshToken: response.data.refresh_token,
+      expiresAt: new Date(Date.now() + (response.data.expires_in * 1000)),
+    },
+  });
+  // Update cache
+  req._lightspeedTokenCache = {
+    accessToken: response.data.access_token,
+    refreshToken: response.data.refresh_token,
+    expiresAt: new Date(Date.now() + (response.data.expires_in * 1000)),
+  };
   return response.data.access_token;
 }
 
-function createAxiosInstance(req: any): AxiosInstance {
-  const accessToken = getAccessToken(req);
-  const domainPrefix = getDomainPrefix(req);
+function createAxiosInstanceSync(accessToken: string, domainPrefix: string): AxiosInstance {
   if (!accessToken) throw new Error('No Lightspeed access token');
   if (!domainPrefix) throw new Error('No Lightspeed domain prefix');
   console.info(`[LightspeedClient] Using domain: ${domainPrefix}, token: ${accessToken.slice(0, 8)}...`);
@@ -94,9 +129,20 @@ function createAxiosInstance(req: any): AxiosInstance {
 }
 
 export function createLightspeedClient(req: any) {
-  let client = createAxiosInstance(req);
+  let client: AxiosInstance;
+  let initialized = false;
+
+  async function ensureClient() {
+    if (!initialized) {
+      const accessToken = await getAccessToken(req);
+      const domainPrefix = await getDomainPrefix(req);
+      client = createAxiosInstanceSync(accessToken, domainPrefix);
+      initialized = true;
+    }
+  }
 
   async function requestWithRefresh(method: string, endpoint: string, data?: any, params?: any, retryCount: number = 0): Promise<any> {
+    await ensureClient();
     return await lightspeedCircuitBreaker.execute(async () => {
       try {
         let response;
@@ -107,18 +153,15 @@ export function createLightspeedClient(req: any) {
         } else if (method === 'put') {
           response = await client.put(endpoint, data);
         }
-
         // Log rate limit headers for monitoring
         if (response?.headers['x-ratelimit-remaining']) {
           const remaining = response.headers['x-ratelimit-remaining'];
           const limit = response.headers['x-ratelimit-limit'];
           console.debug(`Rate limit: ${remaining}/${limit} remaining`);
         }
-
         return response;
       } catch (error) {
         const err = error as AxiosError;
-
         // Handle rate limiting with exponential backoff
         if (err.response?.status === 429) {
           try {
@@ -128,11 +171,10 @@ export function createLightspeedClient(req: any) {
             throw rateLimitError;
           }
         }
-
         if (err.response?.status === 401 && !req._retry) {
           req._retry = true;
           const newToken = await refreshAccessToken(req);
-          client = createAxiosInstance(req); // update client with new token
+          client = createAxiosInstanceSync(newToken, await getDomainPrefix(req)); // update client with new token
           if (method === 'get') {
             return await client.get(endpoint, { params });
           } else if (method === 'post') {

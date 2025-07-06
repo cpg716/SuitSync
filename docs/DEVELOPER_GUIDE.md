@@ -10,6 +10,7 @@
 6. [Security Best Practices](#security-best-practices)
 7. [Deployment](#deployment)
 8. [Troubleshooting](#troubleshooting)
+9. [Using OpenAPI-Generated Types in the Frontend](#using-openapi-generated-types-in-the-frontend)
 
 ## Getting Started
 
@@ -417,3 +418,69 @@ DATABASE_LOGGING=true pnpm dev
 2. **API Reference**: docs/API_REFERENCE.md
 3. **Issues**: GitHub Issues for bug reports
 4. **Discussions**: GitHub Discussions for questions
+
+## Backend Dashboard
+- Use the backend dashboard at `/` or `/api/admin/dashboard(.json)` for live health/status of DB, Redis, Lightspeed, jobs, and app info.
+
+## Session, Cookie, and CORS
+- Session cookies are `secure: false` in dev, `secure: true` in production.
+- CORS allows credentials and uses `CORS_ORIGIN` (default: `http://localhost:3001`).
+- Frontend API client must send `credentials: 'include'` on all requests.
+
+## Prisma Migrations
+- After building containers, run:
+  ```sh
+  docker-compose exec backend pnpm prisma migrate deploy
+  ```
+- This ensures all tables (including `ApiToken`) exist before backend starts.
+
+## Using OpenAPI-Generated Types in the Frontend
+
+### Overview
+The SuitSync backend uses tsoa to generate an OpenAPI (Swagger) spec from TypeScript controllers. The frontend automatically generates TypeScript types from this spec using [openapi-typescript](https://github.com/drwpow/openapi-typescript), ensuring type-safe API integration and eliminating drift between backend and frontend types.
+
+### Workflow
+1. **After updating backend controllers or types:**
+   - Run `pnpm run tsoa:spec` in the `backend/` directory to regenerate the OpenAPI spec (`src/docs/swagger.json`).
+2. **Then, in the frontend:**
+   - Run `pnpm run gen:openapi-types` in the `frontend/` directory to regenerate TypeScript types in `src/types/openapi.d.ts`.
+
+### Example Usage
+Import the generated types in your frontend code:
+
+```ts
+import type { paths } from '@/types/openapi';
+
+// Type for GET /users response
+// (adjust path and method as needed for your endpoint)
+type UsersResponse = paths['/users']['get']['responses']['200']['content']['application/json'];
+
+// Usage in an API call
+const res = await api.get<UsersResponse>('/api/users');
+const users = res.data; // Fully typed!
+```
+
+You can also type request bodies and parameters:
+
+```ts
+// For POST /users
+// (adjust as needed for your endpoint)
+type CreateUserRequest = paths['/users']['post']['requestBody']['content']['application/json'];
+type CreateUserResponse = paths['/users']['post']['responses']['201']['content']['application/json'];
+
+const newUser: CreateUserRequest = { name: 'Alice', email: 'alice@example.com' };
+const res = await api.post<CreateUserResponse>('/api/users', newUser);
+```
+
+### Benefits
+- **Type safety:** If the backend changes, the frontend will get a type error after you regenerate types.
+- **No manual drift:** Types are always in sync with the backend API.
+- **Easy onboarding:** New developers can see the full API contract in TypeScript.
+
+### Troubleshooting
+- If you see type errors after backend changes, re-run both generation steps above.
+- If you add new endpoints, make sure they are decorated with tsoa decorators and included in the OpenAPI spec.
+
+---
+
+For more details, see the [openapi-typescript docs](https://github.com/drwpow/openapi-typescript) and [tsoa docs](https://tsoa-community.github.io/docs/).

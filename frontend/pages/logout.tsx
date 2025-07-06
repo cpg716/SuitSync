@@ -4,7 +4,8 @@ import { useAuth } from '../src/AuthContext';
 
 export default function Logout() {
   const { logout } = useAuth();
-  const router = useRouter();
+  const isClient = typeof window !== 'undefined';
+  const router = isClient ? useRouter() : null;
 
   useEffect(() => {
     const performLogout = async () => {

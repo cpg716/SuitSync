@@ -9,7 +9,8 @@ import { useAuth } from '../src/AuthContext';
 import { apiFetch } from '../lib/apiClient';
 
 export default function SetupPinPage() {
-  const router = useRouter();
+  const isClient = typeof window !== 'undefined';
+  const router = isClient ? useRouter() : null;
   const { user } = useAuth();
   const { success: toastSuccess, error: toastError } = useToast();
   
@@ -21,7 +22,7 @@ export default function SetupPinPage() {
   // Redirect if user is not authenticated
   useEffect(() => {
     if (!user) {
-      router.push('/login');
+      router?.push('/login');
     }
   }, [user, router]);
 
@@ -86,7 +87,7 @@ export default function SetupPinPage() {
         toastSuccess('PIN set successfully! You can now use quick user switching.');
         
         // Redirect to dashboard
-        router.push('/');
+        router?.push('/');
       } else {
         const errorData = await response.json();
         toastError(errorData.error || 'Failed to set PIN');
@@ -101,7 +102,7 @@ export default function SetupPinPage() {
 
   const handleSkip = () => {
     // Allow user to skip PIN setup and go to dashboard
-    router.push('/');
+    router?.push('/');
   };
 
   if (!user) {

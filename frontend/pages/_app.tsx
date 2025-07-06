@@ -15,9 +15,10 @@ import ErrorBoundary from '../components/ErrorBoundary';
 
 function InnerApp({ Component, pageProps }: AppProps) {
   // Support per-page layout: if a page exports getLayout, use it; otherwise, wrap in Layout
-  const router = useRouter();
+  const isClient = typeof window !== 'undefined';
+  const router = isClient ? useRouter() : null;
   let getLayout;
-  if (router.pathname === '/login') {
+  if (router && router.pathname === '/login') {
     // Force minimal layout for login page
     getLayout = (page: React.ReactNode) => page;
   } else {
@@ -26,7 +27,7 @@ function InnerApp({ Component, pageProps }: AppProps) {
 
   const [showSplash, setShowSplash] = useState(true);
   const { authError, user, loading } = useAuth();
-  const [health, setHealth] = useState(null);
+  const [health, setHealth] = useState<any>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setShowSplash(false), 1200);
@@ -49,7 +50,7 @@ function InnerApp({ Component, pageProps }: AppProps) {
 
   useEffect(() => {
     // If not loading, not on /login or /status, and not authenticated, redirect to /login
-    if (!loading && !user && !['/login', '/status'].includes(router.pathname)) {
+    if (!loading && !user && !['/login', '/status'].includes(router && router.pathname)) {
       // Use a timeout to prevent race conditions with route changes
       const timeoutId = setTimeout(() => {
         router.replace('/login?reason=auth_required');
@@ -59,7 +60,7 @@ function InnerApp({ Component, pageProps }: AppProps) {
   }, [user, loading, router]);
 
   // Show splash or loading spinner while checking auth
-  if ((showSplash || (loading && !user && router.pathname !== '/login'))) {
+  if ((showSplash || (loading && !user && router && router.pathname !== '/login'))) {
     return (
       <ToastProvider>
         <PWAInstallPrompt />

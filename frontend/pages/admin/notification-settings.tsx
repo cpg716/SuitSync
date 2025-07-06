@@ -26,7 +26,8 @@ interface NotificationSettings {
 }
 
 export default function NotificationSettings() {
-  const router = useRouter();
+  const isClient = typeof window !== 'undefined';
+  const router = isClient ? useRouter() : null;
   const { user } = useAuth();
   const { success, error: toastError } = useToast();
   
@@ -38,7 +39,7 @@ export default function NotificationSettings() {
   // Check admin access
   useEffect(() => {
     if (user && user.role !== 'admin') {
-      router.push('/');
+      router?.push('/');
     }
   }, [user, router]);
 
@@ -50,7 +51,7 @@ export default function NotificationSettings() {
   const loadSettings = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/api/admin/notification-settings');
+      const response = await api.get<NotificationSettings>('/api/admin/notification-settings');
       setSettings(response.data);
     } catch (error: any) {
       toastError('Failed to load notification settings');

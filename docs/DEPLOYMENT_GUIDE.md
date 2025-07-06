@@ -20,6 +20,7 @@ This guide outlines the steps required to deploy the SuitSync application to a p
 - PostgreSQL database (or use included Docker setup)
 - Node.js 18+ and pnpm (for manual/PM2 deployment)
 - Git
+- Lightspeed, Redis, SendGrid, and Twilio credentials in `.env`
 
 ## 2. Quick Start (Docker)
 
@@ -101,4 +102,43 @@ See previous guide for details if not using Docker Compose.
 For more details on environment variables, Docker usage, and AI-augmented workflow, see:
 - [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md)
 - [docs/DOCKER.md](docs/DOCKER.md)
-- [docs/AI_WORKFLOW.md](docs/AI_WORKFLOW.md) 
+- [docs/AI_WORKFLOW.md](docs/AI_WORKFLOW.md)
+
+## 2. Environment Variables
+- Ensure `.env` contains:
+  - DATABASE_URL (matches db service in docker-compose)
+  - SESSION_SECRET (32+ chars)
+  - LS_CLIENT_ID, LS_CLIENT_SECRET, LS_REFRESH_TOKEN, LS_DOMAIN
+  - REDIS_URL=redis://redis:6379
+  - CORS_ORIGIN=http://localhost:3001 (for local dev)
+
+## 3. Running Migrations
+- Before starting backend, run:
+  ```sh
+  docker-compose exec backend pnpm prisma migrate deploy
+  ```
+- This ensures all tables (including ApiToken) exist.
+
+## 4. Starting the App
+- Use:
+  ```sh
+  docker-compose up -d
+  ```
+- Frontend: http://localhost:3001
+- Backend/API: http://localhost:3000
+
+## 5. Session & Cookie Config
+- Session cookies are `secure: false` in dev, `secure: true` in production.
+- CORS allows credentials and uses `CORS_ORIGIN`.
+- Frontend API client must send `credentials: 'include'` on all requests.
+
+## 6. Health & Monitoring
+- Backend dashboard: http://localhost:3000/
+- Dashboard JSON API: http://localhost:3000/api/admin/dashboard.json
+- Check Redis: `docker exec -it <redis_container> redis-cli ping`
+- Check DB: `docker exec -it <db_container> psql -U <user> -d <db> -c '\l'`
+
+## 7. Troubleshooting
+- If you see Prisma errors, ensure migrations are applied and DATABASE_URL matches your db service.
+- If session/auth fails, check CORS, cookie, and frontend credentials settings.
+- For 500/404 errors, check backend logs and dashboard for service health. 

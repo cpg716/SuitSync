@@ -2,28 +2,36 @@ import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { withAccelerate } from '@prisma/extension-accelerate';
 import logger from '../utils/logger';
-import { scheduledJobService } from '../services/scheduledJobService';
+import { scheduledJobService, JobInfo } from '../services/scheduledJobService';
+import { createClient } from 'redis';
+import os from 'os';
 
 const prisma = new PrismaClient().$extends(withAccelerate());
 
 export const getSettings = async (req: Request, res: Response) => {
-  let settings = await prisma.settings.findUnique({ where: { id: 1 } });
-  if (!settings) {
-    settings = await prisma.settings.create({
-      data: {
-        id: 1,
-        reminderIntervals: '24,3',
-        earlyMorningCutoff: '09:30',
-        emailSubject: 'Reminder: Your appointment at {shopName}',
-        emailBody: 'Hi {customerName},\n\nThis is a reminder for your appointment with {partyName} on {dateTime}.\n\nThank you!',
-        smsBody: 'Reminder: {partyName} appointment on {dateTime} at {shopName}.',
-        pickupReadySubject: 'Your garment is ready for pickup!',
-        pickupReadyEmail: 'Hi {customerName},\n\nYour garment for {partyName} is ready for pickup!\n\nPlease visit us at your earliest convenience.',
-        pickupReadySms: 'Your garment for {partyName} is ready for pickup at {shopName}!'
-      },
-    });
+  try {
+    let settings = await prisma.settings.findUnique({ where: { id: 1 } });
+    if (!settings) {
+      settings = await prisma.settings.create({
+        data: {
+          id: 1,
+          reminderIntervals: '24,3',
+          earlyMorningCutoff: '09:30',
+          emailSubject: 'Reminder: Your appointment at {shopName}',
+          emailBody: 'Hi {customerName},\n\nThis is a reminder for your appointment with {partyName} on {dateTime}.\n\nThank you!',
+          smsBody: 'Reminder: {partyName} appointment on {dateTime} at {shopName}.',
+          pickupReadySubject: 'Your garment is ready for pickup!',
+          pickupReadyEmail: 'Hi {customerName},\n\nYour garment for {partyName} is ready for pickup!\n\nPlease visit us at your earliest convenience.',
+          pickupReadySms: 'Your garment for {partyName} is ready for pickup at {shopName}!'
+        },
+      });
+    }
+    res.json(settings);
+  } catch (error) {
+    logger.error('Error in getSettings:', error);
+    console.error('Error in getSettings:', error);
+    res.status(500).json({ error: 'Internal server error', details: error instanceof Error ? error.message : error });
   }
-  res.json(settings);
 };
 
 export const updateSettings = async (req: Request, res: Response) => {
@@ -262,10 +270,133 @@ export const updateNotificationSettings = async (req: Request, res: Response): P
 // Scheduled Jobs Management
 export const getScheduledJobsStatus = async (req: Request, res: Response): Promise<void> => {
   try {
-    const jobStatus = scheduledJobService.getJobStatus();
+    const jobStatus: JobInfo[] = scheduledJobService.getJobStatus();
     res.json(jobStatus);
   } catch (error: any) {
     logger.error('Error getting scheduled jobs status:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+async function getDashboardData() {
+  // DB health
+  let dbStatus: string = 'unknown', dbTables: { table_name: string }[] = [], dbError: string | null = null;
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    dbStatus = 'ok';
+    dbTables = await prisma.$queryRaw`SELECT table_name FROM information_schema.tables WHERE table_schema='public'` as { table_name: string }[];
+  } catch (e: any) {
+    dbStatus = 'error';
+    dbError = e && typeof e === 'object' && 'message' in e ? (e as any).message : String(e);
+  }
+
+  // Redis health
+  let redisStatus: string = 'unknown', redisInfo: any = {}, redisError: string | null = null;
+  try {
+    const redis = createClient({ url: process.env.REDIS_URL });
+    await redis.connect();
+    redisStatus = 'ok';
+    redisInfo = await redis.info();
+    await redis.disconnect();
+  } catch (e: any) {
+    redisStatus = 'error';
+    redisError = e && typeof e === 'object' && 'message' in e ? (e as any).message : String(e);
+  }
+
+  // Lightspeed health
+  let lightspeed: { status: string; error?: string; syncStatuses?: any[] } = { status: 'unknown' };
+  try {
+    // Simulate a health check by pinging the DB for sync status
+    const statuses = await prisma.syncStatus.findMany({ orderBy: { resource: 'asc' } });
+    lightspeed = {
+      status: 'ok',
+      syncStatuses: statuses.map(s => ({
+        ...s,
+        lastSyncedVersion: s.lastSyncedVersion?.toString() || null,
+        lastSyncedAt: s.lastSyncedAt?.toISOString() || null,
+        createdAt: s.createdAt?.toISOString() || null,
+        updatedAt: s.updatedAt?.toISOString() || null,
+      }))
+    };
+  } catch (e: any) {
+    lightspeed = { status: 'error', error: e && typeof e === 'object' && 'message' in e ? (e as any).message : String(e) };
+  }
+
+  // Job scheduler
+  let jobs: JobInfo[] = [];
+  try {
+    jobs = scheduledJobService.getJobStatus ? scheduledJobService.getJobStatus() : [];
+  } catch (e: any) {
+    jobs = [{ name: 'scheduler', running: false, status: 'error', lastRun: null, error: e && typeof e === 'object' && 'message' in e ? (e as any).message : String(e) }];
+  }
+
+  // App/server info
+  const appInfo = {
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    node: process.version,
+    env: process.env.NODE_ENV,
+    hostname: os.hostname(),
+    platform: os.platform(),
+    arch: os.arch(),
+  };
+
+  return {
+    dbStatus, dbTables, dbError,
+    redisStatus, redisInfo, redisError,
+    lightspeed,
+    jobs,
+    appInfo
+  };
+}
+
+export async function adminDashboard(req: Request, res: Response) {
+  const data = await getDashboardData();
+  // Render HTML dashboard
+  res.set('Content-Type', 'text/html');
+  res.send(`
+    <html><head><title>SuitSync Backend Dashboard</title>
+    <style>body{font-family:sans-serif;background:#f8fafc;color:#222}h1{color:#2563eb}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:4px 8px}tr.ok{background:#d1fae5}tr.error{background:#fee2e2}</style>
+    </head><body>
+    <h1>SuitSync Backend Dashboard</h1>
+    <h2>Database</h2>
+    <table><tr><th>Status</th><td class="${data.dbStatus}">${data.dbStatus}</td></tr>
+    <tr><th>Tables</th><td>${Array.isArray(data.dbTables) ? data.dbTables.map(t=>t.table_name).join(', ') : ''}</td></tr>
+    ${data.dbError ? `<tr class="error"><th>Error</th><td>${data.dbError}</td></tr>` : ''}
+    </table>
+    <h2>Redis</h2>
+    <table><tr><th>Status</th><td class="${data.redisStatus}">${data.redisStatus}</td></tr>
+    <tr><th>Info</th><td><pre>${typeof data.redisInfo==='string'?data.redisInfo:JSON.stringify(data.redisInfo,null,2)}</pre></td></tr>
+    ${data.redisError ? `<tr class="error"><th>Error</th><td>${data.redisError}</td></tr>` : ''}
+    </table>
+    <h2>Lightspeed</h2>
+    <table><tr><th>Status</th><td>${data.lightspeed.status}</td></tr>
+    ${'error' in data.lightspeed && data.lightspeed.error ? `<tr class="error"><th>Error</th><td>${data.lightspeed.error}</td></tr>` : ''}
+    </table>
+    <h2>Job Scheduler</h2>
+    <table><tr><th>Job</th><th>Status</th><th>Last Run</th><th>Error</th></tr>
+    ${Array.isArray(data.jobs) ? data.jobs.map(j => {
+      const status = 'status' in j ? j.status || '' : '';
+      const lastRun = 'lastRun' in j ? j.lastRun || '' : '';
+      const error = 'error' in j ? j.error || '' : '';
+      return `<tr class="${status}"><td>${j.name}</td><td>${status}</td><td>${lastRun}</td><td>${error}</td></tr>`;
+    }).join('') : ''}
+    </table>
+    <h2>App Info</h2>
+    <table>
+      <tr><th>Uptime (s)</th><td>${data.appInfo.uptime.toFixed(0)}</td></tr>
+      <tr><th>Memory (MB)</th><td>${(data.appInfo.memory.rss/1024/1024).toFixed(1)}</td></tr>
+      <tr><th>Node</th><td>${data.appInfo.node}</td></tr>
+      <tr><th>Env</th><td>${data.appInfo.env}</td></tr>
+      <tr><th>Host</th><td>${data.appInfo.hostname}</td></tr>
+      <tr><th>Platform</th><td>${data.appInfo.platform}</td></tr>
+      <tr><th>Arch</th><td>${data.appInfo.arch}</td></tr>
+    </table>
+    </body></html>
+  `);
+}
+
+export async function adminDashboardJson(req: Request, res: Response) {
+  const data = await getDashboardData();
+  res.json(data);
+}

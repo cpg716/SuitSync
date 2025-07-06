@@ -81,6 +81,9 @@ All notable changes to SuitSync will be documented in this file.
 - frontend/pages/tasks.tsx
 - test_routes.js
 - test_routes_fixed.js
+- Backend dashboard now available at `/` (root) and `/api/admin/dashboard` (HTML) and `/api/admin/dashboard.json` (JSON API).
+- Dashboard shows health/status for: Database, Redis, Lightspeed, Job Scheduler, App Info.
+- JSON API endpoint for dashboard data for frontend consumption.
 
 ### Deleted
 - backend/prisma/migrations/20250701155334_enhanced_appointment_workflow/migration.sql
@@ -136,6 +139,18 @@ All notable changes to SuitSync will be documented in this file.
 - frontend/pages/setup-pin.tsx
 - frontend/pages/status.tsx
 - frontend/src/AuthContext.tsx
+- Session cookies are now set to `secure: false` in development (local Docker), `secure: true` in production. This allows local HTTP sessions to persist.
+- CORS configuration now allows credentials and uses `CORS_ORIGIN` or defaults to `http://localhost:3001`.
+- Frontend API client always sends credentials with requests for session-based authentication.
+- Prisma migrations are now required to be run in Docker before backend starts (see deployment guide).
+
+### Fixed
+- Fixed session persistence and authentication issues in Docker/local development.
+- Fixed 500 errors on protected endpoints by ensuring session cookies and CORS are correct.
+- Fixed 404/500 for `/dashboard` and `/api/admin/settings` by ensuring correct port mapping, session, and route registration.
+
+### Removed
+- Old root message at `/` replaced by backend dashboard.
 
 ### Summary
 - Fixed: Prevented SyncStatusPanel crash on undefined syncStatus (admin panel)

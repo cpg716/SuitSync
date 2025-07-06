@@ -26,7 +26,7 @@ export const getSyncStatus = async (req: Request, res: Response) => {
 
 export const triggerSync = async (req: Request, res: Response) => {
   logger.info('[SyncController] Trigger sync called', {
-    user: req.user || null,
+    user: (req as any).user || null,
     sessionId: req.sessionID,
     resource: req.params.resource,
     time: new Date().toISOString()
@@ -48,7 +48,7 @@ export const triggerSync = async (req: Request, res: Response) => {
     logger.info(`Manual sync triggered for '${resource}' by user ${userId}`);
     res.status(202).json({ message: `Synchronization for ${resource} has been initiated.` });
   } catch (error: any) {
-    logger.error('[SyncController] Sync error', { error: error, resource: req.params.resource, user: req.user, sessionId: req.sessionID });
+    logger.error('[SyncController] Sync error', { error: error, resource: req.params.resource, user: (req as any).user, sessionId: req.sessionID });
     res.status(500).json({ message: `Failed to start synchronization for ${resource}.` });
   }
 };

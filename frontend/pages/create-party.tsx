@@ -7,7 +7,8 @@ import { useToast } from '../components/ToastContext';
 export default function CreatePartyPage() {
   const [name, setName] = useState('');
   const [eventDate, setEventDate] = useState('');
-  const router = useRouter();
+  const isClient = typeof window !== 'undefined';
+  const router = isClient ? useRouter() : null;
   const { success, error: toastError } = useToast();
 
   async function handleSubmit(e: any) {

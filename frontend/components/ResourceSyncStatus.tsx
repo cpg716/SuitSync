@@ -33,7 +33,10 @@ export function ResourceSyncStatus({ resource }: ResourceSyncStatusProps) {
       toastSuccess(`${resource} sync started`);
       mutate();
     } catch (err) {
-      const message = err.response?.data?.message || `Sync failed`;
+      let message = 'Sync failed';
+      if (err && typeof err === 'object' && 'response' in err && err.response && typeof err.response === 'object' && 'data' in err.response && err.response.data && typeof err.response.data === 'object' && 'message' in err.response.data && typeof err.response.data.message === 'string') {
+        message = err.response.data.message || message;
+      }
       toastError(message);
     }
   };
@@ -84,7 +87,9 @@ export function ResourceSyncStatus({ resource }: ResourceSyncStatusProps) {
       case 'SUCCESS':
         return {
           icon: <CheckCircle size={16} className="text-green-500" />,
-          text: `Synced ${formatDistanceToNow(new Date(status.lastSyncedAt), { addSuffix: true })}`,
+          text: status.lastSyncedAt
+            ? `Synced ${formatDistanceToNow(new Date(status.lastSyncedAt), { addSuffix: true })}`
+            : 'Synced (time unknown)',
           color: 'text-green-600 dark:text-green-400',
         };
       case 'FAILED':

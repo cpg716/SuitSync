@@ -8,8 +8,8 @@ export const SplashScreen: React.FC = () => (
       alt="SuitSync Logo"
       width={128}
       height={128}
-      className="h-32 w-auto mb-8 drop-shadow-xl animate-fade-in"
-      style={{ width: 128, height: 'auto' }}
+      className="h-32 w-32 mb-8 drop-shadow-xl animate-fade-in"
+      style={{ width: 128, height: 128 }}
       priority
     />
     <div className="flex items-center justify-center">

@@ -106,16 +106,17 @@ export class MultiUserSessionService {
 
       logger.info(`Added user session for user ${userId} to multi-user cache`);
 
-      // In addUserSession, after updating session fields:
+      // Look up the user from the database
+      const userRecord = await prisma.user.findUnique({ where: { id: userId } });
       req.session.lightspeedUser = {
         id: userId,
-        name: localUser?.name || '',
-        email: localUser?.email || '',
-        role: localUser?.role || '',
-        photoUrl: localUser?.photoUrl || null,
-        lightspeedEmployeeId: localUser?.lightspeedEmployeeId || null,
+        name: userRecord?.name || '',
+        email: userRecord?.email || '',
+        role: userRecord?.role || '',
+        photoUrl: userRecord?.photoUrl || null,
+        lightspeedEmployeeId: userRecord?.lightspeedEmployeeId || null,
         isLightspeedUser: true,
-        hasLocalRecord: !!localUser,
+        hasLocalRecord: !!userRecord,
         localUserId: userId
       };
       req.session.userId = userId;
@@ -133,7 +134,7 @@ export class MultiUserSessionService {
         loginTime: new Date()
       };
       logger.info('[MultiUserSession] Session fields synchronized for user', { userId });
-      await new Promise((resolve, reject) => req.session.save(err => err ? reject(err) : resolve()));
+      await new Promise<void>((resolve, reject) => req.session.save(err => err ? reject(err) : resolve()));
       logger.info('[MultiUserSession] Session saved for user', { userId });
     } catch (error) {
       logger.error('Error adding user session:', error);

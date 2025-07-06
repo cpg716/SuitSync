@@ -15,7 +15,8 @@ interface HealthStatus {
 }
 
 export default function StatusPage() {
-  const router = useRouter();
+  const isClient = typeof window !== 'undefined';
+  const router = isClient ? useRouter() : null;
   const { user, loading, connectLightspeed, isLightspeedConnected } = useAuth();
   const { success: toastSuccess, error: toastError } = useToast();
   const [healthStatus, setHealthStatus] = useState<HealthStatus | null>(null);
@@ -38,7 +39,7 @@ export default function StatusPage() {
     const checkHealth = async () => {
       try {
         const response = await api.get('/api/health');
-        setHealthStatus(response.data);
+        setHealthStatus(response.data as HealthStatus);
       } catch (error) {
         console.error('Health check failed:', error);
         setHealthStatus({ status: 'error', timestamp: new Date().toISOString() });

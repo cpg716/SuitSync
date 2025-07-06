@@ -135,10 +135,10 @@ function TaskTypesAdmin() {
     fetch('/api/admin/settings/task-types', { credentials: 'include' }).then(r => r.json()).then(setTypes).catch(() => {}).then(() => setLoading(false));
   }, []);
 
-  const handleEdit = t => { setEditing(t.id); setForm({ name: t.name, defaultDuration: t.defaultDuration }); };
+  const handleEdit = (t: any) => { setEditing(t.id); setForm({ name: t.name, defaultDuration: t.defaultDuration }); };
   const handleCancel = () => { setEditing(null); setForm({ name: '', defaultDuration: 60 }); };
-  const handleChange = e => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
-  const handleSave = async e => {
+  const handleChange = (e: any) => setForm((f: any) => ({ ...f, [e.target.name]: e.target.value }));
+  const handleSave = async (e: any) => {
     e.preventDefault();
     const method = editing ? 'PUT' : 'POST';
     const url = editing ? `/api/admin/settings/task-types/${editing}` : '/api/admin/settings/task-types';
@@ -150,14 +150,14 @@ function TaskTypesAdmin() {
     });
     if (res.ok) {
       const updated = await res.json();
-      setTypes(ts => editing ? ts.map(t => t.id === updated.id ? updated : t) : [...ts, updated]);
+      setTypes((ts: any) => editing ? ts.map((t: any) => t.id === updated.id ? updated : t) : [...ts, updated]);
       handleCancel();
     }
   };
-  const handleDelete = id => { setDeleteId(id); setShowConfirm(true); };
+  const handleDelete = (id: any) => { setDeleteId(id); setShowConfirm(true); };
   const confirmDelete = async () => {
     await fetch(`/api/admin/settings/task-types/${deleteId}`, { method: 'DELETE', credentials: 'include' });
-    setTypes(ts => ts.filter(t => t.id !== deleteId));
+    setTypes((ts: any) => ts.filter((t: any) => t.id !== deleteId));
     setShowConfirm(false); setDeleteId(null);
   };
   return (
@@ -232,10 +232,10 @@ function TailorAbilitiesAdmin() {
       setLoading(false);
     });
   }, []);
-  const handleEdit = ab => { setEditing(ab.id); setForm({ tailorId: ab.tailorId, taskTypeId: ab.taskTypeId, proficiency: ab.proficiency }); };
+  const handleEdit = (ab: any) => { setEditing(ab.id); setForm({ tailorId: ab.tailorId, taskTypeId: ab.taskTypeId, proficiency: ab.proficiency }); };
   const handleCancel = () => { setEditing(null); setForm({ tailorId: '', taskTypeId: '', proficiency: 3 }); };
-  const handleChange = e => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
-  const handleSave = async e => {
+  const handleChange = (e: any) => setForm((f: any) => ({ ...f, [e.target.name]: e.target.value }));
+  const handleSave = async (e: any) => {
     e.preventDefault();
     const method = editing ? 'PUT' : 'POST';
     const url = editing ? `/api/admin/settings/tailor-abilities/${editing}` : '/api/admin/settings/tailor-abilities';
@@ -247,14 +247,14 @@ function TailorAbilitiesAdmin() {
     });
     if (res.ok) {
       const updated = await res.json();
-      setAbilities(abs => editing ? abs.map(a => a.id === updated.id ? updated : a) : [...abs, updated]);
+      setAbilities((abs: any) => editing ? abs.map((a: any) => a.id === updated.id ? updated : a) : [...abs, updated]);
       handleCancel();
     }
   };
-  const handleDelete = id => { setDeleteId(id); setShowConfirm(true); };
+  const handleDelete = (id: any) => { setDeleteId(id); setShowConfirm(true); };
   const confirmDelete = async () => {
     await fetch(`/api/admin/settings/tailor-abilities/${deleteId}`, { method: 'DELETE', credentials: 'include' });
-    setAbilities(abs => abs.filter(a => a.id !== deleteId));
+    setAbilities((abs: any) => abs.filter((a: any) => a.id !== deleteId));
     setShowConfirm(false); setDeleteId(null);
   };
   return (
@@ -334,10 +334,10 @@ function TailorSchedulesAdmin() {
       setLoading(false);
     });
   }, []);
-  const handleEdit = s => { setEditing(s.id); setForm({ tailorId: s.tailorId, dayOfWeek: s.dayOfWeek, startTime: s.startTime, endTime: s.endTime }); };
+  const handleEdit = (s: any) => { setEditing(s.id); setForm({ tailorId: s.tailorId, dayOfWeek: s.dayOfWeek, startTime: s.startTime, endTime: s.endTime }); };
   const handleCancel = () => { setEditing(null); setForm({ tailorId: '', dayOfWeek: 1, startTime: '09:00', endTime: '17:00' }); };
-  const handleChange = e => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
-  const handleSave = async e => {
+  const handleChange = (e: any) => setForm((f: any) => ({ ...f, [e.target.name]: e.target.value }));
+  const handleSave = async (e: any) => {
     e.preventDefault();
     const method = editing ? 'PUT' : 'POST';
     const url = editing ? `/api/admin/settings/tailor-schedules/${editing}` : '/api/admin/settings/tailor-schedules';
@@ -349,14 +349,14 @@ function TailorSchedulesAdmin() {
     });
     if (res.ok) {
       const updated = await res.json();
-      setSchedules(ss => editing ? ss.map(s => s.id === updated.id ? updated : s) : [...ss, updated]);
+      setSchedules((ss: any) => editing ? ss.map((s: any) => s.id === updated.id ? updated : s) : [...ss, updated]);
       handleCancel();
     }
   };
-  const handleDelete = id => { setDeleteId(id); setShowConfirm(true); };
+  const handleDelete = (id: any) => { setDeleteId(id); setShowConfirm(true); };
   const confirmDelete = async () => {
     await fetch(`/api/admin/settings/tailor-schedules/${deleteId}`, { method: 'DELETE', credentials: 'include' });
-    setSchedules(ss => ss.filter(s => s.id !== deleteId));
+    setSchedules((ss: any) => ss.filter((s: any) => s.id !== deleteId));
     setShowConfirm(false); setDeleteId(null);
   };
   return (
@@ -516,6 +516,7 @@ function UsersAdminCard() {
                         src={u.photoUrl}
                         alt={u.name}
                         className="h-16 w-16 sm:h-20 sm:w-20 rounded-full object-cover shadow-md ring-2 ring-white dark:ring-gray-700"
+                        style={{ width: '100%', height: '100%' }}
                       />
                     ) : (
                       <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shadow-md ring-2 ring-white dark:ring-gray-700">
@@ -710,12 +711,12 @@ export default function AdminSettings() {
       });
   }, []);
 
-  const handleChange = e => {
+  const handleChange = (e: any) => {
     setSettings((s: any) => ({ ...s, [e.target.name]: e.target.value }));
     setDirty(true);
   };
 
-  const handleSave = async e => {
+  const handleSave = async (e: any) => {
     e.preventDefault();
     setSaving(true);
     setError('');

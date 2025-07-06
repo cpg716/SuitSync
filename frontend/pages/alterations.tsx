@@ -31,13 +31,18 @@ const statusCols = [
 ];
 
 export default function AlterationsPage() {
-  const router = useRouter();
+  const isClient = typeof window !== 'undefined';
+  const router = isClient ? useRouter() : null;
   const [tab, setTab] = useState<'list' | 'calendar'>('list');
-  const { data: jobsData, error, isLoading, mutate } = useSWR('/api/alterations', fetcher, { refreshInterval: 60_000 });
+  const { data: jobsData, error, isLoading, mutate } = useSWR<{ jobs: any[] }>(
+    '/api/alterations',
+    fetcher as (url: string) => Promise<{ jobs: any[] }>,
+    { refreshInterval: 60_000 }
+  );
   
   // Fetch customers and parties for job creation
-  const { data: customersData } = useSWR('/api/customers', fetcher);
-  const { data: partiesData } = useSWR('/api/parties', fetcher);
+  const { data: customersData } = useSWR<{ customers: any[] }>('/api/customers', fetcher as (url: string) => Promise<{ customers: any[] }>);
+  const { data: partiesData } = useSWR<{ parties: any[] }>('/api/parties', fetcher as (url: string) => Promise<{ parties: any[] }>);
   const [selectedJob, setSelectedJob] = useState(null);
   const [alterations, setAlterations] = useState<any[]>([]);
   const [search, setSearch] = useState('');
@@ -96,7 +101,7 @@ export default function AlterationsPage() {
 
   const paginated = filtered.slice((page-1)*pageSize, page*pageSize);
 
-  const events = useMemo(() => jobs.map(job => ({
+  const events = useMemo(() => jobs.map((job: any) => ({
     id: job.id,
     title: `${job.partyName || job.party?.name || 'Party'} - ${job.memberName || job.member?.name || ''}`,
     start: new Date(job.dueDate || job.scheduledDateTime || job.createdAt),
@@ -341,12 +346,12 @@ export default function AlterationsPage() {
               type="text"
               placeholder="Search alterations..."
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
               className="sm:col-span-1"
             />
             <select 
               value={statusFilter} 
-              onChange={e => setStatusFilter(e.target.value)} 
+              onChange={(e: any) => setStatusFilter(e.target.value)} 
               className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-gray-800 text-black dark:text-white"
             >
               <option value="">All Statuses</option>
@@ -356,11 +361,11 @@ export default function AlterationsPage() {
             </select>
             <select 
               value={tailorFilter} 
-              onChange={e => setTailorFilter(e.target.value)} 
+              onChange={(e: any) => setTailorFilter(e.target.value)} 
               className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-gray-800 text-black dark:text-white"
             >
               <option value="">All Tailors</option>
-              {tailorOptions.map(t => <option key={t} value={t}>{t}</option>)}
+              {tailorOptions.map((t: any) => <option key={t} value={t}>{t}</option>)}
             </select>
             <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center">
               {filtered.length} of {jobs.length} alterations
@@ -414,7 +419,7 @@ export default function AlterationsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                    {paginated.map(job => (
+                    {paginated.map((job: any) => (
                       <ExpandableAlterationCard 
                         key={job.id} 
                         job={job} 
@@ -430,7 +435,7 @@ export default function AlterationsPage() {
               {/* Mobile Card View */}
               <div className="lg:hidden">
                 <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {paginated.map(job => (
+                  {paginated.map((job: any) => (
                     <div key={job.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex-1 min-w-0">
