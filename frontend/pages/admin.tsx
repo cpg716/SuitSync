@@ -11,6 +11,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/Tabs'
 import { Modal } from '../components/ui/Modal';
 import { useAuth } from '../src/AuthContext';
 import { apiFetch, getApiUrl } from '../lib/apiClient';
+import MonitoringDashboard from '../components/MonitoringDashboard';
 
 // Dynamically import heavy components
 const UserSettings = dynamic(() => import('./UserSettings'), {
@@ -618,6 +619,7 @@ const TABS = [
   { value: 'availability', label: 'My Availability' },
   { value: 'integrations', label: 'Integrations' },
   { value: 'sync', label: 'Sync & Health' },
+  { value: 'health', label: 'Health & Sync' },
 ];
 
 function SyncStatusPanel() {
@@ -854,6 +856,9 @@ export default function AdminSettings() {
                 </TabsContent>
                 <TabsContent value="sync">
                   <SyncStatusPanel />
+                </TabsContent>
+                <TabsContent value="health">
+                  <MonitoringDashboard />
                 </TabsContent>
               </Tabs>
             </>

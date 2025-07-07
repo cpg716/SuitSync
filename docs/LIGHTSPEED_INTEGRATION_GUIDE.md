@@ -1,5 +1,27 @@
 # Lightspeed Integration Guide
 
+## Overview
+- The app integrates with Lightspeed X-Series for customers, users, products, and sales.
+- Sync status for all resources is tracked in the `SyncStatus` table and visible in the UI header.
+- API health and error states are reported in the header tooltip and backend logs.
+
+## Endpoints
+- `/api/lightspeed/health`: Returns sync status for all resources (customers, users, products, sales) and API health/errors.
+- `/api/sync/trigger/:resource`: Manually trigger sync for a resource.
+
+## Sync Status
+- All resources are always included in the sync status array, even if never synced (status: 'IDLE').
+- After a successful sync, status is updated to 'SUCCESS'.
+- Any errors are shown in the UI and logs.
+
+## Windows & Docker
+- The integration is fully Dockerized and works on Mac, Windows, and Linux.
+- See `DEPLOYMENT_GUIDE.md` for migration steps.
+
+## Troubleshooting
+- If sync status is 'Idle' or 'Not Synced', check the backend logs and ensure all resources have a SyncStatus row.
+- API errors are surfaced in the UI and logs.
+
 This document provides a definitive guide to the Lightspeed X-Series integration within the SuitSync application. It details the architecture, authentication flow, and best practices implemented in our system.
 
 ## Table of Contents

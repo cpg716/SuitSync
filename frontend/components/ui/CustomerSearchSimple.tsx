@@ -11,6 +11,8 @@ interface Customer {
   phone?: string;
   appointments?: Appointment[];
   alterationJobs?: AlterationJob[];
+  first_name?: string;
+  last_name?: string;
 }
 
 interface Party {
@@ -125,7 +127,7 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
 
   const handleCustomerSelect = (customer: Customer) => {
     onCustomerSelect(customer);
-    setQuery(customer.name);
+    setQuery(`${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'N/A');
     setIsOpen(false);
   };
 
@@ -191,7 +193,7 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
                       <div className="flex items-center space-x-3">
                         {progress ? getStatusIcon(progress.status) : <User className="h-4 w-4 text-gray-400" />}
                         <div className="flex-1">
-                          <div className="font-medium">{customer.name}</div>
+                          <div className="font-medium">{`${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'N/A'}</div>
                           <div className="text-sm text-gray-500 space-y-1">
                             {customer.email && <div>{customer.email}</div>}
                             {customer.appointments && customer.appointments.length > 0 && (

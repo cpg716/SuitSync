@@ -21,6 +21,7 @@ import ThemeToggle from '../ThemeToggle';
 import { SwitchUserModal } from './SwitchUserModal';
 import { api } from '../../lib/apiClient';
 import { useToast } from '../ToastContext';
+import { UnifiedSyncStatus } from '../UnifiedSyncStatus';
 
 const routeTitles = {
   '/': 'Dashboard',
@@ -175,7 +176,7 @@ export const Appbar: React.FC = () => {
             <span className="lg:hidden">Install</span>
           </Button>
         )}
-        <LightspeedStatus />
+        <UnifiedSyncStatus />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 sm:h-9 sm:w-9 md:h-10 md:w-10 relative group min-h-[44px] min-w-[44px] sm:min-h-[36px] sm:min-w-[36px] md:min-h-[40px] md:min-w-[40px] touch-manipulation">

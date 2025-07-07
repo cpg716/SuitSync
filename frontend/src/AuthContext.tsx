@@ -139,18 +139,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await mutate();
   }
 
+  function capitalizeWords(str: string) {
+    return str.replace(/\b\w/g, c => c.toUpperCase());
+  }
+
   const syncCustomers = useCallback(async () => {
-    toastSuccess('Starting manual sync...');
+    toastSuccess(capitalizeWords('Starting manual sync...'));
     try {
       await api.post('/api/sync/customers');
-      toastSuccess('Sync in progress. Data will update shortly.');
+      toastSuccess(capitalizeWords('Sync in progress. Data will update shortly.'));
       mutateSyncStatus();
     } catch (err) {
       let message = 'Sync failed';
       if (err && typeof err === 'object' && 'response' in err && err.response && typeof err.response === 'object' && 'data' in err.response && err.response.data && typeof err.response.data === 'object' && 'error' in err.response.data) {
         message = err.response.data.error || message;
       }
-      toastError(message);
+      toastError(capitalizeWords(message));
     }
   }, [toastSuccess, toastError, mutateSyncStatus]);
 

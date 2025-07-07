@@ -30,7 +30,8 @@ interface Alteration { id: number; createdAt: string; status: string; notes: str
 interface Appointment { id: number; dateTime: string; type: string; notes: string; }
 interface Customer {
   id: number;
-  name: string;
+  first_name?: string;
+  last_name?: string;
   email: string;
   phone?: string;
   address?: string;
@@ -52,7 +53,7 @@ function CustomerHeader({ customer, onEdit }) {
           <div className="flex items-center gap-4">
             <User className="w-12 h-12 text-gray-400" />
             <div>
-              <CardTitle className="text-2xl">{customer.name}</CardTitle>
+              <CardTitle className="text-2xl">{`${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'N/A'}</CardTitle>
               <p className="text-sm text-gray-500">Lightspeed ID: {customer.lightspeedId || 'N/A'}</p>
             </div>
           </div>

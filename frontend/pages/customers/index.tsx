@@ -10,15 +10,18 @@ import { useAuth } from '../../src/AuthContext';
 import { MagnifyingGlass, Plus, Users } from '@phosphor-icons/react';
 import { api } from '@/lib/apiClient';
 import { ResourceSyncStatus } from '@/components/ResourceSyncStatus';
+import { CheckCircle, XCircle, Loader2, AlertTriangle } from 'lucide-react';
 
 interface Customer {
   id: number;
-  name: string;
+  first_name?: string;
+  last_name?: string;
   email: string;
   phone: string;
   lightspeedId: string;
   parties: any[];
   measurements: any;
+  display_name?: string;
 }
 
 interface PaginationData {
@@ -38,6 +41,10 @@ export default function CustomersPage() {
   const [saving, setSaving] = useState(false);
   const { success, error: toastError } = useToast();
   const { user } = useAuth();
+  const [syncModalOpen, setSyncModalOpen] = useState(false);
+  const [syncPreview, setSyncPreview] = useState<{ new: number; updated: number; unchanged: number; total: number } | null>(null);
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   const fetcher = (url: string): Promise<{ customers: Customer[]; pagination: PaginationData; }> => Promise.resolve(api.get(url)).then(res => res.data as { customers: Customer[]; pagination: PaginationData; });
 
@@ -82,6 +89,52 @@ export default function CustomersPage() {
     }
   }
 
+  // Handler for sync button
+  const handleSyncClick = async () => {
+    setSyncModalOpen(true);
+    setSyncLoading(true);
+    setSyncError(null);
+    setSyncPreview(null);
+    try {
+      // Simulate step-by-step checks for a more visual checklist
+      const steps = [
+        { key: 'new', label: 'Checking for new customers' },
+        { key: 'updated', label: 'Checking for updated customers' },
+        { key: 'unchanged', label: 'Checking for unchanged customers' },
+      ];
+      let preview: any = {};
+      for (let i = 0; i < steps.length; i++) {
+        // Simulate network delay for each step
+        await new Promise(res => setTimeout(res, 400));
+        if (i === 0) {
+          const res = await api.get('/api/sync/customers/preview');
+          preview = res.data;
+        }
+        setSyncPreview(prev => ({ ...preview, _step: i + 1 }));
+      }
+    } catch (err: any) {
+      setSyncError(err?.response?.data?.message || 'Failed to check for updates');
+    } finally {
+      setSyncLoading(false);
+    }
+  };
+
+  // Handler for confirming sync
+  const handleConfirmSync = async () => {
+    setSyncLoading(true);
+    setSyncError(null);
+    try {
+      await api.post('/api/sync/customers');
+      setSyncModalOpen(false);
+      setSyncPreview(null);
+      success('Customer sync started');
+    } catch (err: any) {
+      setSyncError(err?.response?.data?.message || 'Failed to start sync');
+    } finally {
+      setSyncLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Streamlined Action Bar - All in One Row */}
@@ -91,7 +144,7 @@ export default function CustomersPage() {
           <div className="flex-1 relative min-w-0">
             <Input
               type="text"
-              placeholder="Search customers..."
+              placeholder="Search by name, phone, or email..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-10 w-full h-10 sm:h-11 text-sm sm:text-base"
@@ -105,7 +158,7 @@ export default function CustomersPage() {
 
         {/* Sync Status and Controls */}
         <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0 w-full sm:w-auto justify-between sm:justify-start">
-          <ResourceSyncStatus resource="customers" />
+          <ResourceSyncStatus resource="customers" onSyncClick={handleSyncClick} />
           {user?.role === 'admin' && (
             <Button
               onClick={() => setAddModalOpen(true)}
@@ -144,16 +197,9 @@ export default function CustomersPage() {
                       className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
                     >
                       <td className="px-6 py-4">
-                        <div className="flex items-center space-x-3">
-                          <div className="h-10 w-10 rounded-full bg-primary/10 dark:bg-accent/10 flex items-center justify-center">
-                            <span className="text-sm font-bold text-primary dark:text-accent">
-                              {customer.name?.charAt(0)?.toUpperCase() || '?'}
-                            </span>
-                          </div>
-                          <div className="min-w-0">
-                            <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                              {customer.name}
-                            </div>
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                            {customer.display_name || `${customer.last_name || ''}${customer.last_name && customer.first_name ? ', ' : ''}${customer.first_name || ''}`.trim() || 'N/A'}
                           </div>
                         </div>
                       </td>
@@ -219,20 +265,13 @@ export default function CustomersPage() {
                 {(Array.isArray(customers) && customers.length > 0) ? customers.map((customer) => (
                   <div key={customer.id} className="p-4 sm:p-5 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors active:bg-gray-100 dark:active:bg-gray-800">
                     <div className="flex items-start justify-between mb-4">
-                      <div className="flex items-center space-x-3 flex-1 min-w-0">
-                        <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-full bg-primary/10 dark:bg-accent/10 flex items-center justify-center flex-shrink-0">
-                          <span className="text-lg sm:text-xl font-bold text-primary dark:text-accent">
-                            {customer.name?.charAt(0)?.toUpperCase() || '?'}
-                          </span>
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <h3 className="text-base sm:text-lg font-medium text-gray-900 dark:text-gray-100 truncate">
-                            {customer.name}
-                          </h3>
-                          <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                            {customer.email || '—'}
-                          </p>
-                        </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-base sm:text-lg font-medium text-gray-900 dark:text-gray-100 truncate">
+                          {customer.display_name || `${customer.last_name || ''}${customer.last_name && customer.first_name ? ', ' : ''}${customer.first_name || ''}`.trim() || 'N/A'}
+                        </h3>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                          {customer.email || '—'}
+                        </p>
                       </div>
                     </div>
 
@@ -308,9 +347,43 @@ export default function CustomersPage() {
                   >
                     Previous
                   </Button>
-                  <span className="text-sm text-gray-500 dark:text-gray-400">
-                    Page {pagination.current} of {pagination.pages}
-                  </span>
+                  {/* Numbered pagination */}
+                  {(() => {
+                    const pages = [];
+                    const totalPages = pagination.pages;
+                    const current = pagination.current;
+                    let start = Math.max(1, current - 2);
+                    let end = Math.min(totalPages, current + 2);
+                    if (current <= 3) {
+                      end = Math.min(5, totalPages);
+                    } else if (current >= totalPages - 2) {
+                      start = Math.max(1, totalPages - 4);
+                    }
+                    if (start > 1) {
+                      pages.push(
+                        <Button key={1} variant={current === 1 ? 'default' : 'ghost'} size="sm" onClick={() => setPage(1)}>
+                          1
+                        </Button>
+                      );
+                      if (start > 2) pages.push(<span key="start-ellipsis">...</span>);
+                    }
+                    for (let i = start; i <= end; i++) {
+                      pages.push(
+                        <Button key={i} variant={current === i ? 'default' : 'ghost'} size="sm" onClick={() => setPage(i)}>
+                          {i}
+                        </Button>
+                      );
+                    }
+                    if (end < totalPages) {
+                      if (end < totalPages - 1) pages.push(<span key="end-ellipsis">...</span>);
+                      pages.push(
+                        <Button key={totalPages} variant={current === totalPages ? 'default' : 'ghost'} size="sm" onClick={() => setPage(totalPages)}>
+                          {totalPages}
+                        </Button>
+                      );
+                    }
+                    return pages;
+                  })()}
                   <Button
                     variant="ghost"
                     size="sm"
@@ -370,6 +443,63 @@ export default function CustomersPage() {
                 </Button>
               </div>
             </form>
+          </Modal>
+
+          {/* Sync Preview Modal */}
+          <Modal open={syncModalOpen} onClose={() => setSyncModalOpen(false)}>
+            <div className="p-6 min-w-[340px] max-w-xs">
+              <h2 className="text-lg font-bold mb-2">Customer Sync Preview</h2>
+              {syncLoading && (
+                <div className="py-4 text-center">
+                  <Loader2 className="animate-spin mx-auto mb-2 text-blue-500" size={32} />
+                  <div className="text-sm text-gray-600">Checking for updates...</div>
+                </div>
+              )}
+              {syncError && (
+                <div className="py-2 text-red-600 flex flex-col items-center">
+                  <AlertTriangle className="mb-1" />
+                  <div>{syncError}</div>
+                  <Button variant="outline" className="mt-3" onClick={handleSyncClick}>Retry</Button>
+                </div>
+              )}
+              {syncPreview && !syncLoading && !syncError && (
+                <div className="space-y-4">
+                  <div className="mb-2">
+                    <div className="font-semibold text-base mb-1">Summary</div>
+                    <div className="flex gap-2 items-center">
+                      <CheckCircle className="text-green-500" size={20} />
+                      <span className="text-green-700 font-medium">{syncPreview.new} new</span>
+                      <CheckCircle className="text-green-500" size={20} />
+                      <span className="text-green-700 font-medium">{syncPreview.updated} updated</span>
+                      <CheckCircle className="text-gray-400" size={20} />
+                      <span className="text-gray-600">{syncPreview.unchanged} unchanged</span>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">Total in Lightspeed: {syncPreview.total}</div>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
+                    <div className="font-medium mb-2 text-gray-700 dark:text-gray-200">Checks</div>
+                    <ul className="space-y-2">
+                      <li className="flex items-center gap-2">
+                        {syncPreview._step >= 1 ? <CheckCircle className="text-green-500" size={18} /> : <Loader2 className="animate-spin text-blue-500" size={18} />}
+                        <span>New customers: <span className="font-semibold">{syncPreview.new}</span></span>
+                      </li>
+                      <li className="flex items-center gap-2">
+                        {syncPreview._step >= 2 ? <CheckCircle className="text-green-500" size={18} /> : <Loader2 className="animate-spin text-blue-500" size={18} />}
+                        <span>Updated customers: <span className="font-semibold">{syncPreview.updated}</span></span>
+                      </li>
+                      <li className="flex items-center gap-2">
+                        {syncPreview._step >= 3 ? <CheckCircle className="text-green-500" size={18} /> : <Loader2 className="animate-spin text-blue-500" size={18} />}
+                        <span>Unchanged customers: <span className="font-semibold">{syncPreview.unchanged}</span></span>
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="flex gap-2 mt-4 justify-end">
+                    <Button variant="secondary" onClick={() => setSyncModalOpen(false)} disabled={syncLoading}>Cancel</Button>
+                    <Button onClick={handleConfirmSync} disabled={syncLoading || syncPreview._step < 3}>Sync</Button>
+                  </div>
+                </div>
+              )}
+            </div>
           </Modal>
         </>
       )}

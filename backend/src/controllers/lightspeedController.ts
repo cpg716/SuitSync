@@ -26,14 +26,22 @@ export const getLightspeedHealth = async (req: Request, res: Response) => {
     });
   }
   try {
+    const expectedResources = ['customers', 'users', 'products', 'sales'];
     const statuses = await prisma.syncStatus.findMany({ orderBy: { resource: 'asc' } });
-    const sanitizedStatuses = statuses.map(s => ({
-      ...s,
-      lastSyncedVersion: s.lastSyncedVersion?.toString() || null,
-      lastSyncedAt: s.lastSyncedAt?.toISOString() || null,
-      createdAt: s.createdAt?.toISOString() || null,
-      updatedAt: s.updatedAt?.toISOString() || null,
-    }));
+    const statusMap = new Map(statuses.map(s => [s.resource, s]));
+    const now = new Date();
+    const sanitizedStatuses = expectedResources.map(resource => {
+      const s = statusMap.get(resource);
+      return {
+        resource,
+        status: s?.status || 'IDLE',
+        lastSyncedVersion: s?.lastSyncedVersion?.toString() || null,
+        lastSyncedAt: s?.lastSyncedAt?.toISOString() || null,
+        createdAt: s?.createdAt?.toISOString() || null,
+        updatedAt: s?.updatedAt?.toISOString() || null,
+        errorMessage: s?.errorMessage || null,
+      };
+    });
     res.status(200).json({
       lightspeedConnection,
       lightspeedApiError,

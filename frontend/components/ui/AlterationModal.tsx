@@ -26,7 +26,12 @@ interface Alteration {
 
 interface Customer {
   id: string;
-  name: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  phone?: string;
+  lightspeedId?: string;
+  measurements?: any;
 }
 
 interface Tailor {
@@ -190,7 +195,7 @@ export const AlterationModal = function({ open, onClose, onSubmit, alteration, l
                   <option value="">Select Customer</option>
                   {(Array.isArray(customers) ? customers : []).map(customer => (
                     <option key={customer.id} value={customer.id}>
-                      {customer.name}
+                      {`${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'N/A'}
                     </option>
                   ))}
                 </select>

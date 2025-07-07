@@ -316,3 +316,28 @@ This implementation provides a production-ready foundation for SuitSync with ent
 
 ## Removed
 - The old root message at `/` has been replaced by the backend dashboard.
+
+## Architecture
+- Monorepo with `backend/` (Node.js/Express/Prisma/Postgres), `frontend/` (Next.js/React/Tailwind), and `infra/` (Docker Compose).
+- All builds, tests, and migrations run in Docker containers for cross-platform compatibility (Mac, Windows, Linux).
+
+## Sync & Health
+- Unified sync status system: backend always returns all expected resources (customers, users, products, sales) with current status and last sync time.
+- Sync status and API health are visible in the header tooltip, with per-resource details and error reporting.
+- Sync jobs update the `SyncStatus` table after every run; UI reflects real-time state.
+
+## Customer List & Search
+- Customer list is sorted by last name (missing last names at end), displayed as `Last Name, First Name`.
+- Search works for last name, first name, email, or phone.
+- UI improvements: removed leading letter/avatar, improved accessibility and clarity.
+
+## Windows Migration
+- Project is fully Dockerized and can be moved to Windows by copying the folder and running Docker Desktop.
+- All environment variables and scripts are cross-platform.
+- Database can be migrated using pg_dump/restore or Docker volume copy.
+
+## Error Handling & Logging
+- Improved backend logging for sync jobs, API health, and search queries.
+- All errors are surfaced in the UI and logs for easier debugging.
+
+## See other docs for API, database, and deployment details.

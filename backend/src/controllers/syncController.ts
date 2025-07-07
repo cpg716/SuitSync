@@ -1,8 +1,9 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { withAccelerate } from '@prisma/extension-accelerate';
-import { syncCustomers, syncProducts, syncUserPhotos } from '../services/syncService';
+import { syncCustomers, syncProducts } from '../services/syncService';
 import logger from '../utils/logger';
+import { createLightspeedClient } from '../lightspeedClient';
 
 const prisma = new PrismaClient().$extends(withAccelerate());
 
@@ -75,14 +76,34 @@ export const resetSyncStatus = async (req: Request, res: Response) => {
   }
 };
 
-export const manualUserPhotoSync = async (req: Request, res: Response) => {
+export const previewCustomerSync = async (req: Request, res: Response) => {
   try {
-    syncUserPhotos(req).catch(err => {
-      logger.error('Background user photo sync failed:', err);
-    });
-    res.json({ message: 'User photo sync started', timestamp: new Date().toISOString() });
+    // Get all customers from Lightspeed
+    const lightspeedClient = createLightspeedClient(req);
+    const lsCustomers = await lightspeedClient.fetchAllWithPagination('/customers', {});
+    // Get all local customers
+    const localCustomers = await prisma.customer.findMany({ select: { lightspeedId: true, lightspeedVersion: true } });
+    const localMap = new Map(localCustomers.map(c => [c.lightspeedId, c.lightspeedVersion ? c.lightspeedVersion.toString() : null]));
+    let newCount = 0;
+    let updatedCount = 0;
+    let unchangedCount = 0;
+    for (const ls of lsCustomers) {
+      const id = ls.id?.toString();
+      const version = ls.version ? ls.version.toString() : null;
+      if (!id) continue;
+      if (!localMap.has(id)) {
+        newCount++;
+      } else if (localMap.get(id) !== version) {
+        updatedCount++;
+      } else {
+        unchangedCount++;
+      }
+    }
+    res.json({ new: newCount, updated: updatedCount, unchanged: unchangedCount, total: lsCustomers.length });
   } catch (error: any) {
-    logger.error('Error starting user photo sync:', error);
-    res.status(500).json({ error: 'Failed to start user photo sync' });
+    logger.error('Failed to preview customer sync:', error);
+    res.status(500).json({ message: 'Failed to preview customer sync', error: error.message });
   }
-}; 
+};
+
+export { syncCustomers, syncProducts }; 

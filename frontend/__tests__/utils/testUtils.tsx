@@ -114,7 +114,8 @@ export const mockSWR = (data: any, error: any = null) => {
 // Test data factories
 export const createMockCustomer = (overrides = {}) => ({
   id: 1,
-  name: 'John Doe',
+  first_name: 'John',
+  last_name: 'Doe',
   email: 'john@example.com',
   phone: '+1234567890',
   address: '123 Main St',

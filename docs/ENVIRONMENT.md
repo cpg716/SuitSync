@@ -164,3 +164,22 @@ For more troubleshooting help, see the main [README.md](../README.md) and [DEPLO
 
 ## Health Checks
 - Use the backend dashboard at `/` or `/api/admin/dashboard(.json)` for live health/status.
+
+## Environment Setup
+
+## Required Environment Variables
+- `DATABASE_URL`: Postgres connection string
+- `LS_DOMAIN`, `LS_CLIENT_ID`, `LS_CLIENT_SECRET`, `LS_REDIRECT_URI`: Lightspeed OAuth2 credentials
+- `SESSION_SECRET`: Session encryption key
+- `CORS_ORIGIN`: Allowed frontend origin (e.g., http://localhost:3001)
+- `REDIS_URL`: Redis connection string (if used)
+
+## Notes
+- All variables are cross-platform (Mac/Windows/Linux)
+- Use `.env` file in project root
+- No hardcoded OS-specific paths
+- Docker Compose automatically loads environment variables
+
+## Windows
+- All scripts and Docker commands work on Windows with Docker Desktop
+- If you see path or permission errors, check Docker Desktop settings

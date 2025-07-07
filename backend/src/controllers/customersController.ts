@@ -31,29 +31,39 @@ export const listCustomers = async (req: Request, res: Response): Promise<void> 
   try {
     const { search, page = 1, limit = 10 } = req.query as any;
     const skip = (page - 1) * limit;
-    let where = undefined;
+    let customers, total;
     if (search) {
-      where = {
-        OR: [
-          { name: { contains: search, mode: 'insensitive' as const } },
-          { email: { contains: search, mode: 'insensitive' as const } },
-          { phone: { contains: search, mode: 'insensitive' as const } },
-        ]
-      };
+      console.log('[Customer List SQL]', `SELECT *, CASE WHEN last_name IS NULL OR TRIM(last_name) = '' THEN 1 ELSE 0 END AS missing_last, CONCAT_WS(', ', NULLIF(TRIM(last_name), ''), NULLIF(TRIM(first_name), '')) AS display_name FROM "Customer" WHERE first_name ILIKE $1 OR last_name ILIKE $1 OR email ILIKE $1 OR phone ILIKE $1 ORDER BY missing_last ASC, LOWER(last_name) NULLS LAST, LOWER(first_name) NULLS LAST LIMIT $2 OFFSET $3;`, [`%${search}%`, Number(limit), Number(skip)]);
+      customers = await prisma.$queryRawUnsafe(
+        `SELECT *,
+          CASE WHEN last_name IS NULL OR TRIM(last_name) = '' THEN 1 ELSE 0 END AS missing_last,
+          CONCAT_WS(', ', NULLIF(TRIM(last_name), ''), NULLIF(TRIM(first_name), '')) AS display_name
+        FROM "Customer"
+        WHERE first_name ILIKE $1 OR last_name ILIKE $1 OR email ILIKE $1 OR phone ILIKE $1
+        ORDER BY missing_last ASC, LOWER(last_name) NULLS LAST, LOWER(first_name) NULLS LAST
+        LIMIT $2 OFFSET $3;`,
+        `%${search}%`, Number(limit), Number(skip)
+      );
+      const countResult = await prisma.$queryRawUnsafe(
+        `SELECT COUNT(*) FROM "Customer" WHERE first_name ILIKE $1 OR last_name ILIKE $1 OR email ILIKE $1 OR phone ILIKE $1;`,
+        `%${search}%`
+      );
+      total = parseInt(countResult[0].count, 10);
+    } else {
+      customers = await prisma.$queryRawUnsafe(
+        `SELECT *,
+          CASE WHEN last_name IS NULL OR TRIM(last_name) = '' THEN 1 ELSE 0 END AS missing_last,
+          CONCAT_WS(', ', NULLIF(TRIM(last_name), ''), NULLIF(TRIM(first_name), '')) AS display_name
+        FROM "Customer"
+        ORDER BY missing_last ASC, LOWER(last_name) NULLS LAST, LOWER(first_name) NULLS LAST
+        LIMIT $1 OFFSET $2;`,
+        Number(limit), Number(skip)
+      );
+      const countResult = await prisma.$queryRawUnsafe(
+        `SELECT COUNT(*) FROM "Customer";`
+      );
+      total = parseInt(countResult[0].count, 10);
     }
-    const [customers, total] = await Promise.all([
-      prisma.customer.findMany({
-        where,
-        skip,
-        take: Number(limit),
-        orderBy: { name: 'asc' },
-        include: {
-          measurements: true,
-          parties: true
-        }
-      }),
-      prisma.customer.count({ where })
-    ]);
     res.json({
       customers,
       pagination: {
@@ -83,7 +93,10 @@ export const getCustomer = async (req: Request, res: Response): Promise<void> =>
       res.status(404).json({ error: 'Customer not found' });
       return;
     }
-    res.json(customer);
+    res.json({
+      ...customer,
+      name: undefined, // Remove or set to undefined for deprecation
+    });
   } catch (err) {
     console.error('Error getting customer:', err);
     res.status(500).json({ error: 'Failed to get customer' });
@@ -93,16 +106,11 @@ export const getCustomer = async (req: Request, res: Response): Promise<void> =>
 export const createCustomer = async (req: Request, res: Response): Promise<void> => {
   const { name, email, phone } = req.body;
   const userId = (req as any).user.id;
-  if (!name || !email) {
-    res.status(400).json({ error: 'Name and email are required' });
+  if (!name) {
+    res.status(400).json({ error: 'Name is required' });
     return;
   }
   try {
-    const existingCustomer = await prisma.customer.findUnique({ where: { email } });
-    if (existingCustomer) {
-      res.status(409).json({ error: 'A customer with this email already exists in SuitSync.' });
-      return;
-    }
     const lightspeedClient = createLightspeedClient(req);
     const [firstName, ...lastNameParts] = name.split(' ');
     const lastName = lastNameParts.join(' ') || firstName;
@@ -111,7 +119,7 @@ export const createCustomer = async (req: Request, res: Response): Promise<void>
       lastName: lastName,
       Contact: {
         Emails: {
-          Email: [{ address: email, type: 'primary' }],
+          Email: [{ address: email || 'N/A', type: 'primary' }],
         },
         Phones: phone ? { Phone: [{ number: phone, type: 'mobile' }] } : undefined,
       },
@@ -123,8 +131,8 @@ export const createCustomer = async (req: Request, res: Response): Promise<void>
       data: {
         lightspeedId: lightspeedCustomer.customerID.toString(),
         name: `${lightspeedCustomer.firstName || ''} ${lightspeedCustomer.lastName || ''}`.trim(),
-        email: lightspeedCustomer.Contact.Emails.Email[0].address,
-        phone: lightspeedCustomer.Contact.Phones?.Phone?.[0]?.number,
+        email: lightspeedCustomer.Contact.Emails.Email[0].address || 'N/A',
+        phone: lightspeedCustomer.Contact.Phones?.Phone?.[0]?.number || 'N/A',
         lightspeedVersion: BigInt(lightspeedCustomer.version),
         syncedAt: new Date(),
       },

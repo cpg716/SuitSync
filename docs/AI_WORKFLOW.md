@@ -237,3 +237,11 @@ What's the best approach following our patterns?"
 - Generate release notes automatically
 
 For more information on SuitSync development, see the main [README.md](../README.md) and other documentation files.
+
+## Sync & Health
+- Sync status is always up to date and visible in the header.
+- All resources are tracked; errors and API health are surfaced in the UI and logs.
+
+## Troubleshooting
+- If sync status is 'Idle' or missing, check the SyncStatus table and backend logs.
+- For Windows migration, see `DEPLOYMENT_GUIDE.md`.

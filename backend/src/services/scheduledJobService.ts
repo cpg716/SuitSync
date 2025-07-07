@@ -61,6 +61,20 @@ export class ScheduledJobService {
       }
     });
 
+    // === SuitSync: Scheduled Customer Sync ===
+    this.scheduleJob('sync-customers', '*/10 * * * *', async () => {
+      try {
+        const { syncCustomers } = await import('./syncService.js');
+        // Use an empty req object; syncService will use persistent token
+        const req = {};
+        logger.info('[AutoSync] Running scheduled customer sync...');
+        await syncCustomers(req);
+        logger.info('[AutoSync] Completed scheduled customer sync.');
+      } catch (error) {
+        logger.error('[AutoSync] Scheduled customer sync failed:', error);
+      }
+    });
+
     logger.info(`Initialized ${this.jobs.size} scheduled jobs`);
   }
 

@@ -4,7 +4,9 @@ import {
   triggerSync,
   getSyncErrors,
   resetSyncStatus,
-  manualUserPhotoSync
+  syncCustomers,
+  syncProducts,
+  previewCustomerSync
 } from '../controllers/syncController';
 import { authMiddleware, requireAdmin } from '../middleware/auth';
 import { asyncHandler } from '../utils/asyncHandler';
@@ -15,12 +17,12 @@ router.get('/errors', asyncHandler(getSyncErrors));
 router.get('/status', asyncHandler(getSyncStatus));
 router.post('/trigger/:resource', authMiddleware, requireAdmin, asyncHandler(triggerSync));
 router.post('/reset-status', authMiddleware, requireAdmin, asyncHandler(resetSyncStatus));
-router.post('/user-photos', authMiddleware, requireAdmin, asyncHandler(manualUserPhotoSync));
 
 // Legacy routes for frontend compatibility
-router.post('/customers', authMiddleware, asyncHandler(async (req, res) => {
-  req.params.resource = 'customers';
-  return triggerSync(req, res);
-}));
+router.post('/customers', authMiddleware, asyncHandler(syncCustomers));
+router.post('/products', authMiddleware, asyncHandler(syncProducts));
+
+// Add preview route for customer sync
+router.get('/customers/preview', authMiddleware, requireAdmin, asyncHandler(previewCustomerSync));
 
 export default router; 

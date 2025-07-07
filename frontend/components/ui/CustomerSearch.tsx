@@ -8,7 +8,8 @@ import { cn } from '@/lib/utils';
 
 interface Customer {
   id: number;
-  name: string;
+  first_name?: string;
+  last_name?: string;
   email?: string;
   phone?: string;
   lightspeedId?: string;
@@ -188,7 +189,7 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
   const handleResultSelect = (result: SearchResult) => {
     if (result.type === 'customer') {
       onCustomerSelect(result.data as Customer);
-      setQuery((result.data as Customer).name);
+      setQuery((result.data as Customer).first_name || (result.data as Customer).last_name || '');
     } else if (result.member) {
       onPartyMemberSelect(result.data as Party, result.member);
       setQuery(`${(result.data as Party).name} - ${result.member.role}`);
@@ -233,7 +234,7 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
           <User className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400 flex-shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="font-medium text-gray-900 dark:text-gray-100 truncate text-sm sm:text-base">
-              {customer.name}
+              {`${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'N/A'}
             </div>
             <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">
               {customer.email || customer.phone || 'No contact info'}

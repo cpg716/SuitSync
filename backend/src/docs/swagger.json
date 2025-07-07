@@ -1,0 +1,277 @@
+{
+	"openapi": "3.0.0",
+	"components": {
+		"examples": {},
+		"headers": {},
+		"parameters": {},
+		"requestBodies": {},
+		"responses": {},
+		"schemas": {},
+		"securitySchemes": {}
+	},
+	"info": {
+		"title": "suitsync-full",
+		"version": "1.0.0",
+		"contact": {}
+	},
+	"paths": {
+		"/users": {
+			"get": {
+				"operationId": "List",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {},
+									"type": "array"
+								}
+							}
+						}
+					}
+				},
+				"description": "List all users",
+				"tags": [
+					"Users"
+				],
+				"security": [],
+				"parameters": []
+			}
+		},
+		"/users/{id}": {
+			"get": {
+				"operationId": "GetById",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"nullable": true
+								}
+							}
+						}
+					}
+				},
+				"description": "Get user by ID",
+				"tags": [
+					"Users"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			}
+		},
+		"/parties": {
+			"get": {
+				"operationId": "List",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {},
+									"type": "array"
+								}
+							}
+						}
+					}
+				},
+				"description": "List all parties",
+				"tags": [
+					"Parties"
+				],
+				"security": [],
+				"parameters": []
+			}
+		},
+		"/parties/{id}": {
+			"get": {
+				"operationId": "GetById",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"nullable": true
+								}
+							}
+						}
+					}
+				},
+				"description": "Get party by ID",
+				"tags": [
+					"Parties"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					}
+				]
+			}
+		},
+		"/customers": {
+			"get": {
+				"operationId": "List",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {},
+									"type": "array"
+								}
+							}
+						}
+					}
+				},
+				"description": "List all customers",
+				"tags": [
+					"Customers"
+				],
+				"security": [],
+				"parameters": []
+			}
+		},
+		"/customers/{id}": {
+			"get": {
+				"operationId": "GetById",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"nullable": true
+								}
+							}
+						}
+					}
+				},
+				"description": "Get customer by ID",
+				"tags": [
+					"Customers"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			}
+		},
+		"/appointments": {
+			"get": {
+				"operationId": "List",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {},
+									"type": "array"
+								}
+							}
+						}
+					}
+				},
+				"description": "List all appointments",
+				"tags": [
+					"Appointments"
+				],
+				"security": [],
+				"parameters": []
+			},
+			"post": {
+				"operationId": "Create",
+				"responses": {
+					"201": {
+						"description": "Created",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"description": "Create a new appointment",
+				"tags": [
+					"Appointments"
+				],
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {}
+						}
+					}
+				}
+			}
+		},
+		"/appointments/{id}": {
+			"get": {
+				"operationId": "GetById",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"nullable": true
+								}
+							}
+						}
+					}
+				},
+				"description": "Get appointment by ID",
+				"tags": [
+					"Appointments"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					}
+				]
+			}
+		}
+	},
+	"servers": [
+		{
+			"url": "/"
+		}
+	]
+}

@@ -12,7 +12,7 @@ import { sessionSizeManager } from './middleware/sessionManager';
 import { scheduledJobService } from './services/scheduledJobService';
 import { createClient } from 'redis';
 import RedisStore from 'connect-redis';
-import { RegisterRoutes } from './routes/initRoutes'; // ensure this file exists!
+import { initRoutes } from './routes/initRoutes';
 import { adminDashboard } from './controllers/adminController';
 
 // Load environment variables and validate
@@ -104,11 +104,14 @@ async function bootstrap() {
   app.use(sessionSizeManager());
 
   // Register all API routes
-  RegisterRoutes(app);
+  initRoutes(app);
+
+  // Public backend dashboard at root (must be before static frontend)
+  app.get('/', adminDashboard);
 
   // Serve uploads
   app.use('/uploads', express.static(path.join(__dirname, '../../public/uploads')));
-  // Serve static frontend (after API routes)
+  // Serve static frontend (after API routes and dashboard)
   app.use(express.static(path.join(__dirname, '../../frontend/out')));
 
   // Healthcheck
@@ -181,9 +184,27 @@ async function bootstrap() {
   process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
-bootstrap().catch((err) => {
-  console.error('Failed to start server:', err);
-  process.exit(1);
-});
+async function ensureSettingsRow() {
+  await prisma.settings.upsert({
+    where: { id: 1 },
+    update: {},
+    create: {
+      id: 1,
+      reminderIntervals: '24,3',
+      earlyMorningCutoff: '09:30',
+      emailSubject: 'Reminder: Your appointment at {shopName}',
+      emailBody: 'Hi {customerName},\n\nThis is a reminder for your appointment with {partyName} on {dateTime}.\n\nThank you!',
+      smsBody: 'Reminder: {partyName} appointment on {dateTime} at {shopName}.',
+      pickupReadySubject: 'Your garment is ready for pickup!',
+      pickupReadyEmail: 'Hi {customerName},\n\nYour garment for {partyName} is ready for pickup!\n\nPlease visit us at your earliest convenience.',
+      pickupReadySms: 'Your garment for {partyName} is ready for pickup at {shopName}!'
+    },
+  });
+}
+
+(async () => {
+  await ensureSettingsRow();
+  await bootstrap();
+})();
 
 export default app; 

@@ -21,6 +21,9 @@ This guide outlines the steps required to deploy the SuitSync application to a p
 - Node.js 18+ and pnpm (for manual/PM2 deployment)
 - Git
 - Lightspeed, Redis, SendGrid, and Twilio credentials in `.env`
+- Docker Desktop (Mac/Windows/Linux)
+- Git (optional, for version control)
+- Node.js (optional, for scripts outside Docker)
 
 ## 2. Quick Start (Docker)
 
@@ -141,4 +144,21 @@ For more details on environment variables, Docker usage, and AI-augmented workfl
 ## 7. Troubleshooting
 - If you see Prisma errors, ensure migrations are applied and DATABASE_URL matches your db service.
 - If session/auth fails, check CORS, cookie, and frontend credentials settings.
-- For 500/404 errors, check backend logs and dashboard for service health. 
+- For 500/404 errors, check backend logs and dashboard for service health.
+
+## Setup (Mac/Windows)
+1. Copy the project folder to your machine.
+2. Install Docker Desktop and ensure it is running.
+3. (Optional) Install Git and Node.js if needed.
+4. Update your `.env` file as needed (check for OS-specific paths).
+5. In a terminal, navigate to the project folder.
+6. Run: `docker-compose up --build`
+7. Access the app at `http://localhost:3001` (or your configured port).
+
+## Database Migration (Optional)
+- To move your database, use `pg_dump` on the old machine and `psql` to restore on the new one, or copy the Docker volume.
+
+## Notes
+- All scripts and services run in Docker for full cross-platform compatibility.
+- If you see permission or port errors, check Docker Desktop settings and firewall.
+- For troubleshooting, see `CRITICAL_FIXES.md` and logs. 

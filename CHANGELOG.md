@@ -61,100 +61,30 @@ All notable changes to SuitSync will be documented in this file.
 - Comprehensive testing suite
 - Docker deployment setup
 
-## [Unreleased] - 2025-07-03
+## [Unreleased] - 2025-07-07
 
 ### Added
-- backend/entrypoint.sh
-- backend/src/controllers/checklistsController.ts
-- backend/src/controllers/tasksController.ts
-- backend/src/routes/checklists.ts
-- backend/src/routes/lightspeedSync.ts
-- backend/src/routes/tasks.ts
-- backend/src/services/lightspeedCustomFieldsService.ts
-- backend/src/types/express-session.d.ts
-- check_tables.js
-- frontend/components/ui/AppointmentForm.tsx
-- frontend/components/ui/ChecklistCard.tsx
-- frontend/components/ui/CustomerSearchSimple.tsx
-- frontend/components/ui/TaskCard.tsx
-- frontend/pages/checklists.tsx
-- frontend/pages/tasks.tsx
-- test_routes.js
-- test_routes_fixed.js
-- Backend dashboard now available at `/` (root) and `/api/admin/dashboard` (HTML) and `/api/admin/dashboard.json` (JSON API).
-- Dashboard shows health/status for: Database, Redis, Lightspeed, Job Scheduler, App Info.
-- JSON API endpoint for dashboard data for frontend consumption.
-
-### Deleted
-- backend/prisma/migrations/20250701155334_enhanced_appointment_workflow/migration.sql
-- frontend/pages/dashboard.tsx
-
-### Changed
-- .DS_Store
-- backend/Dockerfile
-- backend/package-lock.json
-- backend/package.json
-- backend/prisma/schema.prisma
-- backend/src/controllers/appointmentsController.ts
-- backend/src/controllers/lightspeedAuthController.ts
-- backend/src/controllers/lightspeedController.ts
-- backend/src/controllers/syncController.ts
-- backend/src/controllers/userSwitchController.ts
-- backend/src/index.ts
-- backend/src/lightspeedClient.ts
-- backend/src/middleware/auth.ts
-- backend/src/middleware/security.ts
-- backend/src/routes/alterations.ts
-- backend/src/routes/customers.ts
-- backend/src/routes/initRoutes.ts
-- backend/src/routes/lightspeed.ts
-- backend/src/routes/sync.ts
-- backend/src/services/appointmentWorkflowService.ts
-- backend/src/services/multiUserSessionService.ts
-- backend/src/services/notificationSchedulingService.ts
-- backend/src/services/scheduledJobService.ts
-- backend/src/services/syncService.ts
-- docker-compose.yml
-- frontend/.DS_Store
-- frontend/README.md
-- frontend/components/Layout.tsx
-- frontend/components/README.md
-- frontend/components/ResourceSyncStatus.tsx
-- frontend/components/ui/Appbar.tsx
-- frontend/components/ui/CustomerSearch.tsx
-- frontend/components/ui/README.md
-- frontend/components/ui/SplashScreen.tsx
-- frontend/components/ui/SwitchUserModal.tsx
-- frontend/components/ui/Tabs.tsx
-- frontend/pages/UserSettings.tsx
-- frontend/pages/admin.tsx
-- frontend/pages/admin/notification-settings.tsx
-- frontend/pages/alterations.tsx
-- frontend/pages/create-appointment.tsx
-- frontend/pages/lightspeed-account.tsx
-- frontend/pages/login.tsx
-- frontend/pages/monitoring.tsx
-- frontend/pages/profile.tsx
-- frontend/pages/settings.tsx
-- frontend/pages/setup-pin.tsx
-- frontend/pages/status.tsx
-- frontend/src/AuthContext.tsx
-- Session cookies are now set to `secure: false` in development (local Docker), `secure: true` in production. This allows local HTTP sessions to persist.
-- CORS configuration now allows credentials and uses `CORS_ORIGIN` or defaults to `http://localhost:3001`.
-- Frontend API client always sends credentials with requests for session-based authentication.
-- Prisma migrations are now required to be run in Docker before backend starts (see deployment guide).
+- Unified sync status in header now lists all resources (customers, users, products, sales) with individual status and last sync time.
+- Backend `/api/lightspeed/health` always returns all expected sync resources, even if never synced.
+- API health and error info now included in sync status response.
+- Windows migration instructions and Docker compatibility notes.
 
 ### Fixed
-- Fixed session persistence and authentication issues in Docker/local development.
-- Fixed 500 errors on protected endpoints by ensuring session cookies and CORS are correct.
-- Fixed 404/500 for `/dashboard` and `/api/admin/settings` by ensuring correct port mapping, session, and route registration.
+- Customer list now sorts by last name (with missing last names at end), displays as `Last Name, First Name`.
+- Search by last name, first name, email, or phone now works as expected.
+- Removed leading letter/avatar from customer list display.
+- SyncStatus table and Prisma schema are now fully in sync; backend always updates correct table.
+- Sync status now updates correctly after each sync; no more perpetual 'Idle' or 'Not Synced'.
+- Tooltip in header now shows all sync resources, not just customers.
+- Backend and frontend restart scripts improved for cross-platform compatibility.
+
+### Changed
+- Backend and frontend code refactored for robust sync status and health reporting.
+- Prisma schema and client regenerated and kept in sync with DB.
+- Improved error handling and logging for sync jobs and API health.
 
 ### Removed
-- Old root message at `/` replaced by backend dashboard.
+- Deprecated/unused code for customer name display and avatar.
 
-### Summary
-- Fixed: Prevented SyncStatusPanel crash on undefined syncStatus (admin panel)
-- Verified and ensured all logo/image usages use correct aspect ratio handling to suppress warnings
-- Added new checklist and task management backend/frontend modules
-- Refactored and improved various backend and frontend files
-- Deleted obsolete dashboard and migration files
+## [Older changes]
+(See previous entries for earlier releases)

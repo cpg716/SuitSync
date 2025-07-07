@@ -107,20 +107,28 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
     const { access_token, refresh_token, expires_in } = tokenResponse.data;
     logger.info(`Successfully obtained tokens. Now attempting to fetch user details for user_id: ${user_id}`);
     const expiresAt = new Date(Date.now() + expires_in * 1000);
-    await prisma.apiToken.upsert({
-      where: { service: 'lightspeed' },
-      update: {
-        accessToken: access_token,
-        refreshToken: refresh_token,
-        expiresAt: expiresAt,
-      },
-      create: {
-        service: 'lightspeed',
-        accessToken: access_token,
-        refreshToken: refresh_token,
-        expiresAt: expiresAt,
-      },
-    });
+    let tokenRow;
+    try {
+      tokenRow = await prisma.apiToken.upsert({
+        where: { service: 'lightspeed' },
+        update: {
+          accessToken: access_token,
+          refreshToken: refresh_token,
+          expiresAt: expiresAt,
+        },
+        create: {
+          service: 'lightspeed',
+          accessToken: access_token,
+          refreshToken: refresh_token,
+          expiresAt: expiresAt,
+        },
+      });
+      logger.info('[OAuth] Successfully upserted Lightspeed token in apiToken table:', tokenRow);
+    } catch (upsertError) {
+      logger.error('[OAuth] Failed to upsert Lightspeed token in apiToken table:', upsertError);
+      res.redirect(`${FRONTEND_URL}/login?error=token_upsert_failed&details=${encodeURIComponent(upsertError instanceof Error ? upsertError.message : String(upsertError))}`);
+      return;
+    }
     req.session.lsAccessToken = access_token;
     req.session.lsRefreshToken = refresh_token;
     req.session.lsDomainPrefix = domain_prefix;
