@@ -173,7 +173,6 @@ export default function TagPreview({ job }: { job: any }) {
                 <QRCode
                   value={qrValue}
                   size={100}
-                  title="SuitSync QR Code"
                 />
               </div>
 

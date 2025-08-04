@@ -1,486 +1,116 @@
 # SuitSync Developer Guide
 
-## Table of Contents
-
-1. [Getting Started](#getting-started)
-2. [Architecture Overview](#architecture-overview)
-3. [Development Workflow](#development-workflow)
-4. [Testing Strategy](#testing-strategy)
-5. [Performance Optimization](#performance-optimization)
-6. [Security Best Practices](#security-best-practices)
-7. [Deployment](#deployment)
-8. [Troubleshooting](#troubleshooting)
-9. [Using OpenAPI-Generated Types in the Frontend](#using-openapi-generated-types-in-the-frontend)
-
-## Getting Started
+## Quick Start
 
 ### Prerequisites
+- Node.js 18+ 
+- pnpm
+- Docker & Docker Compose
+- PostgreSQL
 
-- Node.js 18+ and npm/pnpm
-- PostgreSQL 15+
-- Docker and Docker Compose
-- Git
-- Lightspeed X-Series developer account
+### Setup
+```bash
+# Clone and install dependencies
+git clone <repository>
+cd suitsync_full_clean
+pnpm install
 
-### Quick Setup
+# Start all services
+docker-compose up -d
 
-1. **Clone and Install**
-   ```bash
-   git clone https://github.com/your-org/suitsync.git
-   cd suitsync
-   pnpm install
-   ```
+# Run database migrations
+cd backend && pnpm prisma migrate deploy
 
-2. **Environment Configuration**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your configuration
-   ```
-
-3. **Database Setup**
-   ```bash
-   # Using Docker
-   docker-compose up -d postgres
-   
-   # Or local PostgreSQL
-   createdb suitsync
-   ```
-
-4. **Run Migrations**
-   ```bash
-   cd backend
-   npx prisma migrate deploy
-   npx prisma db seed
-   ```
-
-5. **Start Development**
-   ```bash
-   # Terminal 1: Backend
-   cd backend && pnpm dev
-   
-   # Terminal 2: Frontend
-   cd frontend && pnpm dev
-   ```
-
-## Architecture Overview
-
-### Backend Architecture
-
-```
-backend/
-├── src/
-│   ├── controllers/          # Request handlers
-│   ├── middleware/           # Express middleware
-│   ├── routes/              # API route definitions
-│   ├── services/            # Business logic
-│   ├── utils/               # Utility functions
-│   ├── types/               # TypeScript types
-│   └── __tests__/           # Test files
-├── prisma/                  # Database schema & migrations
-└── dist/                    # Compiled JavaScript
+# Start development servers
+pnpm dev  # Starts both frontend and backend
 ```
 
-**Key Components:**
+## Testing
 
-- **Controllers**: Handle HTTP requests/responses
-- **Services**: Business logic and external API integration
-- **Middleware**: Authentication, validation, logging, security
-- **Prisma**: Database ORM with type safety
-- **Lightspeed Client**: Centralized API client with retry logic
-
-### Frontend Architecture
-
-```
-frontend/
-├── pages/                   # Next.js pages (routing)
-├── components/              # Reusable UI components
-├── contexts/                # React contexts (state management)
-├── lib/                     # Utility functions
-├── styles/                  # Global styles
-└── __tests__/               # Test files
+### Frontend Tests
+```bash
+cd frontend
+npm test              # Run all tests
+npm run test:watch    # Watch mode
+npm run test:coverage # Coverage report
 ```
 
-**Key Technologies:**
+**Current Test Coverage:**
+- ✅ Button component (5 tests)
+- ✅ Card component (3 tests)
+- ✅ Jest DOM matchers configured
+- ✅ TypeScript declarations working
 
-- **Next.js**: React framework with SSR/SSG
-- **Tailwind CSS**: Utility-first CSS framework
-- **shadcn/ui**: Component library
-- **SWR**: Data fetching and caching
-- **React Hook Form**: Form management
+### Backend Tests
+```bash
+cd backend
+npm test              # Run all tests
+npm run test:watch    # Watch mode
+```
 
-### Database Design
+**Current Test Coverage:**
+- ✅ Utility functions (asyncHandler)
+- ✅ Error handling middleware
+- ✅ Clean test execution without database dependencies
 
-The database follows a normalized design with proper indexing:
+### Type Checking
+```bash
+# Frontend
+cd frontend && npm run type-check
 
-- **Customers**: Core customer data synced with Lightspeed
-- **Parties**: Wedding/event groups linked to customers
-- **AlterationJobs**: Work orders with QR tracking
-- **Appointments**: Scheduling system
-- **Users**: Staff management with role-based access
+# Backend  
+cd backend && npm run type-check
+```
 
 ## Development Workflow
 
-### Code Style and Standards
+### Code Quality
+- **TypeScript**: Strict mode enabled, no type errors allowed
+- **ESLint**: Configured for both frontend and backend
+- **Prettier**: Automatic code formatting
+- **Tests**: Must pass before merge
 
-1. **TypeScript**: Strict mode enabled
-2. **ESLint**: Configured for both backend and frontend
-3. **Prettier**: Code formatting (run on save)
-4. **Husky**: Pre-commit hooks for linting and testing
-
-### Git Workflow
-
-```bash
-# Feature development
-git checkout -b feature/new-feature
-git commit -m "feat: add new feature"
-git push origin feature/new-feature
-
-# Create PR, get review, merge to main
-```
-
-### Commit Message Convention
-
-Follow [Conventional Commits](https://www.conventionalcommits.org/):
-
-- `feat:` New features
-- `fix:` Bug fixes
-- `docs:` Documentation changes
-- `style:` Code style changes
-- `refactor:` Code refactoring
-- `test:` Test additions/changes
-- `chore:` Build process or auxiliary tool changes
+### Database
+- **Prisma**: ORM with migrations
+- **PostgreSQL**: Production database
+- **Migrations**: Run with `pnpm prisma migrate deploy`
 
 ### API Development
-
-1. **Define Schema**: Update Prisma schema if needed
-2. **Create Migration**: `npx prisma migrate dev`
-3. **Add Validation**: Use Zod schemas in middleware
-4. **Implement Controller**: Handle business logic
-5. **Add Routes**: Register in route files
-6. **Write Tests**: Unit and integration tests
-7. **Update Documentation**: API reference and examples
+- **Express**: Backend framework
+- **REST**: Standard RESTful endpoints
+- **Validation**: Request/response validation
+- **Error Handling**: Consistent error responses
 
 ### Frontend Development
-
-1. **Design Components**: Start with shadcn/ui primitives
-2. **Implement Logic**: Use React hooks and contexts
-3. **Add Data Fetching**: Use SWR for API calls
-4. **Style Components**: Tailwind CSS classes
-5. **Add Tests**: Component and integration tests
-6. **Accessibility**: Ensure ARIA compliance
-
-## Testing Strategy
-
-### Backend Testing
-
-```bash
-# Run all tests
-pnpm test
-
-# Run with coverage
-pnpm test:coverage
-
-# Watch mode
-pnpm test:watch
-```
-
-**Test Types:**
-
-1. **Unit Tests**: Individual functions and methods
-2. **Integration Tests**: API endpoints with database
-3. **Service Tests**: External API integrations
-
-**Test Structure:**
-```typescript
-describe('CustomerController', () => {
-  beforeEach(async () => {
-    await cleanupDatabase();
-  });
-
-  it('should create customer successfully', async () => {
-    const response = await request(app)
-      .post('/api/customers')
-      .send(validCustomerData)
-      .expect(201);
-    
-    expect(response.body).toMatchObject({
-      name: validCustomerData.name,
-      email: validCustomerData.email,
-    });
-  });
-});
-```
-
-### Frontend Testing
-
-```bash
-# Run tests
-pnpm test
-
-# Run with coverage
-pnpm test:coverage
-```
-
-**Test Types:**
-
-1. **Component Tests**: React Testing Library
-2. **Hook Tests**: Custom hook testing
-3. **Integration Tests**: User workflows
-
-**Test Example:**
-```typescript
-import { render, screen, fireEvent } from '../utils/testUtils';
-import CustomerCard from '../components/CustomerCard';
-
-test('renders customer information', () => {
-  const customer = createMockCustomer();
-  render(<CustomerCard customer={customer} />);
-  
-  expect(screen.getByText(customer.name)).toBeInTheDocument();
-  expect(screen.getByText(customer.email)).toBeInTheDocument();
-});
-```
-
-## Performance Optimization
-
-### Database Optimization
-
-1. **Indexing Strategy**:
-   ```sql
-   -- Composite indexes for common queries
-   CREATE INDEX idx_jobs_status_due_date ON alteration_jobs(status, due_date);
-   CREATE INDEX idx_appointments_date_tailor ON appointments(date_time, tailor_id);
-   ```
-
-2. **Query Optimization**:
-   ```typescript
-   // Use select to limit fields
-   const customers = await prisma.customer.findMany({
-     select: {
-       id: true,
-       name: true,
-       email: true,
-     },
-     take: 50, // Limit results
-   });
-   ```
-
-3. **Connection Pooling**: Prisma handles this automatically
-
-### Caching Strategy
-
-```typescript
-import { cacheService, CACHE_TTL } from '../services/cacheService';
-
-// Cache expensive operations
-const customers = await cacheService.cached(
-  'customers:all',
-  () => performanceService.getCustomersOptimized(filters),
-  CACHE_TTL.MEDIUM
-);
-```
-
-### Frontend Optimization
-
-1. **SWR Configuration**:
-   ```typescript
-   const { data, error } = useSWR('/api/customers', fetcher, {
-     revalidateOnFocus: false,
-     dedupingInterval: 60000, // 1 minute
-   });
-   ```
-
-2. **Code Splitting**: Next.js handles this automatically
-3. **Image Optimization**: Use Next.js Image component
-4. **Bundle Analysis**: `pnpm analyze`
-
-## Security Best Practices
-
-### Authentication & Authorization
-
-1. **JWT Tokens**: HTTP-only cookies for web, Bearer tokens for API
-2. **Role-Based Access**: Admin, Manager, Tailor, Sales roles
-3. **Session Management**: Secure session storage with Prisma
-
-### Input Validation
-
-```typescript
-import { validateBody, customerSchemas } from '../middleware/validation';
-
-router.post('/customers', 
-  validateBody(customerSchemas.create),
-  createCustomer
-);
-```
-
-### Security Headers
-
-```typescript
-// Configured in middleware/security.ts
-app.use(securityHeaders); // Helmet with CSP
-app.use(rateLimits.general); // Rate limiting
-app.use(sanitizeInput); // Input sanitization
-```
-
-### Data Protection
-
-1. **Encryption**: Sensitive data encrypted at rest
-2. **Audit Logging**: All actions logged with user context
-3. **HTTPS Only**: Force secure connections in production
-4. **CORS**: Strict origin validation
+- **Next.js**: React framework
+- **Tailwind CSS**: Styling
+- **shadcn/ui**: Component library
+- **SWR**: Data fetching
+- **TypeScript**: Full type safety
 
 ## Deployment
 
-### Docker Deployment
-
+### Docker
 ```bash
-# Build images
-docker-compose build
+# Build and run
+docker-compose up --build
 
-# Deploy to production
-docker-compose -f docker-compose.prod.yml up -d
+# Production build
+docker-compose -f docker-compose.prod.yml up --build
 ```
 
 ### Environment Variables
-
-```bash
-# Production environment
-NODE_ENV=production
-DATABASE_URL=postgresql://user:pass@host:5432/db
-SESSION_SECRET=your-secret-key
-LIGHTSPEED_CLIENT_ID=your-client-id
-LIGHTSPEED_CLIENT_SECRET=your-client-secret
-```
-
-### CI/CD Pipeline
-
-GitHub Actions workflow:
-
-1. **Lint & Test**: ESLint, TypeScript, Jest
-2. **Build**: Docker images
-3. **Deploy**: To staging/production
-4. **Health Check**: Verify deployment
-
-### Monitoring
-
-1. **Performance Metrics**: `/api/performance/metrics`
-2. **Health Checks**: `/api/performance/health`
-3. **Error Tracking**: Structured logging
-4. **Database Monitoring**: Query performance tracking
+Required environment variables are documented in `.env.example` files.
 
 ## Troubleshooting
 
 ### Common Issues
-
-1. **Database Connection**:
-   ```bash
-   # Check PostgreSQL status
-   pg_isready -h localhost -p 5432
-   
-   # Reset database
-   npx prisma migrate reset
-   ```
-
-2. **Lightspeed API Errors**:
-   ```bash
-   # Check API health
-   curl -X GET /api/lightspeed/health
-   
-   # Refresh tokens
-   # Re-authenticate through /api/auth/start-lightspeed
-   ```
-
-3. **Cache Issues**:
-   ```bash
-   # Clear cache
-   curl -X POST /api/performance/cache/clear
-   ```
-
-### Debug Mode
-
-```bash
-# Enable debug logging
-DEBUG=suitsync:* pnpm dev
-
-# Database query logging
-DATABASE_LOGGING=true pnpm dev
-```
-
-### Performance Issues
-
-1. **Slow Queries**: Check `/api/performance/queries/slow`
-2. **Memory Usage**: Monitor `/api/performance/health`
-3. **Cache Hit Rate**: Check `/api/performance/cache/stats`
+1. **Database connection**: Ensure PostgreSQL is running
+2. **Port conflicts**: Check if ports 3000/3001 are available
+3. **Type errors**: Run `npm run type-check` to identify issues
+4. **Test failures**: Check Jest configuration and dependencies
 
 ### Getting Help
-
-1. **Documentation**: Check docs/ directory
-2. **API Reference**: docs/API_REFERENCE.md
-3. **Issues**: GitHub Issues for bug reports
-4. **Discussions**: GitHub Discussions for questions
-
-## Backend Dashboard
-- Use the backend dashboard at `/` or `/api/admin/dashboard(.json)` for live health/status of DB, Redis, Lightspeed, jobs, and app info.
-
-## Session, Cookie, and CORS
-- Session cookies are `secure: false` in dev, `secure: true` in production.
-- CORS allows credentials and uses `CORS_ORIGIN` (default: `http://localhost:3001`).
-- Frontend API client must send `credentials: 'include'` on all requests.
-
-## Prisma Migrations
-- After building containers, run:
-  ```sh
-  docker-compose exec backend pnpm prisma migrate deploy
-  ```
-- This ensures all tables (including `ApiToken`) exist before backend starts.
-
-## Using OpenAPI-Generated Types in the Frontend
-
-### Overview
-The SuitSync backend uses tsoa to generate an OpenAPI (Swagger) spec from TypeScript controllers. The frontend automatically generates TypeScript types from this spec using [openapi-typescript](https://github.com/drwpow/openapi-typescript), ensuring type-safe API integration and eliminating drift between backend and frontend types.
-
-### Workflow
-1. **After updating backend controllers or types:**
-   - Run `pnpm run tsoa:spec` in the `backend/` directory to regenerate the OpenAPI spec (`src/docs/swagger.json`).
-2. **Then, in the frontend:**
-   - Run `pnpm run gen:openapi-types` in the `frontend/` directory to regenerate TypeScript types in `src/types/openapi.d.ts`.
-
-### Example Usage
-Import the generated types in your frontend code:
-
-```ts
-import type { paths } from '@/types/openapi';
-
-// Type for GET /users response
-// (adjust path and method as needed for your endpoint)
-type UsersResponse = paths['/users']['get']['responses']['200']['content']['application/json'];
-
-// Usage in an API call
-const res = await api.get<UsersResponse>('/api/users');
-const users = res.data; // Fully typed!
-```
-
-You can also type request bodies and parameters:
-
-```ts
-// For POST /users
-// (adjust as needed for your endpoint)
-type CreateUserRequest = paths['/users']['post']['requestBody']['content']['application/json'];
-type CreateUserResponse = paths['/users']['post']['responses']['201']['content']['application/json'];
-
-const newUser: CreateUserRequest = { name: 'Alice', email: 'alice@example.com' };
-const res = await api.post<CreateUserResponse>('/api/users', newUser);
-```
-
-### Benefits
-- **Type safety:** If the backend changes, the frontend will get a type error after you regenerate types.
-- **No manual drift:** Types are always in sync with the backend API.
-- **Easy onboarding:** New developers can see the full API contract in TypeScript.
-
-### Troubleshooting
-- If you see type errors after backend changes, re-run both generation steps above.
-- If you add new endpoints, make sure they are decorated with tsoa decorators and included in the OpenAPI spec.
-
----
-
-For more details, see the [openapi-typescript docs](https://github.com/drwpow/openapi-typescript) and [tsoa docs](https://tsoa-community.github.io/docs/).
+- Check existing documentation in `/docs`
+- Review error logs in Docker containers
+- Ensure all dependencies are installed

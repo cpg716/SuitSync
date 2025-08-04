@@ -352,5 +352,219 @@ const syncCustomers = async (req: any) => {
     },
   });
 };
-const syncProducts = (req: any) => syncResource(req, 'products', '/products', prisma.product, (item: any) => item);
-export { syncCustomers, syncProducts };
+
+const syncSales = async (req: any) => {
+  const persistentToken = await getPersistentLightspeedToken();
+  const reqWithToken = {
+    ...req,
+    session: {
+      ...(req?.session || {}),
+      lsAccessToken: persistentToken.accessToken,
+      lsRefreshToken: persistentToken.refreshToken,
+      lsDomainPrefix: process.env.LS_DOMAIN || req?.session?.lsDomainPrefix,
+    },
+    _forcePersistentToken: true,
+  };
+  const lightspeedClient = createLightspeedClient(reqWithToken);
+  const items = await lightspeedClient.fetchAllWithPagination('/sales', {});
+  const BATCH_SIZE = 10;
+  for (let i = 0; i < items.length; i += BATCH_SIZE) {
+    const batch = items.slice(i, i + BATCH_SIZE);
+    await Promise.all(
+      batch.map((item: any) =>
+        prisma.sale.upsert({
+          where: { lightspeedId: item.id?.toString() },
+          create: {
+            lightspeedId: item.id?.toString(),
+            total: item.total_amount ? parseFloat(item.total_amount) : 0,
+            saleDate: item.created_at ? new Date(item.created_at) : new Date(),
+            customerId: 1, // Default customer ID - will need to be linked properly
+            syncedAt: new Date(),
+          },
+          update: {
+            total: item.total_amount ? parseFloat(item.total_amount) : 0,
+            saleDate: item.created_at ? new Date(item.created_at) : new Date(),
+            syncedAt: new Date(),
+          },
+        })
+      )
+    );
+  }
+  
+  // Sync sale line items for commission tracking
+  for (const sale of items) {
+    if (sale.sale_line_items && Array.isArray(sale.sale_line_items)) {
+      for (const lineItem of sale.sale_line_items) {
+        await prisma.saleLineItem.upsert({
+          where: { lightspeedId: lineItem.id?.toString() },
+          create: {
+            lightspeedId: lineItem.id?.toString(),
+            saleId: parseInt(sale.id?.toString()) || 0,
+            productId: parseInt(lineItem.product_id?.toString()) || 1, // Default product ID
+            quantity: lineItem.quantity || 1,
+            price: lineItem.total_price ? parseFloat(lineItem.total_price) : 0,
+            syncedAt: new Date(),
+          },
+          update: {
+            saleId: parseInt(sale.id?.toString()) || 0,
+            productId: parseInt(lineItem.product_id?.toString()) || 1,
+            quantity: lineItem.quantity || 1,
+            price: lineItem.total_price ? parseFloat(lineItem.total_price) : 0,
+            syncedAt: new Date(),
+          },
+        });
+      }
+    }
+  }
+  
+  // Always set syncStatus to SUCCESS after a successful sync
+  await prisma.syncStatus.updateMany({
+    where: { resource: 'sales' },
+    data: {
+      status: 'SUCCESS',
+      errorMessage: null,
+      lastSyncedAt: new Date(),
+    },
+  });
+};
+
+const syncUsers = async (req: any) => {
+  const persistentToken = await getPersistentLightspeedToken();
+  const reqWithToken = {
+    ...req,
+    session: {
+      ...(req?.session || {}),
+      lsAccessToken: persistentToken.accessToken,
+      lsRefreshToken: persistentToken.refreshToken,
+      lsDomainPrefix: process.env.LS_DOMAIN || req?.session?.lsDomainPrefix,
+    },
+    _forcePersistentToken: true,
+  };
+  const lightspeedClient = createLightspeedClient(reqWithToken);
+  const items = await lightspeedClient.fetchAllWithPagination('/users', {});
+  const BATCH_SIZE = 10;
+  for (let i = 0; i < items.length; i += BATCH_SIZE) {
+    const batch = items.slice(i, i + BATCH_SIZE);
+    await Promise.all(
+      batch.map((item: any) =>
+        prisma.user.upsert({
+          where: { id: parseInt(item.id?.toString()) || 0 },
+          create: {
+            name: item.display_name || item.first_name + ' ' + item.last_name || 'Unknown User',
+            email: item.email || null,
+            role: mapLightspeedRoleToSuitSync(item.account_type || 'employee'),
+            lightspeedEmployeeId: item.id?.toString(),
+            photoUrl: item.photo_url || null,
+            createdAt: item.created_at ? new Date(item.created_at) : new Date(),
+            updatedAt: item.updated_at ? new Date(item.updated_at) : new Date(),
+          },
+          update: {
+            name: item.display_name || item.first_name + ' ' + item.last_name || 'Unknown User',
+            email: item.email || null,
+            role: mapLightspeedRoleToSuitSync(item.account_type || 'employee'),
+            lightspeedEmployeeId: item.id?.toString(),
+            photoUrl: item.photo_url || null,
+            updatedAt: item.updated_at ? new Date(item.updated_at) : new Date(),
+          },
+        })
+      )
+    );
+  }
+  
+  // Always set syncStatus to SUCCESS after a successful sync
+  await prisma.syncStatus.updateMany({
+    where: { resource: 'users' },
+    data: {
+      status: 'SUCCESS',
+      errorMessage: null,
+      lastSyncedAt: new Date(),
+    },
+  });
+};
+
+const syncGroups = async (req: any) => {
+  const persistentToken = await getPersistentLightspeedToken();
+  const reqWithToken = {
+    ...req,
+    session: {
+      ...(req?.session || {}),
+      lsAccessToken: persistentToken.accessToken,
+      lsRefreshToken: persistentToken.refreshToken,
+      lsDomainPrefix: process.env.LS_DOMAIN || req?.session?.lsDomainPrefix,
+    },
+    _forcePersistentToken: true,
+  };
+  const lightspeedClient = createLightspeedClient(reqWithToken);
+  const items = await lightspeedClient.fetchAllWithPagination('/customer_groups', {});
+  const BATCH_SIZE = 10;
+  for (let i = 0; i < items.length; i += BATCH_SIZE) {
+    const batch = items.slice(i, i + BATCH_SIZE);
+    await Promise.all(
+      batch.map(async (item: any) => {
+        // Check if party already exists with this lightspeedGroupId
+        const existingParty = await prisma.party.findFirst({
+          where: { lightspeedGroupId: item.id?.toString() }
+        });
+        
+        if (existingParty) {
+          // Update existing party
+          await prisma.party.update({
+            where: { id: existingParty.id },
+            data: {
+              name: item.name || 'Unnamed Party',
+              notes: item.description || '',
+              updatedAt: item.updated_at ? new Date(item.updated_at) : new Date(),
+            },
+          });
+        } else {
+          // Create new party
+          await prisma.party.create({
+            data: {
+              name: item.name || 'Unnamed Party',
+              eventDate: new Date(), // Default date since groups don't have event dates
+              notes: item.description || '',
+              lightspeedGroupId: item.id?.toString(),
+              customerId: 1, // Default customer ID
+              salesPersonId: 1, // Default sales person ID
+              createdAt: item.created_at ? new Date(item.created_at) : new Date(),
+              updatedAt: item.updated_at ? new Date(item.updated_at) : new Date(),
+            },
+          });
+        }
+      })
+    );
+  }
+  
+  // Always set syncStatus to SUCCESS after a successful sync
+  await prisma.syncStatus.updateMany({
+    where: { resource: 'groups' },
+    data: {
+      status: 'SUCCESS',
+      errorMessage: null,
+      lastSyncedAt: new Date(),
+    },
+  });
+};
+
+// Helper function to map Lightspeed roles to SuitSync roles
+function mapLightspeedRoleToSuitSync(lightspeedAccountType: string): string {
+  switch (lightspeedAccountType?.toLowerCase()) {
+    case 'admin':
+    case 'administrator':
+      return 'admin';
+    case 'manager':
+    case 'supervisor':
+      return 'manager';
+    case 'employee':
+    case 'staff':
+    case 'sales':
+      return 'employee';
+    case 'tailor':
+    case 'alterations':
+      return 'tailor';
+    default:
+      return 'employee';
+  }
+}
+
+export { syncCustomers, syncSales, syncUsers, syncGroups };

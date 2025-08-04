@@ -5,10 +5,13 @@ import { setCustomFieldValue } from '../lightspeedClient'; // TODO: migrate this
 import { getOrCreateSuitSyncAppointmentsField, verifyAndGetCustomField, createOrUpdateCustomField, initialize as initializeWorkflow } from '../services/workflowService';
 import logger from '../utils/logger'; // TODO: migrate this as well
 import { processWebhook } from '../services/webhookService';
-import { executeWorkflowTriggers } from '../services/appointmentWorkflowService';
+import { executeWorkflowTriggers, scheduleNextAppointment } from '../services/appointmentWorkflowService';
 import { scheduleAppointmentReminders } from '../services/notificationSchedulingService';
 import { lightspeedCustomFieldsService } from '../services/lightspeedCustomFieldsService';
 import { Route, Get, Post, Body, Path, SuccessResponse, Tags, Controller } from 'tsoa';
+import { sendAppointmentConfirmationNotification } from '../services/staffNotificationService';
+import { sendCancellationNotificationToStaff } from '../services/staffNotificationService';
+import { logChange } from '../services/AuditLogService';
 
 const prisma = new PrismaClient().$extends(withAccelerate());
 
@@ -165,6 +168,23 @@ export const createAppointment = async (req: Request, res: Response): Promise<vo
       }
     });
 
+    // Log appointment creation for audit
+    await logChange(
+      (req as any).user?.id,
+      'create',
+      'Appointment',
+      appointment.id,
+      {
+        appointmentData,
+        partyId: appointment.partyId,
+        partyName: appointment.party?.name,
+        customerName: appointment.individualCustomer 
+          ? `${appointment.individualCustomer.first_name || ''} ${appointment.individualCustomer.last_name || ''}`.trim()
+          : appointment.member?.notes || 'Party Member'
+      },
+      req
+    );
+
     // Sync to Lightspeed custom fields
     try {
       await lightspeedCustomFieldsService.syncAppointmentToLightspeed(req, appointment.id);
@@ -188,6 +208,15 @@ export const createAppointment = async (req: Request, res: Response): Promise<vo
       // Don't fail the appointment creation if notification scheduling fails
     }
 
+    // Send confirmation notification to customer
+    try {
+      await sendAppointmentConfirmationNotification(appointment.id);
+      logger.info(`Sent confirmation notification for appointment ${appointment.id}`);
+    } catch (confirmationError: any) {
+      logger.error('Error sending appointment confirmation:', confirmationError);
+      // Don't fail the appointment creation if confirmation fails
+    }
+
     res.status(201).json(appointment);
     return;
   } catch (err: any) {
@@ -204,7 +233,13 @@ export const updateAppointment = async (req: Request, res: Response): Promise<vo
 
     // Get the current appointment to check for status changes
     const currentAppointment = await prisma.appointment.findUnique({
-      where: { id: appointmentId }
+      where: { id: appointmentId },
+      include: {
+        party: true,
+        member: true,
+        tailor: true,
+        individualCustomer: true
+      }
     });
 
     if (!currentAppointment) {
@@ -223,7 +258,48 @@ export const updateAppointment = async (req: Request, res: Response): Promise<vo
         notes,
         status,
       },
+      include: {
+        party: true,
+        member: true,
+        tailor: true,
+        individualCustomer: true
+      }
     });
+
+    // Log appointment changes for audit
+    const changes: Record<string, any> = {};
+    if (dateTime && currentAppointment.dateTime.getTime() !== new Date(dateTime).getTime()) {
+      changes.dateTime = { from: currentAppointment.dateTime, to: new Date(dateTime) };
+    }
+    if (durationMinutes !== undefined && currentAppointment.durationMinutes !== durationMinutes) {
+      changes.durationMinutes = { from: currentAppointment.durationMinutes, to: durationMinutes };
+    }
+    if (tailorId !== undefined && currentAppointment.tailorId !== tailorId) {
+      changes.tailorId = { from: currentAppointment.tailorId, to: tailorId };
+    }
+    if (memberId !== undefined && currentAppointment.memberId !== memberId) {
+      changes.memberId = { from: currentAppointment.memberId, to: memberId };
+    }
+    if (type !== undefined && currentAppointment.type !== type) {
+      changes.type = { from: currentAppointment.type, to: type };
+    }
+    if (notes !== undefined && currentAppointment.notes !== notes) {
+      changes.notes = { from: currentAppointment.notes, to: notes };
+    }
+    if (status !== undefined && currentAppointment.status !== status) {
+      changes.status = { from: currentAppointment.status, to: status };
+    }
+
+    if (Object.keys(changes).length > 0) {
+      await logChange(
+        (req as any).user?.id,
+        'update',
+        'Appointment',
+        appointmentId,
+        changes,
+        req
+      );
+    }
 
     // Trigger workflow automation if appointment was just completed
     if (status === 'completed' && currentAppointment.status !== 'completed') {
@@ -269,11 +345,29 @@ export const updateAppointment = async (req: Request, res: Response): Promise<vo
 export const deleteAppointment = async (req: Request, res: Response): Promise<void> => {
   try {
     const appointmentId = Number(req.params.id);
-    const appointment = await prisma.appointment.findUnique({ where: { id: appointmentId }});
+    const appointment = await prisma.appointment.findUnique({ 
+      where: { id: appointmentId },
+      include: {
+        party: true,
+        member: true,
+        individualCustomer: true
+      }
+    });
     if (!appointment) {
       res.status(404).json({ error: 'Appointment not found' });
       return;
     }
+
+    // Log appointment deletion for audit
+    await logChange(
+      (req as any).user?.id,
+      'delete',
+      'Appointment',
+      appointmentId,
+      { appointmentType: appointment.type, scheduledAt: appointment.dateTime },
+      req
+    );
+
     await prisma.appointment.delete({ where: { id: appointmentId } });
     if (appointment.partyId) {
       await syncAppointmentsToLightspeed(req, appointment.partyId);
@@ -284,5 +378,277 @@ export const deleteAppointment = async (req: Request, res: Response): Promise<vo
     logger.error(`Error deleting appointment ${req.params.id}:`, err);
     res.status(500).json({ error: 'Internal server error' });
     return;
+  }
+};
+
+/**
+ * Get a single appointment by ID
+ */
+export const getAppointment = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    
+    if (!id) {
+      res.status(400).json({ error: 'Appointment ID is required' });
+      return;
+    }
+
+    const appointment = await prisma.appointment.findUnique({
+      where: { id: parseInt(id) },
+      include: {
+        party: true,
+        individualCustomer: true,
+        tailor: true,
+        member: true
+      }
+    });
+
+    if (!appointment) {
+      res.status(404).json({ error: 'Appointment not found' });
+      return;
+    }
+
+    res.json(appointment);
+  } catch (error: any) {
+    logger.error(`Error getting appointment ${req.params.id}:`, error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/**
+ * Manually trigger workflow execution for an appointment
+ */
+export const triggerWorkflow = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { appointmentId } = req.params;
+    
+    if (!appointmentId) {
+      res.status(400).json({ error: 'Appointment ID is required' });
+      return;
+    }
+
+    const result = await executeWorkflowTriggers(parseInt(appointmentId));
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'Workflow triggered successfully',
+        actions: result.actions,
+        requiresNextScheduling: result.requiresNextScheduling,
+        suggestedNextAppointment: result.suggestedNextAppointment,
+        nextAppointmentId: result.nextAppointmentId,
+        alterationJobId: result.alterationJobId,
+        orderStubId: result.orderStubId
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: 'Workflow trigger failed',
+        errors: result.errors
+      });
+    }
+  } catch (error: any) {
+    logger.error('Error triggering workflow:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/**
+ * Manually schedule the next appointment after workflow completion
+ */
+export const scheduleNextAppointmentController = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const {
+      partyId,
+      memberId,
+      appointmentType,
+      dateTime,
+      durationMinutes,
+      tailorId,
+      notes
+    } = req.body;
+
+    if (!partyId || !memberId || !appointmentType || !dateTime || !durationMinutes) {
+      res.status(400).json({ error: 'Missing required fields' });
+      return;
+    }
+
+    const result = await scheduleNextAppointment(
+      parseInt(partyId),
+      parseInt(memberId),
+      appointmentType,
+      new Date(dateTime),
+      parseInt(durationMinutes),
+      tailorId ? parseInt(tailorId) : undefined,
+      notes
+    );
+
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'Next appointment scheduled successfully',
+        actions: result.actions,
+        nextAppointmentId: result.nextAppointmentId
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: 'Failed to schedule next appointment',
+        errors: result.errors
+      });
+    }
+  } catch (error: any) {
+    logger.error('Error scheduling next appointment:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}; 
+
+/**
+ * Reschedule an appointment
+ */
+export const rescheduleAppointment = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { appointmentId, token, newDateTime, newDurationMinutes, notes } = req.body;
+
+    if (!appointmentId || !token || !newDateTime) {
+      res.status(400).json({ error: 'Appointment ID, token, and new date/time are required' });
+      return;
+    }
+
+    // Verify token (in production, use proper JWT validation)
+    const expectedToken = Buffer.from(`${appointmentId}-${Date.now()}`).toString('base64');
+    if (token !== expectedToken) {
+      res.status(401).json({ error: 'Invalid or expired token' });
+      return;
+    }
+
+    const appointment = await prisma.appointment.findUnique({
+      where: { id: parseInt(appointmentId) },
+      include: {
+        party: true,
+        member: true,
+        individualCustomer: true,
+        tailor: true
+      }
+    });
+
+    if (!appointment) {
+      res.status(404).json({ error: 'Appointment not found' });
+      return;
+    }
+
+    // Check if appointment is in the future and can be rescheduled
+    if (appointment.dateTime <= new Date()) {
+      res.status(400).json({ error: 'Cannot reschedule past appointments' });
+      return;
+    }
+
+    // Update the appointment
+    const updatedAppointment = await prisma.appointment.update({
+      where: { id: parseInt(appointmentId) },
+      data: {
+        dateTime: new Date(newDateTime),
+        durationMinutes: newDurationMinutes || appointment.durationMinutes,
+        notes: notes || appointment.notes,
+        status: 'rescheduled'
+      },
+      include: {
+        party: true,
+        member: true,
+        individualCustomer: true,
+        tailor: true
+      }
+    });
+
+    // Send confirmation notification
+    try {
+      await sendAppointmentConfirmationNotification(updatedAppointment.id);
+      logger.info(`Sent reschedule confirmation for appointment ${appointmentId}`);
+    } catch (notificationError: any) {
+      logger.error('Error sending reschedule confirmation:', notificationError);
+    }
+
+    res.json({
+      success: true,
+      message: 'Appointment rescheduled successfully',
+      appointment: updatedAppointment
+    });
+  } catch (err: any) {
+    logger.error('Error rescheduling appointment:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/**
+ * Cancel an appointment
+ */
+export const cancelAppointment = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { appointmentId, token, reason } = req.body;
+
+    if (!appointmentId || !token) {
+      res.status(400).json({ error: 'Appointment ID and token are required' });
+      return;
+    }
+
+    // Verify token (in production, use proper JWT validation)
+    const expectedToken = Buffer.from(`${appointmentId}-${Date.now()}`).toString('base64');
+    if (token !== expectedToken) {
+      res.status(401).json({ error: 'Invalid or expired token' });
+      return;
+    }
+
+    const appointment = await prisma.appointment.findUnique({
+      where: { id: parseInt(appointmentId) },
+      include: {
+        party: true,
+        member: true,
+        individualCustomer: true,
+        tailor: true
+      }
+    });
+
+    if (!appointment) {
+      res.status(404).json({ error: 'Appointment not found' });
+      return;
+    }
+
+    // Check if appointment is in the future and can be canceled
+    if (appointment.dateTime <= new Date()) {
+      res.status(400).json({ error: 'Cannot cancel past appointments' });
+      return;
+    }
+
+    // Update the appointment
+    const updatedAppointment = await prisma.appointment.update({
+      where: { id: parseInt(appointmentId) },
+      data: {
+        status: 'canceled',
+        notes: reason ? `${appointment.notes || ''}\n\nCancellation reason: ${reason}` : appointment.notes
+      },
+      include: {
+        party: true,
+        member: true,
+        individualCustomer: true,
+        tailor: true
+      }
+    });
+
+    // Send cancellation notification to staff
+    try {
+      await sendCancellationNotificationToStaff(updatedAppointment);
+      logger.info(`Sent cancellation notification to staff for appointment ${appointmentId}`);
+    } catch (notificationError: any) {
+      logger.error('Error sending cancellation notification to staff:', notificationError);
+    }
+
+    res.json({
+      success: true,
+      message: 'Appointment canceled successfully',
+      appointment: updatedAppointment
+    });
+  } catch (err: any) {
+    logger.error('Error canceling appointment:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 }; 

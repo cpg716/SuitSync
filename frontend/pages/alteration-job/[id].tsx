@@ -710,9 +710,9 @@ export default function AlterationJobDetail({ job: initialJob }: AlterationJobDe
 
         {/* QR Scanner Modal */}
         <QRScanner
-          open={scannerOpen}
+          isOpen={scannerOpen}
           onClose={() => setScannerOpen(false)}
-          onScanSuccess={handleScanSuccess}
+          onScan={(qrCode) => handleScanSuccess({ qrCode })}
         />
 
         {/* Auto-Assign Preview Modal */}

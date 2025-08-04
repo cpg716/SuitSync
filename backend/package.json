@@ -9,7 +9,7 @@
     "prisma:gen": "prisma generate",
     "tsoa:routes": "tsoa routes",
     "tsoa:spec": "tsoa spec",
-    "build": "pnpm run prisma:gen && pnpm run tsoa:routes && pnpm run tsoa:spec && tsc",
+    "build": "npm run prisma:gen && npm run tsoa:routes && npm run tsoa:spec && tsc",
     "seed": "node dist/seed.js",
     "start": "node dist/index.js",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",

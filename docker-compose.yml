@@ -1,11 +1,10 @@
-# version: '3.8'
 services:
   db:
     image: postgres:15-alpine
     container_name: suitsync-db
     restart: always
     environment:
-      POSTGRES_DB: suitsync_prod
+      POSTGRES_DB: suitsync
       POSTGRES_USER: suitsync_user
       POSTGRES_PASSWORD: supersecret
     ports:

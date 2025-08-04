@@ -117,7 +117,7 @@ export default function Layout({ children, title }: LayoutProps) {
                 alt="Riverside Icon"
                 width={64}
                 height={64}
-                style={{ width: 64, height: 'auto' }}
+                style={{ width: 64, height: 64 }}
               />
             </div>
             <div className={`flex items-center ${collapsed ? 'justify-center' : 'justify-between'} w-full`}>

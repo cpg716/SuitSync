@@ -1,245 +1,222 @@
-import cron from 'node-cron';
-import type { ScheduledTask } from 'node-cron';
+import { PrismaClient } from '@prisma/client';
 import logger from '../utils/logger';
+import { sendDailyStaffNotifications } from './staffNotificationService';
 import { processPendingNotifications } from './notificationSchedulingService';
 
-/**
- * Detailed info for each scheduled job.
- */
-export interface JobInfo {
-  name: string;
-  running: boolean;
-  status: string;           // e.g. 'idle' | 'in-progress' | 'error'
-  lastRun: Date | null;     // timestamp of the last execution
-  error: string | null;     // error message if the job failed
-}
+const prisma = new PrismaClient();
 
-export class ScheduledJobService {
-  private static instance: ScheduledJobService;
-  private jobs: Map<string, ScheduledTask> = new Map();
-  private jobMeta: Map<string, { lastRun: Date | null; status: string; error: string | null }> = new Map();
-
-  private constructor() {}
-
-  public static getInstance(): ScheduledJobService {
-    if (!ScheduledJobService.instance) {
-      ScheduledJobService.instance = new ScheduledJobService();
-    }
-    return ScheduledJobService.instance;
-  }
-
-  /**
-   * Initialize all scheduled jobs
-   */
-  public initialize(): void {
-    logger.info('Initializing scheduled jobs...');
-
-    // Process notifications every 5 minutes
-    this.scheduleJob('process-notifications', '*/5 * * * *', async () => {
+// Scheduled jobs configuration
+const JOBS = {
+  'daily-staff-notifications': {
+    cron: '0 9 * * *', // 9:00 AM daily
+    handler: sendDailyStaffNotifications,
+    description: 'Send daily staff notifications for appointments'
+  },
+  'process-notifications': {
+    cron: '*/5 * * * *', // Every 5 minutes
+    handler: processPendingNotifications,
+    description: 'Process pending notification schedules'
+  },
+  'cleanup-notifications': {
+    cron: '0 2 * * *', // 2:00 AM daily
+    handler: async () => {
       try {
-        await processPendingNotifications();
-      } catch (error) {
-        logger.error('Error in scheduled notification processing:', error);
-      }
-    });
-
-    // Clean up old notifications daily at 2 AM
-    this.scheduleJob('cleanup-notifications', '0 2 * * *', async () => {
-      try {
-        await this.cleanupOldNotifications();
-      } catch (error) {
-        logger.error('Error in scheduled notification cleanup:', error);
-      }
-    });
-
-    // Check for overdue appointments daily at 9 AM
-    this.scheduleJob('check-overdue-appointments', '0 9 * * *', async () => {
-      try {
-        await this.checkOverdueAppointments();
-      } catch (error) {
-        logger.error('Error in scheduled overdue appointment check:', error);
-      }
-    });
-
-    // === SuitSync: Scheduled Customer Sync ===
-    this.scheduleJob('sync-customers', '*/10 * * * *', async () => {
-      try {
-        const { syncCustomers } = await import('./syncService.js');
-        // Use an empty req object; syncService will use persistent token
-        const req = {};
-        logger.info('[AutoSync] Running scheduled customer sync...');
-        await syncCustomers(req);
-        logger.info('[AutoSync] Completed scheduled customer sync.');
-      } catch (error) {
-        logger.error('[AutoSync] Scheduled customer sync failed:', error);
-      }
-    });
-
-    logger.info(`Initialized ${this.jobs.size} scheduled jobs`);
-  }
-
-  /**
-   * Schedule a new job
-   */
-  private scheduleJob(name: string, schedule: string, task: () => Promise<void>): void {
-    if (this.jobs.has(name)) {
-      logger.warn(`Job ${name} already exists, stopping previous instance`);
-      this.jobs.get(name)?.stop();
-      this.jobMeta.delete(name);
-    }
-
-    this.jobMeta.set(name, { lastRun: null, status: 'idle', error: null });
-
-    const wrappedTask = async () => {
-      const meta = this.jobMeta.get(name);
-      if (meta) {
-        meta.status = 'in-progress';
-        meta.error = null;
-      }
-      try {
-        await task();
-        if (meta) {
-          meta.lastRun = new Date();
-          meta.status = 'idle';
-        }
-      } catch (error: any) {
-        if (meta) {
-          meta.lastRun = new Date();
-          meta.status = 'error';
-          meta.error = error && error.message ? error.message : String(error);
-        }
-        logger.error(`Error in scheduled job ${name}:`, error);
-      }
-    };
-
-    const job = cron.schedule(schedule, wrappedTask, {
-      timezone: 'America/New_York' // Adjust timezone as needed
-    });
-
-    this.jobs.set(name, job);
-    logger.info(`Scheduled job: ${name} with schedule: ${schedule}`);
-  }
-
-  /**
-   * Stop a specific job
-   */
-  public stopJob(name: string): void {
-    const job = this.jobs.get(name);
-    if (job) {
-      job.stop();
-      this.jobs.delete(name);
-      this.jobMeta.delete(name);
-      logger.info(`Stopped job: ${name}`);
-    }
-  }
-
-  /**
-   * Stop all jobs
-   */
-  public stopAll(): void {
-    for (const [name, job] of this.jobs) {
-      job.stop();
-      this.jobs.delete(name);
-      this.jobMeta.delete(name);
-      logger.info(`Stopped job: ${name}`);
-    }
-    this.jobs.clear();
-    this.jobMeta.clear();
-    logger.info('Stopped all scheduled jobs');
-  }
-
-  /**
-   * Get job status
-   */
-  public getJobStatus(): JobInfo[] {
-    return Array.from(this.jobs.entries()).map(([name, job]) => {
-      const meta = this.jobMeta.get(name);
-      return {
-        name,
-        running: job.getStatus() === 'scheduled',
-        status: meta?.status || 'idle',
-        lastRun: meta?.lastRun || null,
-        error: meta?.error || null,
-      };
-    });
-  }
-
-  /**
-   * Clean up old notification records
-   */
-  private async cleanupOldNotifications(): Promise<void> {
-    const { PrismaClient } = await import('@prisma/client');
-    const prisma = new PrismaClient();
-
-    try {
-      // Delete notifications older than 30 days
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-      const result = await prisma.notificationSchedule.deleteMany({
-        where: {
-          scheduledFor: {
-            lt: thirtyDaysAgo
-          },
-          sent: true
-        }
-      });
-
-      logger.info(`Cleaned up ${result.count} old notification records`);
-    } catch (error) {
-      logger.error('Error cleaning up old notifications:', error);
-    } finally {
-      await prisma.$disconnect();
-    }
-  }
-
-  /**
-   * Check for overdue appointments and send alerts
-   */
-  private async checkOverdueAppointments(): Promise<void> {
-    const { PrismaClient } = await import('@prisma/client');
-    const prisma = new PrismaClient();
-
-    try {
-      const now = new Date();
-      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-
-      // Find appointments that were scheduled for yesterday but not completed
-      const overdueAppointments = await prisma.appointment.findMany({
-        where: {
-          dateTime: {
-            gte: yesterday,
-            lt: now
-          },
-          status: {
-            in: ['scheduled', 'confirmed']
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - 30); // Keep 30 days
+        
+        const result = await prisma.notificationSchedule.deleteMany({
+          where: {
+            scheduledFor: {
+              lt: cutoffDate
+            },
+            sent: true
           }
-        },
-        include: {
-          party: true,
-          member: true,
-          individualCustomer: true,
-          tailor: true
-        }
-      });
-
-      if (overdueAppointments.length > 0) {
-        logger.warn(`Found ${overdueAppointments.length} overdue appointments`);
+        });
         
-        // TODO: Send alerts to staff about overdue appointments
-        // This could be implemented as email alerts to managers or dashboard notifications
-        
-        for (const appointment of overdueAppointments) {
-          logger.warn(`Overdue appointment: ${appointment.id} - ${appointment.type} scheduled for ${appointment.dateTime}`);
-        }
+        logger.info(`Cleaned up ${result.count} old notification schedules`);
+      } catch (error) {
+        logger.error('Error cleaning up notifications:', error);
       }
-    } catch (error) {
-      logger.error('Error checking overdue appointments:', error);
-    } finally {
-      await prisma.$disconnect();
-    }
+    },
+    description: 'Clean up old notification schedules'
+  },
+  'check-overdue-appointments': {
+    cron: '0 8 * * *', // 8:00 AM daily
+    handler: async () => {
+      try {
+        const overdueDate = new Date();
+        overdueDate.setDate(overdueDate.getDate() - 1); // Yesterday
+        
+        const overdueAppointments = await prisma.appointment.findMany({
+          where: {
+            dateTime: {
+              lt: overdueDate
+            },
+            status: {
+              in: ['scheduled', 'confirmed']
+            }
+          },
+          include: {
+            individualCustomer: true,
+            member: {
+              include: {
+                party: true
+              }
+            },
+            tailor: true
+          }
+        });
+        
+        if (overdueAppointments.length > 0) {
+          logger.warn(`Found ${overdueAppointments.length} overdue appointments`);
+          
+          // Update status to 'no_show'
+          await prisma.appointment.updateMany({
+            where: {
+              id: {
+                in: overdueAppointments.map(apt => apt.id)
+              }
+            },
+            data: {
+              status: 'no_show'
+            }
+          });
+        }
+      } catch (error) {
+        logger.error('Error checking overdue appointments:', error);
+      }
+    },
+    description: 'Check for overdue appointments and update status'
+  },
+  'sync-customers': {
+    cron: '0 6 * * *', // 6:00 AM daily
+    handler: async () => {
+      try {
+        logger.info('Starting daily customer sync from Lightspeed');
+        const { syncCustomers } = require('./syncService');
+        await syncCustomers({});
+        logger.info('Daily customer sync completed successfully');
+      } catch (error) {
+        logger.error('Error during customer sync:', error);
+      }
+    },
+    description: 'Sync customers from Lightspeed'
+  }
+};
+
+// Job scheduler state
+let jobScheduler: any = null;
+const activeJobs = new Map<string, any>();
+
+/**
+ * Initialize the job scheduler
+ */
+export async function initializeScheduledJobs(): Promise<void> {
+  try {
+    // In production, you would use a proper job scheduler like node-cron
+    // For now, we'll simulate the scheduling with setInterval
+    
+    logger.info('Initializing scheduled jobs...');
+    
+    // Start the daily staff notifications job (simulate 9am daily)
+    startJob('daily-staff-notifications');
+    
+    // Start the notification processing job (every 5 minutes)
+    startJob('process-notifications');
+    
+    // Start the cleanup job (simulate 2am daily)
+    startJob('cleanup-notifications');
+    
+    // Start the overdue appointments check (simulate 8am daily)
+    startJob('check-overdue-appointments');
+    
+    // Start the customer sync job (simulate 6am daily)
+    startJob('sync-customers');
+    
+    logger.info('Scheduled jobs initialized successfully');
+  } catch (error) {
+    logger.error('Error initializing scheduled jobs:', error);
   }
 }
 
-// Export singleton instance
-export const scheduledJobService = ScheduledJobService.getInstance();
+/**
+ * Start a specific job
+ */
+function startJob(jobName: string): void {
+  const job = JOBS[jobName as keyof typeof JOBS];
+  if (!job) {
+    logger.error(`Unknown job: ${jobName}`);
+    return;
+  }
+  
+  try {
+    // For development, we'll run jobs more frequently
+    // In production, use proper cron scheduling
+    let interval: number;
+    
+    switch (jobName) {
+      case 'daily-staff-notifications':
+        interval = 24 * 60 * 60 * 1000; // 24 hours
+        break;
+      case 'process-notifications':
+        interval = 5 * 60 * 1000; // 5 minutes
+        break;
+      case 'cleanup-notifications':
+        interval = 24 * 60 * 60 * 1000; // 24 hours
+        break;
+      case 'check-overdue-appointments':
+        interval = 24 * 60 * 60 * 1000; // 24 hours
+        break;
+      case 'sync-customers':
+        interval = 24 * 60 * 60 * 1000; // 24 hours
+        break;
+      default:
+        interval = 60 * 60 * 1000; // 1 hour default
+    }
+    
+    const timer = setInterval(async () => {
+      try {
+        logger.info(`Running scheduled job: ${jobName}`);
+        await job.handler();
+        logger.info(`Completed scheduled job: ${jobName}`);
+      } catch (error) {
+        logger.error(`Error in scheduled job ${jobName}:`, error);
+      }
+    }, interval);
+    
+    activeJobs.set(jobName, timer);
+    logger.info(`Started job: ${jobName} (${job.description})`);
+  } catch (error) {
+    logger.error(`Error starting job ${jobName}:`, error);
+  }
+}
+
+/**
+ * Stop all scheduled jobs
+ */
+export function stopAllJobs(): void {
+  logger.info('Stopping all scheduled jobs...');
+  
+  for (const [jobName, timer] of activeJobs) {
+    clearInterval(timer);
+    logger.info(`Stopped job: ${jobName}`);
+  }
+  
+  activeJobs.clear();
+}
+
+/**
+ * Get status of all jobs
+ */
+export function getJobStatus(): { [key: string]: { active: boolean; description: string } } {
+  const status: { [key: string]: { active: boolean; description: string } } = {};
+  
+  for (const [jobName, job] of Object.entries(JOBS)) {
+    status[jobName] = {
+      active: activeJobs.has(jobName),
+      description: job.description
+    };
+  }
+  
+  return status;
+}

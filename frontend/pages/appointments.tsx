@@ -9,13 +9,14 @@ import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { toast } from 'react-hot-toast';
 import { Pagination } from '../components/ui/Pagination';
 import useSWR from 'swr';
-import { api } from '../lib/apiClient';
+import { simpleFetcher } from '../lib/simpleApiClient';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { Calendar, dateFnsLocalizer, View } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay, addMinutes, isValid } from 'date-fns';
 import enUS from 'date-fns/locale/en-US/index.js';
 import { useAuth } from '@/src/AuthContext';
 import { ListIcon, CalendarIcon, Plus } from 'lucide-react';
+import { api } from '@/lib/apiClient';
 
 const locales = { 'en-US': enUS };
 
@@ -128,14 +129,18 @@ export default function AppointmentsPage() {
   const pageSize = 10;
   const { user } = useAuth();
 
-  const { data: appointments = [], error: swrError, isLoading, mutate } = useSWR('/api/appointments', {
-    revalidateOnFocus: true,
-    revalidateOnReconnect: true,
-    refreshInterval: 5000,
-    onError: (error) => {
-      toastError('Failed to load appointments: ' + error.message);
+  const { data: appointments = [], error: swrError, isLoading, mutate } = useSWR(
+    '/api/customers', 
+    simpleFetcher,
+    {
+      revalidateOnFocus: true,
+      revalidateOnReconnect: true,
+      refreshInterval: 5000,
+      onError: (error) => {
+        toastError('Failed to load appointments: ' + error.message);
+      }
     }
-  });
+  );
 
   // List view logic
   const filtered = (Array.isArray(appointments) ? appointments : []).filter((a: any) =>
@@ -197,6 +202,11 @@ export default function AppointmentsPage() {
     }
   }
 
+  function handleSelectSlot(slotInfo: any) {
+    // Prevent opening modal when clicking on calendar slots
+    // This prevents interference with the appointment modal
+  }
+
   function handleNavigate(newDate: Date) {
     setDate(newDate);
   }
@@ -225,7 +235,7 @@ export default function AppointmentsPage() {
     try {
       await api.delete(`/api/appointments/${deleteAppt.id}`);
       success('Appointment deleted successfully');
-      mutate(appointments.filter((a: any) => a.id !== deleteAppt.id));
+      mutate((appointments as any[])?.filter((a: any) => a.id !== deleteAppt.id));
       setDeleteAppt(null);
     } catch (err) {
       toastError('Error deleting appointment: ' + err.message);
@@ -319,7 +329,7 @@ export default function AppointmentsPage() {
               <option value="consultation">Consultation</option>
             </select>
             <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center">
-              {filtered.length} of {appointments.length} appointments
+              {filtered.length} of {(appointments as any[])?.length || 0} appointments
             </div>
           </div>
         )}
@@ -543,6 +553,7 @@ export default function AppointmentsPage() {
                   endAccessor="end"
                   style={{ height: '100%' }}
                   onSelectEvent={handleSelectEvent}
+                  onSelectSlot={handleSelectSlot}
                   onNavigate={handleNavigate}
                   onView={view => setView(view as CalendarView)}
                   view={view}

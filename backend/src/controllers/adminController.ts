@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { withAccelerate } from '@prisma/extension-accelerate';
 import logger from '../utils/logger';
-import { scheduledJobService, JobInfo } from '../services/scheduledJobService';
+import { getJobStatus } from '../services/scheduledJobService';
 import { createClient } from 'redis';
 import os from 'os';
 
@@ -270,7 +270,7 @@ export const updateNotificationSettings = async (req: Request, res: Response): P
 // Scheduled Jobs Management
 export const getScheduledJobsStatus = async (req: Request, res: Response): Promise<void> => {
   try {
-    const jobStatus: JobInfo[] = scheduledJobService.getJobStatus();
+    const jobStatus = getJobStatus();
     res.json(jobStatus);
   } catch (error: any) {
     logger.error('Error getting scheduled jobs status:', error);
@@ -323,12 +323,7 @@ async function getDashboardData() {
   }
 
   // Job scheduler
-  let jobs: JobInfo[] = [];
-  try {
-    jobs = scheduledJobService.getJobStatus ? scheduledJobService.getJobStatus() : [];
-  } catch (e: any) {
-    jobs = [{ name: 'scheduler', running: false, status: 'error', lastRun: null, error: e && typeof e === 'object' && 'message' in e ? (e as any).message : String(e) }];
-  }
+  let jobs = getJobStatus();
 
   // App/server info
   const appInfo = {

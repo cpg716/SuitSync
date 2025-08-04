@@ -18,6 +18,7 @@
 - [Technology Stack](#technology-stack)
 - [Application Architecture](#application-architecture)
 - [Key Features](#key-features)
+- [Documentation](#documentation)
 - [Backend Dashboard & Monitoring](#backend-dashboard--monitoring)
 - [Local Development Setup](#local-development-setup)
 - [Docker Usage](#docker-usage)
@@ -91,10 +92,41 @@ The project is organized as a monorepo to streamline development and deployment.
 - **Backend Dashboard:** Real-time health/status dashboard at `/`, `/api/admin/dashboard`, and `/api/admin/dashboard.json` (HTML & JSON)
 - **Lightspeed Integration:** Bidirectional data sync for Customers, Products, and Sales. Automatically creates and manages custom fields in Lightspeed.
 - **Party & Appointment Management:** Group customers into parties (e.g., for a wedding) and schedule appointments like fittings and pickups.
-- **Alteration Job Tracking:** Create and manage alteration jobs linked to specific sale line items, assign them to tailors, and track their status.
+- **Enhanced Alteration Workflow:** Comprehensive alteration job tracking with tailor assignment, work tracking, time management, and detailed audit trails. Supports multiple garment types (Jacket, Pants, Vest, Shirt, Dress, Skirt) and task categories (Alteration, Button Work, Measurement, Custom).
+- **Tailor Assignment & Tracking:** Assign specific tailors to garment parts, track work start/finish times, record time spent, and maintain complete audit trails for quality control.
+- **QR Code Integration:** Unique QR codes for each garment part enable easy scanning to start/finish work and update status.
+- **Print System:** Generate individual garment tickets and complete job tickets with proper formatting for thermal printers.
 - **Automated Notifications:** Utilizes Twilio and SendGrid for sending SMS and email reminders for appointments or job status updates.
 - **Authentication:** Secure staff login via JWT and seamless, server-to-server Lightspeed API access via OAuth 2.0.
 - **Health & Sync Monitoring:** A dedicated UI in the admin panel to monitor the status of the Lightspeed connection and the health of background sync jobs.
+
+---
+
+## Documentation
+
+### Core System Documentation
+- **[Alterations Quick Start](docs/ALTERATIONS_QUICK_START.md)** - Get started with the alterations workflow in minutes
+- **[Alterations Workflow System](docs/ALTERATIONS_WORKFLOW.md)** - Comprehensive guide to the alteration job tracking, tailor assignment, and work management system
+- **[Alterations API Reference](docs/ALTERATIONS_API_REFERENCE.md)** - Quick reference for all alteration-related API endpoints
+- **[Alterations Job Creation](docs/ALTERATIONS_JOB_CREATION.md)** - Complete guide to creating and managing alteration jobs
+- **[Alterations Printing System](docs/ALTERATIONS_PRINTING.md)** - Comprehensive printing system for alteration tickets and labels
+- **[QR Codes System](docs/QR_CODES_SYSTEM.md)** - QR code generation, scanning, and status tracking system
+- **[Party Creation and Management](docs/PARTY_MANAGEMENT.md)** - Party management for events like weddings, proms, and corporate functions
+- **[Appointment System](docs/APPOINTMENT_SYSTEM.md)** - Comprehensive appointment scheduling for individuals and parties with email/SMS notifications
+- **[Lightspeed Integration Guide](docs/LIGHTSPEED_INTEGRATION_GUIDE.md)** - Complete guide to Lightspeed X-Series integration
+- **[Authentication Setup](docs/AUTHENTICATION_SETUP.md)** - JWT and OAuth2 setup instructions
+- **[Database Schema](docs/DATABASE.md)** - Database models and relationships
+- **[Deployment Guide](docs/DEPLOYMENT_GUIDE.md)** - Production deployment instructions
+
+### Development Documentation
+- **[Developer Guide](docs/DEVELOPER_GUIDE.md)** - Development setup and workflow
+- **[Docker Guide](docs/DOCKER.md)** - Containerization and Docker usage
+- **[Environment Configuration](docs/ENVIRONMENT.md)** - Environment variables and configuration
+- **[API Reference](docs/API_REFERENCE.md)** - Complete API documentation
+
+### Testing & Quality Assurance
+- **[AI Workflow](docs/AI_WORKFLOW.md)** - AI-assisted development workflow
+- **[Critical Fixes](docs/CRITICAL_FIXES.md)** - Important fixes and workarounds
 
 ---
 

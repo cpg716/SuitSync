@@ -85,6 +85,18 @@ const COMMON_TASKS = {
     'Shorten Length',
     'Button Adjustment',
     'Lapel Adjustment',
+    'Shoulder Adjustment',
+    'Chest Adjustment',
+    'Waist Suppression',
+    'Sleeve Pitch',
+    'Cuff Adjustment',
+    'Vent Adjustment',
+    'Pocket Adjustment',
+    'Lining Adjustment',
+    'Buttonhole Work',
+    'Button Replacement',
+    'Thread Matching',
+    'Press & Finish'
   ],
   PANTS: [
     'Hem',
@@ -93,12 +105,32 @@ const COMMON_TASKS = {
     'Taper Legs',
     'Shorten Inseam',
     'Cuff Adjustment',
+    'Waistband Adjustment',
+    'Pleat Adjustment',
+    'Pocket Adjustment',
+    'Zipper Adjustment',
+    'Crotch Adjustment',
+    'Thigh Adjustment',
+    'Knee Adjustment',
+    'Button Work',
+    'Hook & Eye',
+    'Belt Loop Adjustment',
+    'Press & Finish'
   ],
   VEST: [
     'Take in Sides',
     'Take in Back',
     'Button Adjustment',
     'Length Adjustment',
+    'Shoulder Adjustment',
+    'Chest Adjustment',
+    'Waist Suppression',
+    'Armhole Adjustment',
+    'Buttonhole Work',
+    'Button Replacement',
+    'Pocket Adjustment',
+    'Thread Matching',
+    'Press & Finish'
   ],
   SHIRT: [
     'Shorten Sleeves',
@@ -106,8 +138,78 @@ const COMMON_TASKS = {
     'Shorten Length',
     'Collar Adjustment',
     'Cuff Adjustment',
+    'Shoulder Adjustment',
+    'Chest Adjustment',
+    'Waist Adjustment',
+    'Armhole Adjustment',
+    'Button Work',
+    'Button Replacement',
+    'Buttonhole Work',
+    'Pocket Adjustment',
+    'Pleat Adjustment',
+    'Thread Matching',
+    'Press & Finish'
   ],
+  DRESS: [
+    'Hem',
+    'Take in Sides',
+    'Take in Back',
+    'Shorten Length',
+    'Shoulder Adjustment',
+    'Chest Adjustment',
+    'Waist Adjustment',
+    'Sleeve Adjustment',
+    'Neckline Adjustment',
+    'Button Work',
+    'Zipper Adjustment',
+    'Pocket Adjustment',
+    'Thread Matching',
+    'Press & Finish'
+  ],
+  SKIRT: [
+    'Hem',
+    'Take in Waist',
+    'Take in Hips',
+    'Shorten Length',
+    'Waistband Adjustment',
+    'Pleat Adjustment',
+    'Pocket Adjustment',
+    'Zipper Adjustment',
+    'Button Work',
+    'Hook & Eye',
+    'Thread Matching',
+    'Press & Finish'
+  ],
+  OTHER: [
+    'Hem',
+    'Take in Sides',
+    'Shorten Length',
+    'Button Work',
+    'Zipper Adjustment',
+    'Pocket Adjustment',
+    'Thread Matching',
+    'Press & Finish'
+  ]
 };
+
+// Button work tasks that can be applied to multiple garments
+const BUTTON_WORK_TASKS = [
+  'Button Replacement',
+  'Buttonhole Work',
+  'Button Adjustment',
+  'Thread Matching',
+  'Hook & Eye',
+  'Snap Installation',
+  'Velcro Installation'
+];
+
+// Common measurement tasks
+const MEASUREMENT_TASKS = [
+  'Initial Measurements',
+  'Fitting Measurements',
+  'Final Measurements',
+  'Quality Check Measurements'
+];
 
 export function AlterationJobModal({
   open,
@@ -244,6 +346,55 @@ export function AlterationJobModal({
         ]
       } : part
     ));
+  };
+
+  const addButtonWorkTasks = (partIndex: number) => {
+    setJobParts(prev => prev.map((part, i) => 
+      i === partIndex ? {
+        ...part,
+        tasks: [
+          ...part.tasks,
+          ...BUTTON_WORK_TASKS.map(taskName => ({
+            taskName,
+            taskType: 'button_work',
+            measurements: '',
+            notes: ''
+          }))
+        ]
+      } : part
+    ));
+  };
+
+  const addMeasurementTasks = (partIndex: number) => {
+    setJobParts(prev => prev.map((part, i) => 
+      i === partIndex ? {
+        ...part,
+        tasks: [
+          ...part.tasks,
+          ...MEASUREMENT_TASKS.map(taskName => ({
+            taskName,
+            taskType: 'measurement',
+            measurements: '',
+            notes: ''
+          }))
+        ]
+      } : part
+    ));
+  };
+
+  const addButtonWorkToAllGarments = () => {
+    setJobParts(prev => prev.map(part => ({
+      ...part,
+      tasks: [
+        ...part.tasks,
+        ...BUTTON_WORK_TASKS.map(taskName => ({
+          taskName,
+          taskType: 'button_work',
+          measurements: '',
+          notes: ''
+        }))
+      ]
+    })));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -447,10 +598,22 @@ export function AlterationJobModal({
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg">Garment Parts & Tasks</CardTitle>
-                <Button type="button" onClick={addJobPart} variant="outline" size="sm">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Part
-                </Button>
+                <div className="flex gap-2">
+                  <Button 
+                    type="button" 
+                    onClick={addButtonWorkToAllGarments} 
+                    variant="outline" 
+                    size="sm"
+                    className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+                    disabled={jobParts.length === 0}
+                  >
+                    Add Button Work to All
+                  </Button>
+                  <Button type="button" onClick={addJobPart} variant="outline" size="sm">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Part
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -548,7 +711,7 @@ export function AlterationJobModal({
                     <div>
                       <div className="flex items-center justify-between mb-3">
                         <Label className="text-base font-semibold">Tasks</Label>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-wrap">
                           <Button
                             type="button"
                             onClick={() => addCommonTasks(partIndex, part.partType)}
@@ -559,12 +722,30 @@ export function AlterationJobModal({
                           </Button>
                           <Button
                             type="button"
+                            onClick={() => addButtonWorkTasks(partIndex)}
+                            variant="outline"
+                            size="sm"
+                            className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+                          >
+                            Add Button Work
+                          </Button>
+                          <Button
+                            type="button"
+                            onClick={() => addMeasurementTasks(partIndex)}
+                            variant="outline"
+                            size="sm"
+                            className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
+                          >
+                            Add Measurements
+                          </Button>
+                          <Button
+                            type="button"
                             onClick={() => addTask(partIndex)}
                             variant="outline"
                             size="sm"
                           >
                             <Plus className="w-4 h-4 mr-1" />
-                            Add Task
+                            Add Custom Task
                           </Button>
                         </div>
                       </div>
@@ -574,9 +755,24 @@ export function AlterationJobModal({
                       ) : (
                         <div className="space-y-3">
                           {(Array.isArray(part.tasks) ? part.tasks : []).map((task, taskIndex) => (
-                            <div key={taskIndex} className="border rounded-lg p-3">
+                            <div key={taskIndex} className={`border rounded-lg p-3 ${
+                              task.taskType === 'button_work' ? 'border-blue-200 bg-blue-50' :
+                              task.taskType === 'measurement' ? 'border-green-200 bg-green-50' :
+                              'border-gray-200'
+                            }`}>
                               <div className="flex items-center justify-between mb-2">
-                                <Label className="font-medium">Task {taskIndex + 1}</Label>
+                                <div className="flex items-center gap-2">
+                                  <Label className="font-medium">Task {taskIndex + 1}</Label>
+                                  {task.taskType === 'button_work' && (
+                                    <Badge className="bg-blue-100 text-blue-700 border-blue-200">Button Work</Badge>
+                                  )}
+                                  {task.taskType === 'measurement' && (
+                                    <Badge className="bg-green-100 text-green-700 border-green-200">Measurement</Badge>
+                                  )}
+                                  {task.taskType === 'alteration' && (
+                                    <Badge className="bg-gray-100 text-gray-700 border-gray-200">Alteration</Badge>
+                                  )}
+                                </div>
                                 <Button
                                   type="button"
                                   onClick={() => removeTask(partIndex, taskIndex)}

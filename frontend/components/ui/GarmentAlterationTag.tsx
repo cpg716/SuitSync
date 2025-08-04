@@ -167,7 +167,7 @@ export function GarmentAlterationTag({
               }
               .checkbox-grid { 
                 display: grid; 
-                grid-template-columns: repeat(3, 1fr); 
+                grid-template-columns: repeat(2, 1fr); 
                 gap: 10px; 
                 margin: 15px 0; 
               }
@@ -176,6 +176,27 @@ export function GarmentAlterationTag({
                 align-items: center; 
                 gap: 8px; 
               }
+              .task-category {
+                margin-bottom: 15px;
+              }
+              .task-category h5 {
+                font-weight: 600;
+                font-size: 14px;
+                margin-bottom: 8px;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+              }
+              .task-category-indicator {
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                display: inline-block;
+              }
+              .task-category-alteration { background-color: #9ca3af; }
+              .task-category-button { background-color: #3b82f6; }
+              .task-category-measurement { background-color: #10b981; }
+              .task-category-custom { background-color: #8b5cf6; }
               .status-badge { 
                 padding: 4px 12px; 
                 border-radius: 12px; 
@@ -197,6 +218,23 @@ export function GarmentAlterationTag({
               @media print {
                 body { margin: 0; padding: 10px; }
                 .tag { border: 2px solid #000; max-width: none; }
+                .task-category { page-break-inside: avoid; }
+                .task-category h5 { 
+                  color: #000 !important; 
+                  font-weight: bold !important; 
+                }
+                .task-category-indicator { 
+                  -webkit-print-color-adjust: exact;
+                  print-color-adjust: exact;
+                }
+                .checkbox-grid { 
+                  grid-template-columns: repeat(2, 1fr); 
+                  gap: 8px; 
+                }
+                .checkbox-item { 
+                  font-size: 12px; 
+                  line-height: 1.2; 
+                }
               }
             </style>
           </head>
@@ -357,23 +395,128 @@ export function GarmentAlterationTag({
                 {jobPart.tasks.length > 0 && (
                   <div className="mb-4">
                     <h4 className="font-semibold mb-2">Tasks:</h4>
-                    <div className="checkbox-grid grid grid-cols-3 gap-2">
-                      {jobPart.tasks.map((task) => (
-                        <div key={task.id} className="checkbox-item flex items-center space-x-2">
-                          <Checkbox 
-                            id={`task-${task.id}`}
-                            checked={task.status === 'COMPLETE'}
-                            disabled={printMode}
-                          />
-                          <label 
-                            htmlFor={`task-${task.id}`}
-                            className={`text-sm ${task.status === 'COMPLETE' ? 'line-through text-gray-500' : ''}`}
-                          >
-                            {task.taskName}
-                          </label>
+                    
+                    {/* Group tasks by type */}
+                    {(() => {
+                      const taskGroups = {
+                        alteration: jobPart.tasks.filter(task => task.taskType === 'alteration' || task.taskType === 'ALTERATION'),
+                        button_work: jobPart.tasks.filter(task => task.taskType === 'button_work' || task.taskType === 'BUTTON_WORK'),
+                        measurement: jobPart.tasks.filter(task => task.taskType === 'measurement' || task.taskType === 'MEASUREMENT'),
+                        custom: jobPart.tasks.filter(task => task.taskType === 'custom' || task.taskType === 'CUSTOM')
+                      };
+
+                      return (
+                        <div className="space-y-4">
+                          {/* Alteration Tasks */}
+                          {taskGroups.alteration.length > 0 && (
+                            <div>
+                              <h5 className="font-medium text-sm text-gray-700 mb-2 flex items-center gap-2">
+                                <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
+                                Alterations
+                              </h5>
+                              <div className="checkbox-grid grid grid-cols-2 gap-2 ml-4">
+                                {taskGroups.alteration.map((task) => (
+                                  <div key={task.id} className="checkbox-item flex items-center space-x-2">
+                                    <Checkbox 
+                                      id={`task-${task.id}`}
+                                      checked={task.status === 'COMPLETE'}
+                                      disabled={printMode}
+                                    />
+                                    <label 
+                                      htmlFor={`task-${task.id}`}
+                                      className={`text-sm ${task.status === 'COMPLETE' ? 'line-through text-gray-500' : ''}`}
+                                    >
+                                      {task.taskName}
+                                    </label>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Button Work Tasks */}
+                          {taskGroups.button_work.length > 0 && (
+                            <div>
+                              <h5 className="font-medium text-sm text-blue-700 mb-2 flex items-center gap-2">
+                                <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                                Button Work
+                              </h5>
+                              <div className="checkbox-grid grid grid-cols-2 gap-2 ml-4">
+                                {taskGroups.button_work.map((task) => (
+                                  <div key={task.id} className="checkbox-item flex items-center space-x-2">
+                                    <Checkbox 
+                                      id={`task-${task.id}`}
+                                      checked={task.status === 'COMPLETE'}
+                                      disabled={printMode}
+                                    />
+                                    <label 
+                                      htmlFor={`task-${task.id}`}
+                                      className={`text-sm ${task.status === 'COMPLETE' ? 'line-through text-gray-500' : ''}`}
+                                    >
+                                      {task.taskName}
+                                    </label>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Measurement Tasks */}
+                          {taskGroups.measurement.length > 0 && (
+                            <div>
+                              <h5 className="font-medium text-sm text-green-700 mb-2 flex items-center gap-2">
+                                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                                Measurements
+                              </h5>
+                              <div className="checkbox-grid grid grid-cols-2 gap-2 ml-4">
+                                {taskGroups.measurement.map((task) => (
+                                  <div key={task.id} className="checkbox-item flex items-center space-x-2">
+                                    <Checkbox 
+                                      id={`task-${task.id}`}
+                                      checked={task.status === 'COMPLETE'}
+                                      disabled={printMode}
+                                    />
+                                    <label 
+                                      htmlFor={`task-${task.id}`}
+                                      className={`text-sm ${task.status === 'COMPLETE' ? 'line-through text-gray-500' : ''}`}
+                                    >
+                                      {task.taskName}
+                                    </label>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Custom Tasks */}
+                          {taskGroups.custom.length > 0 && (
+                            <div>
+                              <h5 className="font-medium text-sm text-purple-700 mb-2 flex items-center gap-2">
+                                <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
+                                Custom Tasks
+                              </h5>
+                              <div className="checkbox-grid grid grid-cols-2 gap-2 ml-4">
+                                {taskGroups.custom.map((task) => (
+                                  <div key={task.id} className="checkbox-item flex items-center space-x-2">
+                                    <Checkbox 
+                                      id={`task-${task.id}`}
+                                      checked={task.status === 'COMPLETE'}
+                                      disabled={printMode}
+                                    />
+                                    <label 
+                                      htmlFor={`task-${task.id}`}
+                                      className={`text-sm ${task.status === 'COMPLETE' ? 'line-through text-gray-500' : ''}`}
+                                    >
+                                      {task.taskName}
+                                    </label>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      ))}
-                    </div>
+                      );
+                    })()}
                   </div>
                 )}
 

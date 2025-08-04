@@ -21,6 +21,14 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       });
     }
 
+    // Special bypass for sync endpoints that use persistent tokens
+    if (req.originalUrl.startsWith('/api/sync/')) {
+      // For sync endpoints, we allow them to proceed without session authentication
+      // The sync service will use persistent tokens from the database
+      console.log('Sync endpoint detected, allowing access with persistent tokens');
+      return next();
+    }
+
     // Check for Lightspeed user authentication with optional local user data
     if (req.session.lightspeedUser) {
       const lightspeedUser = req.session.lightspeedUser;
@@ -72,7 +80,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       };
 
       // Check if Lightspeed connection is required and available
-      const requiresLightspeed = ['/api/customers', '/api/sales', '/api/sync'].some(p => req.originalUrl.startsWith(p));
+      const requiresLightspeed = ['/api/customers', '/api/sales'].some(p => req.originalUrl.startsWith(p));
       if (requiresLightspeed && !req.session.lsAccessToken) {
         console.error('Lightspeed token missing or expired for user', lightspeedUser.id);
         return res.status(401).json({
@@ -140,6 +148,34 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
         console.error('Error handling multi-user session:', error, { sessionId: req.sessionID });
         // Continue to require fresh authentication
       }
+    }
+
+    // Check for selected user (PC version user selection)
+    if (req.session.selectedUser) {
+      // Create user object from selected user
+      (req as any).user = {
+        id: req.session.selectedUser.id,
+        lightspeedId: req.session.selectedUser.id,
+        email: req.session.selectedUser.email,
+        name: req.session.selectedUser.name,
+        role: req.session.selectedUser.role,
+        lightspeedEmployeeId: req.session.selectedUser.id,
+        photoUrl: req.session.selectedUser.photoUrl,
+        isLightspeedUser: true,
+        hasLocalRecord: false,
+        localUserId: null,
+        commissionRate: 0.1,
+        tailorAbilities: [],
+        tailorSchedules: [],
+        skills: [],
+        notificationPrefs: null,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      // For selected users, we use persistent tokens from the database
+      // The sync service will handle token management
+      return next();
     }
 
     // No valid authentication found

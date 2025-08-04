@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, User, Users, AlertCircle, CheckCircle, Package } from 'lucide-react';
+import { Calendar, Clock, User, Users, AlertCircle, CheckCircle, Package, Plus, Search } from 'lucide-react';
 import { Button } from './Button';
 import { Input } from './Input';
 import { Label } from './Label';
@@ -9,6 +9,8 @@ import { Badge } from './Badge';
 import { Card, CardContent, CardHeader, CardTitle } from './Card';
 import { CustomerSearch } from './CustomerSearchSimple';
 import { useToast } from '../ToastContext';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './Tabs';
+import { format } from 'date-fns';
 
 interface Customer {
   id: number;
@@ -17,6 +19,8 @@ interface Customer {
   phone?: string;
   appointments?: Appointment[];
   alterationJobs?: AlterationJob[];
+  first_name?: string;
+  last_name?: string;
 }
 
 interface Party {
@@ -48,22 +52,26 @@ interface AlterationJob {
 }
 
 interface AppointmentFormData {
-  customerId?: number;
+  individualCustomerId?: number;
   partyId?: number;
   partyMemberId?: number;
   dateTime: string;
   durationMinutes: number;
   type: 'first_fitting' | 'alterations_fitting' | 'pickup' | 'fitting';
+  status: string;
   notes: string;
-  tailorId?: number;
+  staffId?: number;
   autoScheduleNext: boolean;
+  recurrenceRule?: string;
+  assignedStaffId?: string;
 }
 
 interface AppointmentFormProps {
   onSubmit: (data: AppointmentFormData) => Promise<void>;
   onCancel: () => void;
   initialData?: Partial<AppointmentFormData>;
-  tailors: Array<{ id: number; name: string; role: string }>;
+  loading?: boolean;
+  isEdit?: boolean;
 }
 
 const APPOINTMENT_TYPES = [
@@ -115,23 +123,67 @@ const calculateDefaultDate = (type: string, eventDate?: string): string => {
 export const AppointmentForm: React.FC<AppointmentFormProps> = ({
   onSubmit,
   onCancel,
-  initialData,
-  tailors
+  initialData = {},
+  loading = false,
+  isEdit = false
 }) => {
   const { success, error } = useToast();
-  const [loading, setLoading] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [selectedParty, setSelectedParty] = useState<Party | null>(null);
   const [selectedMember, setSelectedMember] = useState<PartyMember | null>(null);
-  
+  const [activeTab, setActiveTab] = useState<'individual' | 'party'>('individual');
+  const [staffMembers, setStaffMembers] = useState<Array<{ id: number; name: string; role: string }>>([]);
+
   const [formData, setFormData] = useState<AppointmentFormData>({
-    dateTime: '',
-    durationMinutes: 60,
-    type: 'fitting',
-    notes: '',
-    autoScheduleNext: false,
-    ...initialData
+    individualCustomerId: undefined,
+    partyId: undefined,
+    partyMemberId: undefined,
+    dateTime: initialData.dateTime || format(new Date(), "yyyy-MM-dd'T'HH:mm"),
+    durationMinutes: initialData.durationMinutes || 60,
+    type: initialData.type || 'fitting',
+    status: initialData.status || 'pending',
+    notes: initialData.notes || '',
+    staffId: initialData.staffId,
+    autoScheduleNext: initialData.autoScheduleNext || false,
+    recurrenceRule: initialData.recurrenceRule,
+    assignedStaffId: initialData.assignedStaffId
   });
+
+  // Load staff members when component mounts
+  useEffect(() => {
+    const loadStaffMembers = async () => {
+      try {
+        const response = await fetch('/api/admin/settings/staff', {
+          credentials: 'include'
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setStaffMembers(Array.isArray(data) ? data : []);
+        }
+      } catch (err) {
+        console.error('Failed to load staff members:', err);
+      }
+    };
+    
+    loadStaffMembers();
+  }, []);
+
+  // Load initial data when component mounts or initialData changes
+  useEffect(() => {
+    if (initialData) {
+      setFormData(prev => ({
+        ...prev,
+        ...initialData
+      }));
+
+      // Set active tab based on initial data
+      if (initialData.partyId && initialData.partyMemberId) {
+        setActiveTab('party');
+      } else if (initialData.individualCustomerId) {
+        setActiveTab('individual');
+      }
+    }
+  }, [initialData]);
 
   // Update default date when appointment type or party changes
   useEffect(() => {
@@ -147,11 +199,14 @@ export const AppointmentForm: React.FC<AppointmentFormProps> = ({
     setSelectedCustomer(customer);
     setSelectedParty(null);
     setSelectedMember(null);
+    setActiveTab('individual');
     setFormData(prev => ({
       ...prev,
-      customerId: customer.id,
+      individualCustomerId: customer.id,
       partyId: undefined,
-      partyMemberId: undefined
+      partyMemberId: undefined,
+      type: 'fitting', // Default to general fitting for individual customers
+      autoScheduleNext: false
     }));
   };
 
@@ -159,11 +214,12 @@ export const AppointmentForm: React.FC<AppointmentFormProps> = ({
     setSelectedParty(party);
     setSelectedMember(member);
     setSelectedCustomer(null);
+    setActiveTab('party');
     setFormData(prev => ({
       ...prev,
       partyId: party.id,
       partyMemberId: member.id,
-      customerId: undefined,
+      individualCustomerId: undefined,
       // Auto-suggest appointment type based on existing appointments
       type: suggestAppointmentType(member.appointments || []),
       // Auto-enable next appointment scheduling for wedding parties
@@ -172,70 +228,150 @@ export const AppointmentForm: React.FC<AppointmentFormProps> = ({
   };
 
   const suggestAppointmentType = (appointments: Appointment[]): AppointmentFormData['type'] => {
-    const hasFirstFitting = appointments.some(a => a.type === 'first_fitting');
-    const hasAlterationsFitting = appointments.some(a => a.type === 'alterations_fitting');
+    const completedTypes = appointments
+      .filter(a => a.status === 'completed')
+      .map(a => a.type);
     
-    if (!hasFirstFitting) return 'first_fitting';
-    if (!hasAlterationsFitting) return 'alterations_fitting';
-    return 'pickup';
+    if (!completedTypes.includes('first_fitting')) return 'first_fitting';
+    if (!completedTypes.includes('alterations_fitting')) return 'alterations_fitting';
+    if (!completedTypes.includes('pickup')) return 'pickup';
+    return 'fitting';
   };
 
   const getProgressStatus = (appointments: Appointment[] = [], jobs: AlterationJob[] = []) => {
-    const hasFirstFitting = appointments.some(a => a.type === 'first_fitting');
-    const hasAlterationsFitting = appointments.some(a => a.type === 'alterations_fitting');
-    const hasPickup = appointments.some(a => a.type === 'pickup');
-    const hasCompletedJob = jobs.some(j => j.status === 'COMPLETE');
-    
-    if (hasPickup || hasCompletedJob) return { status: 'completed', label: 'Ready for Pickup', icon: Package, color: 'bg-green-100 text-green-800' };
-    if (hasAlterationsFitting) return { status: 'alterations', label: 'Alterations Phase', icon: Clock, color: 'bg-blue-100 text-blue-800' };
-    if (hasFirstFitting) return { status: 'measured', label: 'Measured', icon: CheckCircle, color: 'bg-yellow-100 text-yellow-800' };
-    return { status: 'new', label: 'New Customer', icon: AlertCircle, color: 'bg-gray-100 text-gray-800' };
+    const completedAppointments = appointments.filter(a => a.status === 'completed').length;
+    const totalAppointments = appointments.length;
+    const completedJobs = jobs.filter(j => j.status === 'completed').length;
+    const totalJobs = jobs.length;
+
+    if (totalAppointments === 0 && totalJobs === 0) {
+      return { label: 'Not Started', color: 'bg-gray-100 text-gray-800', icon: AlertCircle };
+    }
+
+    const progress = ((completedAppointments + completedJobs) / (totalAppointments + totalJobs)) * 100;
+
+    if (progress === 0) {
+      return { label: 'Not Started', color: 'bg-gray-100 text-gray-800', icon: AlertCircle };
+    } else if (progress < 50) {
+      return { label: 'In Progress', color: 'bg-yellow-100 text-yellow-800', icon: Clock };
+    } else if (progress < 100) {
+      return { label: 'Almost Done', color: 'bg-blue-100 text-blue-800', icon: Package };
+    } else {
+      return { label: 'Complete', color: 'bg-green-100 text-green-800', icon: CheckCircle };
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!selectedCustomer && !selectedMember) {
-      error('Please select a customer or party member');
-      return;
-    }
-    
+    // Validate required fields
     if (!formData.dateTime) {
-      error('Please select a date and time');
+      error('Date & Time is required');
       return;
     }
-    
-    setLoading(true);
+
+    if (!formData.individualCustomerId && !formData.partyId) {
+      error('Please select either an individual customer or a party member');
+      return;
+    }
+
     try {
       await onSubmit(formData);
       success('Appointment scheduled successfully');
-    } catch (err) {
+    } catch (error) {
       error('Failed to schedule appointment');
-    } finally {
-      setLoading(false);
     }
   };
 
   const selectedEntity = selectedCustomer || selectedMember;
-  const progress = selectedEntity ? getProgressStatus(
-    selectedEntity.appointments || [],
-    selectedEntity.alterationJobs || []
-  ) : null;
+  const progress = selectedEntity ? getProgressStatus(selectedEntity.appointments, selectedEntity.alterationJobs) : null;
+
+  const clearSelection = () => {
+    setSelectedCustomer(null);
+    setSelectedParty(null);
+    setSelectedMember(null);
+    setFormData(prev => ({
+      ...prev,
+      individualCustomerId: undefined,
+      partyId: undefined,
+      partyMemberId: undefined,
+      type: 'fitting',
+      autoScheduleNext: false
+    }));
+  };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Customer/Party Selection */}
       <div className="space-y-4">
-        <Label htmlFor="customer-search">Customer or Party Member</Label>
-        <CustomerSearch
-          onCustomerSelect={handleCustomerSelect}
-          onPartyMemberSelect={handlePartyMemberSelect}
-          placeholder="Search customers or wedding parties..."
-          showProgressIndicators={true}
-        />
-        
-        {/* Selected Customer/Member Info */}
-        {(selectedCustomer || selectedMember) && (
+        <div className="flex items-center justify-between">
+          <Label className="text-base font-medium">Select Customer or Party Member</Label>
+          {(selectedCustomer || selectedMember) && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={clearSelection}
+              className="text-xs"
+            >
+              Clear Selection
+            </Button>
+          )}
+        </div>
+
+        {!selectedCustomer && !selectedMember ? (
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'individual' | 'party')} className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="individual" className="flex items-center gap-2">
+                <User className="h-4 w-4" />
+                Individual Customer
+              </TabsTrigger>
+              <TabsTrigger value="party" className="flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Wedding Party Member
+              </TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="individual" className="space-y-4">
+              <div className="p-4 border border-gray-200 rounded-lg bg-gray-50">
+                <div className="flex items-center gap-2 mb-2">
+                  <User className="h-4 w-4 text-gray-600" />
+                  <span className="font-medium text-sm">Individual Customer Appointment</span>
+                </div>
+                <p className="text-sm text-gray-600 mb-4">
+                  Schedule appointments for individual customers not part of a wedding party. 
+                  Perfect for regular fittings, alterations, or consultations.
+                </p>
+                <CustomerSearch
+                  onCustomerSelect={handleCustomerSelect}
+                  onPartyMemberSelect={handlePartyMemberSelect}
+                  placeholder="Search individual customers..."
+                  showProgressIndicators={true}
+                />
+              </div>
+            </TabsContent>
+            
+            <TabsContent value="party" className="space-y-4">
+              <div className="p-4 border border-blue-200 rounded-lg bg-blue-50">
+                <div className="flex items-center gap-2 mb-2">
+                  <Users className="h-4 w-4 text-blue-600" />
+                  <span className="font-medium text-sm">Wedding Party Member Appointment</span>
+                </div>
+                <p className="text-sm text-blue-600 mb-4">
+                  Schedule appointments for wedding party members with automated timeline tracking. 
+                  The system will suggest appropriate appointment types based on the wedding date.
+                </p>
+                <CustomerSearch
+                  onCustomerSelect={handleCustomerSelect}
+                  onPartyMemberSelect={handlePartyMemberSelect}
+                  placeholder="Search wedding parties and members..."
+                  showProgressIndicators={true}
+                />
+              </div>
+            </TabsContent>
+          </Tabs>
+        ) : (
+          /* Selected Customer/Member Info */
           <Card>
             <CardContent className="pt-4">
               <div className="flex items-center justify-between">
@@ -257,6 +393,9 @@ export const AppointmentForm: React.FC<AppointmentFormProps> = ({
                     {selectedCustomer?.email && (
                       <div className="text-sm text-gray-500">{selectedCustomer.email}</div>
                     )}
+                    {selectedCustomer?.phone && (
+                      <div className="text-sm text-gray-500">{selectedCustomer.phone}</div>
+                    )}
                   </div>
                 </div>
                 {progress && (
@@ -266,34 +405,26 @@ export const AppointmentForm: React.FC<AppointmentFormProps> = ({
                   </div>
                 )}
               </div>
+              
+              {/* Appointment History Summary */}
+              {selectedEntity && selectedEntity.appointments && selectedEntity.appointments.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <div className="text-xs text-gray-500 mb-2">Recent Appointments:</div>
+                  <div className="space-y-1">
+                    {selectedEntity.appointments.slice(0, 3).map((apt) => (
+                      <div key={apt.id} className="flex items-center justify-between text-xs">
+                        <span className="capitalize">{apt.type.replace('_', ' ')}</span>
+                        <span className="text-gray-500">
+                          {new Date(apt.dateTime).toLocaleDateString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
-      </div>
-
-      {/* Appointment Type */}
-      <div className="space-y-2">
-        <Label htmlFor="type">Appointment Type</Label>
-        <Select
-          value={formData.type}
-          onValueChange={(value: AppointmentFormData['type']) => 
-            setFormData(prev => ({ ...prev, type: value }))
-          }
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {APPOINTMENT_TYPES.map((type) => (
-              <SelectItem key={type.value} value={type.value}>
-                <div>
-                  <div className="font-medium">{type.label}</div>
-                  <div className="text-sm text-gray-500">{type.description}</div>
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </div>
 
       {/* Date and Time */}
@@ -330,26 +461,86 @@ export const AppointmentForm: React.FC<AppointmentFormProps> = ({
         </div>
       </div>
 
-      {/* Tailor Assignment */}
+      {/* Status and Type */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="status">Status</Label>
+          <Select
+            value={formData.status}
+            onValueChange={(value) => 
+              setFormData(prev => ({ ...prev, status: value }))
+            }
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="scheduled">Scheduled</SelectItem>
+              <SelectItem value="confirmed">Confirmed</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+              <SelectItem value="canceled">Canceled</SelectItem>
+              <SelectItem value="no-show">No Show</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        
+        <div className="space-y-2">
+          <Label htmlFor="type">Appointment Type</Label>
+          <Select
+            value={formData.type}
+            onValueChange={(value: AppointmentFormData['type']) => 
+              setFormData(prev => ({ ...prev, type: value }))
+            }
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {APPOINTMENT_TYPES.map((type) => (
+                <SelectItem key={type.value} value={type.value}>
+                  <div>
+                    <div className="font-medium">{type.label}</div>
+                    <div className="text-sm text-gray-500">{type.description}</div>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* Staff Assignment */}
       <div className="space-y-2">
-        <Label htmlFor="tailor">Assigned Tailor (Optional)</Label>
+        <Label htmlFor="assignedStaff">Assigned Staff (Optional)</Label>
         <Select
-          value={formData.tailorId?.toString() || ''}
+          value={formData.assignedStaffId || ''}
           onValueChange={(value) => 
-            setFormData(prev => ({ ...prev, tailorId: value ? parseInt(value) : undefined }))
+            setFormData(prev => ({ ...prev, assignedStaffId: value || undefined }))
           }
         >
           <SelectTrigger>
-            <SelectValue placeholder="Select a tailor..." />
+            <SelectValue placeholder="Select staff member..." />
           </SelectTrigger>
           <SelectContent>
-            {tailors.map((tailor) => (
-              <SelectItem key={tailor.id} value={tailor.id.toString()}>
-                {tailor.name} ({tailor.role})
+            {staffMembers.map((staff) => (
+              <SelectItem key={staff.id} value={staff.id.toString()}>
+                {staff.name} ({staff.role})
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+      </div>
+
+      {/* Recurrence Rule */}
+      <div className="space-y-2">
+        <Label htmlFor="recurrenceRule">Recurrence Rule (iCalendar RRULE)</Label>
+        <Input
+          id="recurrenceRule"
+          type="text"
+          placeholder="e.g. FREQ=WEEKLY;COUNT=4"
+          value={formData.recurrenceRule || ''}
+          onChange={(e) => setFormData(prev => ({ ...prev, recurrenceRule: e.target.value }))}
+        />
       </div>
 
       {/* Notes */}
@@ -405,13 +596,31 @@ export const AppointmentForm: React.FC<AppointmentFormProps> = ({
         </Card>
       )}
 
+      {/* Individual Customer Info */}
+      {selectedCustomer && !selectedParty && (
+        <Card className="bg-gray-50 border-gray-200">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-800">
+              Individual Customer Appointment
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="text-sm text-gray-700 space-y-1">
+              <div>• This appointment will be tracked independently</div>
+              <div>• No automatic timeline scheduling</div>
+              <div>• Perfect for regular fittings, alterations, or consultations</div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Form Actions */}
       <div className="flex justify-end space-x-3 pt-4 border-t">
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
         </Button>
         <Button type="submit" disabled={loading}>
-          {loading ? 'Scheduling...' : 'Schedule Appointment'}
+          {loading ? 'Saving...' : isEdit ? 'Update Appointment' : 'Schedule Appointment'}
         </Button>
       </div>
     </form>

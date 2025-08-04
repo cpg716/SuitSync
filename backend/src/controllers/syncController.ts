@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { withAccelerate } from '@prisma/extension-accelerate';
-import { syncCustomers, syncProducts } from '../services/syncService';
+import { syncCustomers, syncSales, syncUsers, syncGroups } from '../services/syncService';
 import logger from '../utils/logger';
 import { createLightspeedClient } from '../lightspeedClient';
 
@@ -36,7 +36,9 @@ export const triggerSync = async (req: Request, res: Response) => {
   const userId = (req as any).user.id;
   const syncFunctions: Record<string, (req: Request) => Promise<void>> = {
     customers: syncCustomers,
-    products: syncProducts,
+    sales: syncSales,
+    users: syncUsers,
+    groups: syncGroups,
   };
   if (!syncFunctions[resource]) {
     return res.status(400).json({ message: `Syncing for resource '${resource}' is not supported.` });
@@ -106,4 +108,4 @@ export const previewCustomerSync = async (req: Request, res: Response) => {
   }
 };
 
-export { syncCustomers, syncProducts }; 
+export { syncCustomers, syncSales, syncUsers, syncGroups }; 

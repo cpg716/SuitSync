@@ -67,6 +67,12 @@ export const alterationJobSchemas = {
       priority: z.enum(['LOW', 'NORMAL', 'HIGH', 'RUSH']).default('NORMAL'),
       estimatedTime: z.number().int().min(1).max(480).optional(), // max 8 hours
       notes: commonSchemas.notes,
+      tasks: z.array(z.object({
+        taskName: z.string().min(1).max(200),
+        taskType: z.enum(['alteration', 'button_work', 'measurement', 'custom']).default('alteration'),
+        measurements: z.string().max(500).optional(),
+        notes: z.string().max(1000).optional(),
+      })).optional().default([]),
     })).min(1),
   }).refine(data => data.customerId || data.partyId, {
     message: "Either customerId or partyId must be provided",

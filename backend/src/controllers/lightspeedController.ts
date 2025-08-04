@@ -26,7 +26,7 @@ export const getLightspeedHealth = async (req: Request, res: Response) => {
     });
   }
   try {
-    const expectedResources = ['customers', 'users', 'products', 'sales'];
+    const expectedResources = ['customers', 'sales', 'users', 'groups'];
     const statuses = await prisma.syncStatus.findMany({ orderBy: { resource: 'asc' } });
     const statusMap = new Map(statuses.map(s => [s.resource, s]));
     const now = new Date();
@@ -42,10 +42,17 @@ export const getLightspeedHealth = async (req: Request, res: Response) => {
         errorMessage: s?.errorMessage || null,
       };
     });
+    
+    // Determine overall sync status
+    const hasErrors = sanitizedStatuses.some(s => s.status === 'FAILED');
+    const overallStatus = hasErrors ? 'ERROR' : 'SYNCED';
+    
     res.status(200).json({
       lightspeedConnection,
       lightspeedApiError,
       syncStatuses: sanitizedStatuses,
+      overallStatus,
+      hasErrors,
     });
   } catch (dbError: any) {
     logger.error('[Lightspeed Health] Failed to get sync statuses from DB:', {

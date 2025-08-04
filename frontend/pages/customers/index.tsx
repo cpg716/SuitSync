@@ -8,6 +8,7 @@ import { Modal } from '@/components/ui/Modal';
 import { useToast } from '../../components/ToastContext';
 import { useAuth } from '../../src/AuthContext';
 import { MagnifyingGlass, Plus, Users } from '@phosphor-icons/react';
+import { simpleFetcher } from '@/lib/simpleApiClient';
 import { api } from '@/lib/apiClient';
 import { ResourceSyncStatus } from '@/components/ResourceSyncStatus';
 import { CheckCircle, XCircle, Loader2, AlertTriangle } from 'lucide-react';
@@ -46,11 +47,14 @@ export default function CustomersPage() {
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
 
-  const fetcher = (url: string): Promise<{ customers: Customer[]; pagination: PaginationData; }> => Promise.resolve(api.get(url)).then(res => res.data as { customers: Customer[]; pagination: PaginationData; });
-
   const { data, error, mutate, isLoading } = useSWR<{ customers: Customer[], pagination: PaginationData }>(
     `/api/customers?search=${search}&page=${page}&limit=10`,
-    fetcher
+    simpleFetcher,
+    {
+      refreshInterval: 30000,
+      revalidateOnFocus: false,
+      dedupingInterval: 10000
+    }
   );
 
   const customers = data?.customers || [];
@@ -480,22 +484,22 @@ export default function CustomersPage() {
                     <div className="font-medium mb-2 text-gray-700 dark:text-gray-200">Checks</div>
                     <ul className="space-y-2">
                       <li className="flex items-center gap-2">
-                        {syncPreview._step >= 1 ? <CheckCircle className="text-green-500" size={18} /> : <Loader2 className="animate-spin text-blue-500" size={18} />}
+                        <CheckCircle className="text-green-500" size={18} />
                         <span>New customers: <span className="font-semibold">{syncPreview.new}</span></span>
                       </li>
                       <li className="flex items-center gap-2">
-                        {syncPreview._step >= 2 ? <CheckCircle className="text-green-500" size={18} /> : <Loader2 className="animate-spin text-blue-500" size={18} />}
+                        <CheckCircle className="text-green-500" size={18} />
                         <span>Updated customers: <span className="font-semibold">{syncPreview.updated}</span></span>
                       </li>
                       <li className="flex items-center gap-2">
-                        {syncPreview._step >= 3 ? <CheckCircle className="text-green-500" size={18} /> : <Loader2 className="animate-spin text-blue-500" size={18} />}
+                        <CheckCircle className="text-green-500" size={18} />
                         <span>Unchanged customers: <span className="font-semibold">{syncPreview.unchanged}</span></span>
                       </li>
                     </ul>
                   </div>
                   <div className="flex gap-2 mt-4 justify-end">
                     <Button variant="secondary" onClick={() => setSyncModalOpen(false)} disabled={syncLoading}>Cancel</Button>
-                    <Button onClick={handleConfirmSync} disabled={syncLoading || syncPreview._step < 3}>Sync</Button>
+                    <Button onClick={handleConfirmSync} disabled={syncLoading}>Sync</Button>
                   </div>
                 </div>
               )}

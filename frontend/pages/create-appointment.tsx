@@ -7,7 +7,7 @@ import { useToast } from '@/components/ToastContext';
 import { api } from '@/lib/apiClient';
 
 interface AppointmentFormData {
-  customerId?: number;
+  individualCustomerId?: number;
   partyId?: number;
   partyMemberId?: number;
   dateTime: string;
@@ -19,51 +19,35 @@ interface AppointmentFormData {
 }
 
 export default function CreateAppointment() {
-  const isClient = typeof window !== 'undefined';
-  const router = isClient ? useRouter() : null;
+  const router = useRouter();
   const { success, error } = useToast();
-  const [tailors, setTailors] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [formData, setFormData] = useState({
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [selectedParty, setSelectedParty] = useState(null);
+  const [formData, setFormData] = useState<AppointmentFormData>({
+    individualCustomerId: undefined,
+    partyId: undefined,
+    partyMemberId: undefined,
     dateTime: '',
     durationMinutes: 60,
     type: 'fitting',
     notes: '',
-    tailorId: '',
-    customerId: '',
-    partyId: '',
-    partyMemberId: '',
     autoScheduleNext: false
   });
-  const [selectedCustomer, setSelectedCustomer] = useState(null);
-  const [selectedParty, setSelectedParty] = useState(null);
 
   useEffect(() => {
-    fetchTailors();
+    setLoading(false);
   }, []);
-
-  const fetchTailors = async () => {
-    try {
-      const response = await api.get('/api/users?role=tailor,sales_management,admin');
-      setTailors((response.data as any[]).filter((user: any) => 
-        ['tailor', 'sales_management', 'admin'].includes(user.role)
-      ));
-    } catch (err) {
-      console.error('Error fetching tailors:', err);
-      error('Failed to load tailors');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleCustomerSelect = (customer) => {
     setSelectedCustomer(customer);
     setSelectedParty(null);
     setFormData(prev => ({
       ...prev,
-      customerId: customer.id,
-      partyId: '',
-      partyMemberId: ''
+      individualCustomerId: customer.id,
+      partyId: undefined,
+      partyMemberId: undefined,
+      autoScheduleNext: false
     }));
   };
 
@@ -74,14 +58,12 @@ export default function CreateAppointment() {
       ...prev,
       partyId: party.id,
       partyMemberId: member.id,
-      customerId: '',
+      individualCustomerId: undefined,
       autoScheduleNext: true
     }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
+  const handleSubmit = async (formData) => {
     if (!selectedCustomer && !selectedParty) {
       error('Please select a customer or party member');
       return;
@@ -90,10 +72,9 @@ export default function CreateAppointment() {
     try {
       const submitData = {
         ...formData,
-        customerId: formData.customerId ? parseInt(formData.customerId) : undefined,
+        individualCustomerId: formData.individualCustomerId ? parseInt(formData.individualCustomerId) : undefined,
         partyId: formData.partyId ? parseInt(formData.partyId) : undefined,
         partyMemberId: formData.partyMemberId ? parseInt(formData.partyMemberId) : undefined,
-        tailorId: formData.tailorId ? parseInt(formData.tailorId) : undefined,
         durationMinutes: typeof formData.durationMinutes === 'string' ? parseInt(formData.durationMinutes) : Number(formData.durationMinutes)
       };
       
@@ -159,7 +140,6 @@ export default function CreateAppointment() {
               <AppointmentForm
                 onSubmit={handleSubmit}
                 onCancel={handleCancel}
-                tailors={tailors}
               />
             </CardContent>
           </Card>

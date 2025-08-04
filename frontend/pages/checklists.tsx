@@ -80,16 +80,14 @@ export default function ChecklistWorkspace() {
           </div>
         </div>
         <div className="flex flex-col items-center gap-2">
-          <ResponsiveContainer width={120} height={120}>
-            <RePieChart>
-              <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={50} innerRadius={30} label>
-                {pieData.map((entry, idx) => (
-                  <Cell key={`cell-${idx}`} fill={COLORS[idx % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </RePieChart>
-          </ResponsiveContainer>
+          <RePieChart width={120} height={120}>
+            <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={50} innerRadius={30} label>
+              {pieData.map((entry, idx) => (
+                <Cell key={`cell-${idx}`} fill={COLORS[idx % COLORS.length]} />
+              ))}
+            </Pie>
+            <Tooltip />
+          </RePieChart>
           <span className="text-white text-sm font-semibold">{summary.completedChecklists + summary.completedTasks} / {summary.totalChecklists + summary.totalTasks} Completed</span>
         </div>
       </div>

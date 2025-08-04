@@ -206,7 +206,7 @@ export const getSessionStatus = async (req: Request, res: Response): Promise<voi
       sessionInfo: currentSession ? {
         domain: currentSession.lsDomainPrefix,
         expiresAt: currentSession.expiresAt,
-        lastActive: currentSession.lastActive,
+        lastActiveAt: currentSession.lastActiveAt,
       } : null,
     });
   } catch (error) {
@@ -317,7 +317,7 @@ export const refreshUserSession = async (req: Request, res: Response): Promise<v
       sessionInfo: currentSession ? {
         domain: currentSession.lsDomainPrefix,
         expiresAt: currentSession.expiresAt,
-        lastActive: currentSession.lastActive,
+        lastActiveAt: currentSession.lastActiveAt,
       } : null,
     });
   } catch (error) {

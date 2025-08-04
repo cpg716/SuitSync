@@ -1,64 +1,42 @@
 import { Request, Response } from 'express';
-import crypto from 'crypto';
 import axios from 'axios';
-import jwt from 'jsonwebtoken';
+import querystring from 'querystring';
 import { PrismaClient } from '@prisma/client';
 import { withAccelerate } from '@prisma/extension-accelerate';
-import { createLightspeedClient } from '../lightspeedClient'; // TODO: migrate this as well
-import logger from '../utils/logger'; // TODO: migrate this as well
-import querystring from 'querystring';
-// import { MultiUserSessionService } from '../services/multiUserSessionService'; // Disabled for pure Lightspeed auth
+import { createLightspeedClient } from '../lightspeedClient';
+import logger from '../utils/logger';
+import { PersistentUserSessionService } from '../services/persistentUserSessionService';
 
 const prisma = new PrismaClient().$extends(withAccelerate());
-const LS_CLIENT_ID = process.env.LS_CLIENT_ID || '';
-const LS_CLIENT_SECRET = process.env.LS_CLIENT_SECRET || '';
-const LS_REDIRECT_URI = process.env.LS_REDIRECT_URI || '';
+
+const LS_CLIENT_ID = process.env.LS_CLIENT_ID!;
+const LS_CLIENT_SECRET = process.env.LS_CLIENT_SECRET!;
+const LS_DOMAIN = process.env.LS_DOMAIN!;
+const LS_REDIRECT_URI = process.env.LS_REDIRECT_URI!;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3001';
-const JWT_SECRET = process.env.JWT_SECRET || '';
-const LS_DOMAIN = process.env.LS_DOMAIN || '';
 
-// Lightspeed OAuth Authorization URL (per official docs, do not change)
-const LIGHTSPEED_OAUTH_URL = 'https://secure.retail.lightspeed.app/connect';
-
-/**
- * Map Lightspeed account types to SuitSync roles
- * This provides a default mapping that can be overridden in the admin interface
- */
 function mapLightspeedRoleToSuitSync(lightspeedAccountType: string): string {
-  switch (lightspeedAccountType?.toLowerCase()) {
-    case 'admin':
-      return 'admin';
-    case 'manager':
-      return 'sales_management';
-    case 'employee':
-    case 'sales':
-      return 'sales';
-    case 'tailor':
-      return 'tailor';
-    default:
-      // Default to sales for unknown types
-      return 'sales';
-  }
+  // Map Lightspeed account types to SuitSync roles
+  const roleMap: { [key: string]: string } = {
+    'admin': 'admin',
+    'manager': 'manager',
+    'sales': 'sales',
+    'tailor': 'tailor',
+    'associate': 'sales',
+    'employee': 'sales'
+  };
+  
+  return roleMap[lightspeedAccountType.toLowerCase()] || 'sales';
 }
 
 export const redirectToLightspeed = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const state = crypto.randomBytes(16).toString('hex');
-    req.session.lsAuthState = state;
-    const authUrl = new URL(LIGHTSPEED_OAUTH_URL);
-    authUrl.searchParams.set('response_type', 'code');
-    authUrl.searchParams.set('client_id', LS_CLIENT_ID);
-    authUrl.searchParams.set('redirect_uri', LS_REDIRECT_URI);
-    authUrl.searchParams.set('state', state);
-    logger.info(`[OAuth] Using authorization URL: ${authUrl.toString()}`);
-    logger.info('Redirecting to Lightspeed for authorization...');
-    res.redirect(authUrl.toString());
-    return;
-  } catch (error) {
-    logger.error('Error initiating Lightspeed auth redirect:', error);
-    res.status(500).send('Failed to start Lightspeed authentication.');
-    return;
-  }
+  const state = Math.random().toString(36).substring(7);
+  req.session.lsAuthState = state;
+  
+  const authUrl = `https://secure.retail.lightspeed.app/connect?response_type=code&client_id=${LS_CLIENT_ID}&redirect_uri=${encodeURIComponent(LS_REDIRECT_URI)}&state=${state}`;
+  
+  logger.info(`Redirecting to Lightspeed OAuth: ${authUrl}`);
+  res.redirect(authUrl);
 };
 
 export const handleCallback = async (req: Request, res: Response): Promise<void> => {
@@ -84,7 +62,7 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
   }
   req.session.lsAuthState = undefined;
   try {
-    const tokenUrl = `https://${domain_prefix}.retail.lightspeed.app/api/1.0/token`;
+    const tokenUrl = `https://${domain_prefix}.retail.lightspeed.app/oauth/token`;
     logger.info('[OAuth] Exchanging code for tokens at', tokenUrl);
     logger.info('[OAuth] Token request params:', { client_id: LS_CLIENT_ID, redirect_uri: LS_REDIRECT_URI, code });
     const tokenResponse = await axios.post(
@@ -107,6 +85,8 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
     const { access_token, refresh_token, expires_in } = tokenResponse.data;
     logger.info(`Successfully obtained tokens. Now attempting to fetch user details for user_id: ${user_id}`);
     const expiresAt = new Date(Date.now() + expires_in * 1000);
+    
+    // Store tokens in ApiToken table for sync operations
     let tokenRow;
     try {
       tokenRow = await prisma.apiToken.upsert({
@@ -129,11 +109,6 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
       res.redirect(`${FRONTEND_URL}/login?error=token_upsert_failed&details=${encodeURIComponent(upsertError instanceof Error ? upsertError.message : String(upsertError))}`);
       return;
     }
-    req.session.lsAccessToken = access_token;
-    req.session.lsRefreshToken = refresh_token;
-    req.session.lsDomainPrefix = domain_prefix;
-    req.session.lsTokenExpiresAt = expiresAt;
-    req.session.userId = user_id;
 
     if (!user_id) {
       logger.error('Lightspeed callback is missing user_id query parameter.');
@@ -191,128 +166,65 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
     const role = mapLightspeedRoleToSuitSync(userPayload.account_type);
     logger.info(`Authenticated Lightspeed user: ${name}, Account Type: ${userPayload.account_type}, SuitSync Role: ${role}`);
 
-    // HYBRID SYSTEM: Create/update local user record with Lightspeed data
-    let localUser;
+    // Create persistent user session
     try {
-      // Try to find existing user by Lightspeed ID or email
-      localUser = await prisma.user.findFirst({
-        where: {
-          OR: [
-            { lightspeedEmployeeId: lightspeedId },
-            { email: email }
-          ]
-        }
-      });
+      const userAgent = req.headers['user-agent'] || 'unknown';
+      const deviceType = userAgent.includes('Mobile') ? 'mobile' as const : 
+                        userAgent.includes('Tablet') ? 'tablet' as const : 'desktop' as const;
+      
+      const deviceInfo = {
+        userAgent,
+        ipAddress: req.ip || req.connection.remoteAddress || 'unknown',
+        deviceType
+      };
 
-      if (localUser) {
-        // Update existing user with latest Lightspeed data
-        localUser = await prisma.user.update({
-          where: { id: localUser.id },
-          data: {
-            name,
-            email,
-            role,
-            photoUrl: userPayload.image_source || localUser.photoUrl,
-            lightspeedEmployeeId: lightspeedId,
-          }
-        });
-        logger.info(`Updated existing local user ${localUser.id} with Lightspeed data`);
-      } else {
-        // Create new local user from Lightspeed data
-        localUser = await prisma.user.create({
-          data: {
-            name,
-            email,
-            role,
-            photoUrl: userPayload.image_source || undefined,
-            lightspeedEmployeeId: lightspeedId,
-            commissionRate: 0.1, // Default commission rate
-          }
-        });
-        logger.info(`Created new local user ${localUser.id} from Lightspeed data`);
-      }
-    } catch (error) {
-      logger.error('Error creating/updating local user:', error);
-      // Continue with session-only authentication if database fails
-      localUser = null;
+      const userSessionData = {
+        lightspeedUserId: lightspeedId,
+        lightspeedEmployeeId: lightspeedId,
+        email: email,
+        name: name,
+        role: role,
+        photoUrl: userPayload.photo_url || undefined,
+        accessToken: access_token,
+        refreshToken: refresh_token,
+        expiresAt: expiresAt,
+        domainPrefix: domain_prefix
+      };
+
+      const persistentSession = await PersistentUserSessionService.createOrUpdateSession(userSessionData, deviceInfo);
+      logger.info(`Created persistent session for user: ${name} (${lightspeedId})`);
+
+      // Set session data for current browser session
+      req.session.lsAccessToken = access_token;
+      req.session.lsRefreshToken = refresh_token;
+      req.session.lsDomainPrefix = domain_prefix;
+      req.session.lsTokenExpiresAt = expiresAt;
+      req.session.userId = user_id;
+      req.session.lightspeedUser = {
+        id: lightspeedId,
+        lightspeedId: lightspeedId,
+        email: email,
+        name: name,
+        role: role,
+        lightspeedEmployeeId: lightspeedId,
+        photoUrl: userPayload.photo_url || undefined,
+        hasLocalRecord: false,
+        localUserId: null
+      };
+
+      // Redirect to success page
+      res.redirect(`${FRONTEND_URL}/dashboard?auth=success&user=${encodeURIComponent(name)}`);
+
+    } catch (sessionError) {
+      logger.error('Failed to create persistent session:', sessionError);
+      res.redirect(`${FRONTEND_URL}/login?error=session_creation_failed&details=${encodeURIComponent(sessionError instanceof Error ? sessionError.message : String(sessionError))}`);
+      return;
     }
 
-    // Create hybrid user object for session
-    const lightspeedUser = {
-      id: localUser?.id ?? lightspeedId,
-      lightspeedId: lightspeedId,
-      name,
-      email,
-      role,
-      photoUrl: localUser?.photoUrl ?? userPayload.image_source ?? undefined,
-      lightspeedEmployeeId: localUser?.lightspeedEmployeeId ?? lightspeedId,
-      isLightspeedUser: true,
-      hasLocalRecord: !!localUser,
-      localUserId: localUser?.id ?? undefined
-    };
-
-    logger.info(`Hybrid authentication - ${localUser ? 'with' : 'without'} local user storage`);
-
-    // Store hybrid user and tokens in session
-    req.session.lightspeedUser = {
-      id: localUser?.id ?? lightspeedId,
-      name: localUser?.name ?? name,
-      email: localUser?.email ?? email,
-      role: localUser?.role ?? role,
-      photoUrl: localUser?.photoUrl ?? userPayload.image_source ?? undefined,
-      lightspeedEmployeeId: localUser?.lightspeedEmployeeId ?? lightspeedId,
-      isLightspeedUser: true,
-      hasLocalRecord: !!localUser,
-      localUserId: localUser?.id ?? undefined
-    };
-    req.session.userId = localUser?.id ?? lightspeedId;
-    req.session.activeUserId = localUser?.id ?? lightspeedId;
-    req.session.lsAccessToken = access_token;
-    req.session.lsRefreshToken = refresh_token;
-    req.session.lsDomainPrefix = domain_prefix;
-    req.session.lsTokenExpiresAt = expiresAt;
-    if (!req.session.userSessions) req.session.userSessions = {};
-    req.session.userSessions[localUser?.id ?? lightspeedId] = {
-      lsAccessToken: access_token,
-      lsRefreshToken: refresh_token,
-      lsDomainPrefix: domain_prefix,
-      expiresAt: expiresAt,
-      lastActive: new Date(),
-      loginTime: new Date()
-    };
-    logger.info('[Auth] Session fields set for user', { userId: localUser?.id ?? lightspeedId });
-    await new Promise<void>((resolve, reject) => req.session.save(err => err ? reject(err) : resolve()));
-    logger.info('[Auth] Session saved for user', { userId: localUser?.id ?? lightspeedId });
-    logger.info('[OAuth] Session state after login:', req.session);
-
-    // Check if user needs to set up PIN (first time authentication or no PIN set)
-    let needsPinSetup = false;
-    if (localUser) {
-      const pinInfo = await prisma.user.findUnique({
-        where: { id: localUser.id },
-        select: { pinHash: true, pinSetAt: true }
-      });
-
-      needsPinSetup = !pinInfo?.pinHash;
-      logger.info(`User ${localUser.id} PIN setup required: ${needsPinSetup}`);
-    }
-
-    // Redirect to appropriate page
-    const redirectUrl = needsPinSetup
-      ? `${FRONTEND_URL}/setup-pin`
-      : `${FRONTEND_URL}/dashboard`;
-
-    res.redirect(redirectUrl);
-    return;
-  } catch (err) {
-    const errMsg = (typeof err === 'object' && err && 'message' in err) ? (err as any).message : String(err);
-    const errResp = (typeof err === 'object' && err && 'response' in err) ? (err as any).response?.data : undefined;
-    logger.error('Error in handleCallback:', err);
-    logger.info("Session after callback error:", req.session);
-    res.redirect(`${FRONTEND_URL}/login?error=callback_failed&details=${encodeURIComponent(JSON.stringify(errResp || errMsg))}`);
-    return;
+  } catch (error: any) {
+    logger.error('OAuth callback error:', error);
+    res.redirect(`${FRONTEND_URL}/login?error=callback_failed&details=${encodeURIComponent(error.message)}`);
   }
-  logger.info("Session after callback:", req.session);
 };
 
 export const refreshToken = async (req: Request, res: Response) => {
@@ -323,7 +235,7 @@ export const refreshToken = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Missing required session data for token refresh.' });
     }
     logger.info('Refreshing Lightspeed token...');
-    const tokenUrl = `https://${lsDomainPrefix}.retail.lightspeed.app/api/1.0/token`;
+    const tokenUrl = `https://${lsDomainPrefix}.retail.lightspeed.app/oauth/token`;
     const tokenResponse = await axios.post(
       tokenUrl,
       querystring.stringify({

@@ -1,407 +1,1288 @@
 import { Request, Response } from 'express';
-import { PrismaClient, AlterationJobStatus, OrderStatus, PartPriority, GarmentPartType, WorkflowStepType } from '@prisma/client';
-import { createServiceOrder } from '../lightspeedClient'; // TODO: migrate this as well
-import logger from '../utils/logger'; // TODO: migrate this as well
-import { v4 as uuidv4 } from 'uuid';
-import crypto from 'crypto';
-import { autoAssignTailorsForJob } from '../services/autoAssignService';
-import { verifyAndGetCustomField, createOrUpdateCustomField, initialize as initializeWorkflow } from '../services/workflowService';
-import { processWebhook } from '../services/webhookService';
-import { withAccelerate } from '@prisma/extension-accelerate';
+import { PrismaClient } from '@prisma/client';
+import logger from '../utils/logger';
+import { logChange } from '../services/AuditLogService';
 
-const prisma = new PrismaClient().$extends(withAccelerate());
+const prisma = new PrismaClient();
 
-type AlterationJobPartInput = {
-  partName: string;
-  partType: string;
-  priority?: string;
-  estimatedTime?: number;
-  notes?: string;
-  tasks?: Array<{
-    taskName: string;
-    taskType: string;
-    measurements?: any;
-    notes?: string;
-  }>;
-};
+/**
+ * Create alterations job after 2nd appointment (alterations_fitting)
+ */
+export async function createAlterationsJob(req: Request, res: Response) {
+  try {
+    const { partyMemberId, alterations } = req.body;
+    
+    if (!partyMemberId || !alterations) {
+      return res.status(400).json({ error: 'partyMemberId and alterations are required' });
+    }
 
-function generateJobNumber(): string {
-  const timestamp = Date.now().toString().slice(-8);
-  const random = Math.random().toString(36).substring(2, 5).toUpperCase();
-  return `${timestamp}-${random}`;
+    // Get party member
+    const partyMember = await prisma.partyMember.findUnique({
+      where: { id: partyMemberId },
+      include: { party: true }
+    });
+
+    if (!partyMember) {
+      return res.status(404).json({ error: 'Party member not found' });
+    }
+
+    // Create alteration job
+    const alterationJob = await prisma.alterationJob.create({
+      data: {
+        jobNumber: `AJ-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        partyId: partyMember.partyId,
+        partyMemberId: partyMember.id,
+        status: 'NOT_STARTED',
+        notes: `Alterations for ${partyMember.role} - ${partyMember.notes}`,
+        qrCode: `QR-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      }
+    });
+
+    // Create job parts based on alterations
+    const jobParts = [];
+    for (const [partName, partAlterations] of Object.entries(alterations)) {
+      const jobPart = await prisma.alterationJobPart.create({
+        data: {
+          jobId: alterationJob.id,
+          partName: partName,
+          partType: getPartType(partName),
+          status: 'NOT_STARTED',
+          qrCode: `QR-PART-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          notes: JSON.stringify(partAlterations)
+        }
+      });
+
+      // Create tasks for each alteration
+      for (const alteration of partAlterations as string[]) {
+        await prisma.alterationTask.create({
+          data: {
+            partId: jobPart.id,
+            taskName: alteration,
+            taskType: 'ALTERATION',
+            status: 'NOT_STARTED'
+          }
+        });
+      }
+
+      jobParts.push(jobPart);
+    }
+
+    // Update party member status to being_altered
+    await prisma.partyMember.update({
+      where: { id: partyMemberId },
+      data: { 
+        status: 'being_altered',
+        alteredAt: new Date()
+      }
+    });
+
+    // Log audit event
+    await logChange(
+      (req as any).user?.id,
+      'create',
+      'AlterationJob',
+      alterationJob.id,
+      {
+        partyMemberId,
+        alterations,
+        jobParts: jobParts.length
+      },
+      req
+    );
+
+    res.json({
+      alterationJob,
+      jobParts,
+      message: 'Alterations job created successfully'
+    });
+
+  } catch (error) {
+    logger.error('Error creating alterations job:', error);
+    res.status(500).json({ error: 'Failed to create alterations job' });
+  }
 }
 
-function generateQRCode(prefix = 'ALT'): string {
-  const timestamp = Date.now().toString(36);
-  const random = crypto.randomBytes(8).toString('hex').toUpperCase();
-  return `${prefix}-${timestamp}-${random}`;
-}
-
-const DEFAULT_WORKFLOW_STEPS = [
-  { stepName: 'Measured', stepType: WorkflowStepType.MEASURED, sortOrder: 1 },
-  { stepName: 'Suit Ordered', stepType: WorkflowStepType.SUIT_ORDERED, sortOrder: 2 },
-  { stepName: 'Suit Arrived', stepType: WorkflowStepType.SUIT_ARRIVED, sortOrder: 3 },
-  { stepName: 'Alterations Marked', stepType: WorkflowStepType.ALTERATIONS_MARKED, sortOrder: 4 },
-  { stepName: 'Complete', stepType: WorkflowStepType.COMPLETE, sortOrder: 5 },
-  { stepName: 'QC Checked', stepType: WorkflowStepType.QC_CHECKED, sortOrder: 6 },
-  { stepName: 'Ready for Pickup', stepType: WorkflowStepType.READY_FOR_PICKUP, sortOrder: 7 },
-  { stepName: 'Picked Up', stepType: WorkflowStepType.PICKED_UP, sortOrder: 8 },
-];
-
-export const listAlterations = async (req: any, res: any) => {
+/**
+ * Create alteration job with detailed parts and tasks
+ */
+export async function createAlteration(req: Request, res: Response) {
   try {
-    const jobs = await prisma.alterationJob.findMany({
-      orderBy: { createdAt: 'desc' },
-      include: {
-        tailor: true,
-        jobParts: true,
-        customer: true,
-        partyMember: {
-          include: {
-            party: {
-              include: {
-                customer: true,
-              }
-            },
-          }
-        },
-      }
-    });
-    res.json(jobs);
-  } catch (err: any) {
-    console.error('Error listing alterations:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-};
-
-export const createAlteration = async (req: Request, res: Response) => {
-  const {
-    saleLineItemId,
-    notes,
-    status,
-    tailorId,
-    partyMemberId,
-  } = req.body;
-
-  if (!saleLineItemId) {
-    return res.status(400).json({ error: 'A saleLineItemId is required to create an alteration service order.' });
-  }
-
-  try {
-    const member = await prisma.partyMember.findUnique({
-      where: { id: Number(partyMemberId) },
-      include: { party: { include: { customer: true } } },
-    });
-    const lightspeedCustomerId = member?.party?.customer?.lightspeedId;
-    if (!lightspeedCustomerId) {
-      return res.status(400).json({ error: 'Could not determine the Lightspeed Customer ID for this alteration.' });
+    const { customerId, partyId, partyMemberId, notes, dueDate, rushOrder, jobParts } = req.body;
+    
+    if (!jobParts || !Array.isArray(jobParts) || jobParts.length === 0) {
+      return res.status(400).json({ error: 'jobParts array is required and must not be empty' });
     }
-    const serviceOrderPayload = {
-      customer_id: lightspeedCustomerId,
-      line_item_id: saleLineItemId,
-      status: 'open',
-      notes: notes || 'Standard alteration job.',
-    };
-    const { data: newServiceOrderResponse } = await createServiceOrder(req.session, serviceOrderPayload);
-    if (!newServiceOrderResponse) throw new Error('No response from Lightspeed');
-    const lightspeedServiceOrderId = newServiceOrderResponse.service_order.id;
-    logger.info(`Created Lightspeed Service Order ${lightspeedServiceOrderId} for Line Item ${saleLineItemId}`);
-    const job = await prisma.alterationJob.create({
-      data: {
-        jobNumber: uuidv4(),
-        qrCode: uuidv4(),
-        lightspeedServiceOrderId: String(lightspeedServiceOrderId),
-        partyMemberId: Number(partyMemberId),
-        notes,
-        status: AlterationJobStatus.NOT_STARTED,
-        tailorId: Number(tailorId),
-        partyId: member?.partyId,
-        customerId: member?.party?.customer?.id,
-      },
-      include: {
-        partyMember: { include: { party: true } },
-        tailor: true,
-      }
-    });
-    res.status(201).json(job);
-  } catch (err: any) {
-    logger.error('Error creating alteration service order:', err.response?.data || err.message);
-    res.status(500).json({ error: 'Failed to create alteration job.' });
-  }
-};
 
-export const getAlterationsByMember = async (req: Request, res: Response) => {
-  try {
-    const memberId = Number(req.params.memberId);
-    if (!memberId) return res.status(400).json({ error: 'Invalid member id' });
-    const jobs = await prisma.alterationJob.findMany({
-      where: { partyMemberId: memberId },
-      include: { party: true, customer: true, tailor: true, jobParts: true }
-    });
-    res.json(jobs);
-  } catch (err: any) {
-    console.error('Error fetching alterations by member:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-};
-
-export const getAlteration = async (req: Request, res: Response) => {
-  try {
-    const id = Number(req.params.id);
-    if (!id) return res.status(400).json({ error: 'Invalid alteration id' });
-    const job = await prisma.alterationJob.findUnique({
-      where: { id },
-      include: {
-        customer: true,
-        party: { include: { customer: true } },
-        partyMember: true,
-        tailor: true,
-        jobParts: {
-          include: {
-            tasks: { include: { assignedUser: true } },
-            assignedUser: true
-          }
-        },
-        workflowSteps: { orderBy: { sortOrder: 'asc' } }
-      }
-    });
-    if (!job) {
-      return res.status(404).json({ error: 'Alteration not found' });
-    }
-    res.json(job);
-  } catch (err: any) {
-    console.error('Error fetching alteration:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-};
-
-export const updateAlteration = async (req: Request, res: Response) => {
-  try {
-    const id = Number(req.params.id);
-    if (!id) return res.status(400).json({ error: 'Invalid alteration id' });
-    const { notes, status, tailorId, dueDate, rushOrder } = req.body;
-    const job = await prisma.alterationJob.update({
-      where: { id },
-      data: {
-        notes,
-        status: status ? (typeof status === 'string' ? AlterationJobStatus[status as keyof typeof AlterationJobStatus] : status) : undefined,
-        tailorId: tailorId ? Number(tailorId) : undefined,
-        dueDate: dueDate ? new Date(dueDate) : undefined,
-        rushOrder
-      },
-      include: {
-        customer: true,
-        party: { include: { customer: true } },
-        partyMember: true,
-        tailor: true,
-        jobParts: true,
-      }
-    });
-    res.json(job);
-  } catch (err: any) {
-    console.error('Error updating alteration:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-};
-
-export const deleteAlteration = async (req: Request, res: Response) => {
-  try {
-    const id = Number(req.params.id);
-    if (!id) return res.status(400).json({ error: 'Invalid alteration id' });
-    await prisma.alterationJob.delete({ where: { id } });
-    res.json({ message: 'Alteration deleted successfully' });
-  } catch (err: any) {
-    console.error('Error deleting alteration:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-};
-
-export const createAlterationJob = async (req: Request, res: Response) => {
-  try {
-    const {
-      customerId,
-      partyId,
-      partyMemberId,
-      notes,
-      dueDate,
-      rushOrder = false,
-      orderStatus = OrderStatus.ALTERATION_ONLY,
-      parts = [],
-    } = req.body;
-
+    // Validate that either customerId or partyId is provided
     if (!customerId && !partyId) {
-      return res.status(400).json({ error: 'Either customerId or partyId is required' });
+      return res.status(400).json({ error: 'Either customerId or partyId must be provided' });
     }
 
-    const jobNumber = generateJobNumber();
-    const jobQRCode = generateQRCode('JOB');
+    // Generate unique job number and QR code
+    const jobNumber = `AJ-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const qrCode = `QR-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
+    // Create alteration job
     const alterationJob = await prisma.alterationJob.create({
       data: {
         jobNumber,
-        qrCode: jobQRCode,
-        customerId: customerId ? Number(customerId) : undefined,
-        partyId: partyId ? Number(partyId) : undefined,
-        partyMemberId: partyMemberId ? Number(partyMemberId) : undefined,
-        notes,
-        dueDate: dueDate ? new Date(dueDate) : undefined,
-        rushOrder,
-        orderStatus: typeof orderStatus === 'string' ? OrderStatus[orderStatus as keyof typeof OrderStatus] : orderStatus,
-        status: AlterationJobStatus.NOT_STARTED,
-        receivedDate: new Date(),
-        workflowSteps: {
-          create: DEFAULT_WORKFLOW_STEPS.map(step => ({
-            ...step,
-            completed: step.stepType === 'MEASURED' && (typeof orderStatus === 'string' ? orderStatus === 'ALTERATION_ONLY' : orderStatus === OrderStatus.ALTERATION_ONLY),
-          }))
-        },
-        jobParts: {
-          create: parts.map((part: AlterationJobPartInput) => ({
-            partName: part.partName,
-            partType: typeof part.partType === 'string' ? GarmentPartType[part.partType as keyof typeof GarmentPartType] : part.partType,
-            qrCode: generateQRCode('PART'),
-            priority: part.priority ? (PartPriority[part.priority as keyof typeof PartPriority] ?? PartPriority.NORMAL) : PartPriority.NORMAL,
-            estimatedTime: part.estimatedTime,
-            notes: part.notes,
-            tasks: {
-              create: (part.tasks || []).map((task: any) => ({
-                taskName: task.taskName,
-                taskType: task.taskType,
-                measurements: task.measurements,
-                notes: task.notes,
-              }))
-            },
-            status: AlterationJobStatus.NOT_STARTED,
-          }))
+        qrCode,
+        customerId: customerId ? Number(customerId) : null,
+        partyId: partyId ? Number(partyId) : null,
+        partyMemberId: partyMemberId ? Number(partyMemberId) : null,
+        status: 'NOT_STARTED',
+        notes: notes || '',
+        dueDate: dueDate ? new Date(dueDate) : null,
+        rushOrder: rushOrder || false
+      }
+    });
+
+    // Create job parts and tasks
+    const createdJobParts = [];
+    for (const part of jobParts) {
+      const partQrCode = `QR-PART-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      const jobPart = await prisma.alterationJobPart.create({
+        data: {
+          jobId: alterationJob.id,
+          partName: part.partName,
+          partType: part.partType,
+          status: 'NOT_STARTED',
+          qrCode: partQrCode,
+          notes: part.notes || '',
+          priority: part.priority || 'NORMAL',
+          estimatedTime: part.estimatedTime || null
         }
-      },
-      include: {
-        customer: true,
-        party: {
-          include: {
-            customer: true
+      });
+
+      // Create tasks for this part
+      if (part.tasks && Array.isArray(part.tasks)) {
+        for (const task of part.tasks) {
+          if (task.taskName && task.taskName.trim()) {
+            await prisma.alterationTask.create({
+              data: {
+                partId: jobPart.id,
+                taskName: task.taskName.trim(),
+                taskType: (task.taskType || 'alteration').toUpperCase() as any,
+                status: 'NOT_STARTED',
+                measurements: task.measurements || null,
+                notes: task.notes || null
+              }
+            });
           }
-        },
+        }
+      }
+
+      createdJobParts.push(jobPart);
+    }
+
+    // Log audit event
+    await logChange(
+      (req as any).user?.id,
+      'create',
+      'AlterationJob',
+      alterationJob.id,
+      {
+        customerId,
+        partyId,
+        partyMemberId,
+        jobParts: createdJobParts.length,
+        totalTasks: jobParts.reduce((sum, part) => sum + (part.tasks?.length || 0), 0)
+      },
+      req
+    );
+
+    res.json({
+      success: true,
+      alterationJob,
+      jobParts: createdJobParts,
+      message: 'Alteration job created successfully'
+    });
+
+  } catch (error) {
+    logger.error('Error creating alteration job:', error);
+    res.status(500).json({ error: 'Failed to create alteration job' });
+  }
+}
+
+/**
+ * Get alterations job with parts and tasks
+ */
+export async function getAlterationsJob(req: Request, res: Response) {
+  try {
+    const { jobId } = req.params;
+    
+    const alterationJob = await prisma.alterationJob.findUnique({
+      where: { id: Number(jobId) },
+      include: {
+        party: true,
         partyMember: true,
         jobParts: {
           include: {
             tasks: true,
             assignedUser: true
           }
-        },
-        workflowSteps: {
-          orderBy: { sortOrder: 'asc' }
         }
       }
     });
 
-    res.status(201).json(alterationJob);
-  } catch (error: any) {
-    console.error('Error creating alteration job:', error);
-    res.status(500).json({ error: 'Failed to create alteration job' });
+    if (!alterationJob) {
+      return res.status(404).json({ error: 'Alteration job not found' });
+    }
+
+    res.json(alterationJob);
+
+  } catch (error) {
+    logger.error('Error getting alterations job:', error);
+    res.status(500).json({ error: 'Failed to get alterations job' });
   }
-};
+}
 
-export const getAlterationJobs = async (req: Request, res: Response) => {
+/**
+ * Scan QR code to mark part as started/finished or check status
+ */
+export async function scanQRCode(req: Request, res: Response) {
   try {
-    const {
-      status,
-      customerId,
-      partyId,
-      tailorId,
-      partStatus,
-      search,
-      page = 1,
-      limit = 50,
-      orderBy = 'createdAt',
-      orderDir = 'desc'
-    } = req.query as any;
+    const { qrCode, action } = req.body;
+    
+    if (!qrCode || !action) {
+      return res.status(400).json({ error: 'qrCode and action are required' });
+    }
 
-    const where: any = {};
-    if (status) where.status = status;
-    if (customerId) where.customerId = Number(customerId);
-    if (partyId) where.partyId = Number(partyId);
-    if (tailorId) where.tailorId = Number(tailorId);
-    if (search) {
-      where.OR = [
-        { jobNumber: { contains: search, mode: 'insensitive' } },
-        { notes: { contains: search, mode: 'insensitive' } },
-        { customer: { name: { contains: search, mode: 'insensitive' } } },
-        { party: { name: { contains: search, mode: 'insensitive' } } }
-      ];
-    }
-    if (partStatus) {
-      where.jobParts = {
-        some: {
-          status: partStatus
-        }
-      };
-    }
-    const offset = (Number(page) - 1) * Number(limit);
-    const [jobs, total] = await Promise.all([
-      prisma.alterationJob.findMany({
-        where,
-        include: {
-          customer: true,
-          party: {
-            include: {
-              customer: true
-            }
-          },
-          partyMember: true,
-          tailor: true,
-          jobParts: {
-            include: {
-              assignedUser: true,
-              tasks: {
-                include: {
-                  assignedUser: true
-                }
+    // Find the job part by QR code
+    const jobPart = await prisma.alterationJobPart.findUnique({
+      where: { qrCode },
+      include: {
+        job: {
+          include: {
+            party: {
+              include: {
+                customer: true
+              }
+            },
+            partyMember: true,
+            customer: true,
+            jobParts: {
+              include: {
+                tasks: true
+              },
+              orderBy: {
+                partName: 'asc'
               }
             }
-          },
-          workflowSteps: {
-            orderBy: { sortOrder: 'asc' }
           }
         },
-        orderBy: { [orderBy]: orderDir },
-        skip: offset,
-        take: Number(limit)
-      }),
-      prisma.alterationJob.count({ where })
-    ]);
-    res.json({
-      jobs,
-      pagination: {
-        total,
-        pages: Math.ceil(total / Number(limit)),
-        current: Number(page),
-        limit: Number(limit)
+        tasks: true
       }
     });
-  } catch (error: any) {
-    console.error('Error fetching alteration jobs:', error);
-    res.status(500).json({ error: 'Failed to fetch alteration jobs' });
-  }
-};
 
-export const getAlterationJob = async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const job = await prisma.alterationJob.findUnique({
-      where: { id: Number(id) },
+    if (!jobPart) {
+      return res.status(404).json({ error: 'QR code not found' });
+    }
+
+    // Handle status check (just return job info)
+    if (action === 'status_check') {
+      return res.json({
+        success: true,
+        job: jobPart.job,
+        message: 'Job found successfully'
+      });
+    }
+
+    // Log the scan
+    await prisma.qRScanLog.create({
+      data: {
+        qrCode,
+        partId: jobPart.id,
+        scannedBy: (req as any).user?.id || 1,
+        scanType: action === 'start' ? 'START_WORK' : 'FINISH_WORK',
+        location: req.ip,
+        result: 'SUCCESS'
+      }
+    });
+
+    let newStatus = jobPart.status;
+    let completedTasks = 0;
+
+    if (action === 'start') {
+      newStatus = 'IN_PROGRESS';
+      // Mark all tasks as started
+      await prisma.alterationTask.updateMany({
+        where: { partId: jobPart.id },
+        data: { 
+          status: 'IN_PROGRESS',
+          startTime: new Date()
+        }
+      });
+    } else if (action === 'finish') {
+      // Mark all tasks as complete
+      await prisma.alterationTask.updateMany({
+        where: { partId: jobPart.id },
+        data: { 
+          status: 'COMPLETE',
+          finishTime: new Date()
+        }
+      });
+      
+      completedTasks = jobPart.tasks.length;
+      newStatus = 'COMPLETE';
+    }
+
+    // Update job part status
+    await prisma.alterationJobPart.update({
+      where: { id: jobPart.id },
+      data: { status: newStatus }
+    });
+
+    // Check if all parts are complete
+    const allParts = await prisma.alterationJobPart.findMany({
+      where: { jobId: jobPart.job.id }
+    });
+
+    const allComplete = allParts.every(part => part.status === 'COMPLETE');
+
+    if (allComplete) {
+      // Update job status to complete
+      await prisma.alterationJob.update({
+        where: { id: jobPart.job.id },
+        data: { status: 'COMPLETE' }
+      });
+
+      // Update party member status to ready_for_pickup
+      if (jobPart.job.partyMemberId) {
+        await prisma.partyMember.update({
+          where: { id: jobPart.job.partyMemberId },
+          data: { 
+            status: 'ready_for_pickup',
+            readyForPickupAt: new Date()
+          }
+        });
+      }
+    }
+
+    // Get updated job data
+    const updatedJob = await prisma.alterationJob.findUnique({
+      where: { id: jobPart.job.id },
       include: {
-        customer: true,
         party: {
           include: {
             customer: true
           }
         },
         partyMember: true,
+        customer: true,
+        jobParts: {
+          include: {
+            tasks: true
+          },
+          orderBy: {
+            partName: 'asc'
+          }
+        }
+      }
+    });
+
+    res.json({
+      success: true,
+      job: updatedJob,
+      jobPart: {
+        id: jobPart.id,
+        partName: jobPart.partName,
+        status: newStatus,
+        completedTasks
+      },
+      allComplete,
+      message: `Part ${action === 'start' ? 'started' : 'completed'} successfully`
+    });
+
+  } catch (error) {
+    logger.error('Error scanning QR code:', error);
+    res.status(500).json({ error: 'Failed to scan QR code' });
+  }
+}
+
+/**
+ * Schedule pickup date
+ */
+export async function schedulePickup(req: Request, res: Response) {
+  try {
+    const { partyMemberId, pickupDate } = req.body;
+    
+    if (!partyMemberId || !pickupDate) {
+      return res.status(400).json({ error: 'partyMemberId and pickupDate are required' });
+    }
+
+    const pickupDateTime = new Date(pickupDate);
+    const today = new Date();
+    const minPickupDate = new Date(today.getTime() + (7 * 24 * 60 * 60 * 1000)); // 7 days from now
+
+    if (pickupDateTime < minPickupDate) {
+      return res.status(400).json({ 
+        error: 'Pickup date must be at least 7 days from today',
+        minPickupDate: minPickupDate.toISOString().split('T')[0]
+      });
+    }
+
+    // Update party member with pickup date
+    const updatedMember = await prisma.partyMember.update({
+      where: { id: partyMemberId },
+      data: { pickupDate: pickupDateTime },
+      include: {
+        party: true
+      }
+    });
+
+    // Log audit event
+    await logChange(
+      (req as any).user?.id,
+      'update',
+      'PartyMember',
+      partyMemberId,
+      {
+        pickupDate: pickupDateTime,
+        partyName: updatedMember.party?.name
+      },
+      req
+    );
+
+    res.json({
+      success: true,
+      partyMember: updatedMember,
+      message: 'Pickup date scheduled successfully'
+    });
+
+  } catch (error) {
+    logger.error('Error scheduling pickup:', error);
+    res.status(500).json({ error: 'Failed to schedule pickup' });
+  }
+}
+
+/**
+ * Generate alterations ticket for printing
+ */
+export async function generateAlterationsTicket(req: Request, res: Response) {
+  try {
+    const { jobId } = req.params;
+    
+    const alterationJob = await prisma.alterationJob.findUnique({
+      where: { id: Number(jobId) },
+      include: {
+        party: {
+          include: {
+            customer: true
+          }
+        },
+        partyMember: true,
+        customer: true,
+        jobParts: {
+          include: {
+            tasks: true
+          }
+        }
+      }
+    });
+
+    if (!alterationJob) {
+      return res.status(404).json({ error: 'Alteration job not found' });
+    }
+
+    // Get customer info
+    const customer = alterationJob.customer || alterationJob.party?.customer;
+    const memberName = alterationJob.partyMember?.notes || customer?.name || 'Unknown';
+    const memberRole = alterationJob.partyMember?.role || 'Customer';
+    const partyName = alterationJob.party?.name;
+    const eventDate = alterationJob.party?.eventDate;
+    const customerPhone = customer?.phone || 'No phone';
+
+    // Get measurements
+    let measurements = null;
+    if (customer) {
+      const customerMeasurements = await prisma.measurements.findFirst({
+        where: { customerId: customer.id }
+      });
+      if (customerMeasurements) {
+        measurements = {
+          chest: customerMeasurements.chest,
+          waistJacket: customerMeasurements.waistJacket,
+          hips: customerMeasurements.hips,
+          shoulderWidth: customerMeasurements.shoulderWidth,
+          sleeveLength: customerMeasurements.sleeveLength,
+          neck: customerMeasurements.neck,
+          inseam: customerMeasurements.inseam,
+          outseam: customerMeasurements.outseam
+        };
+      }
+    }
+
+    // Generate ticket data
+    const ticketData = {
+      jobNumber: alterationJob.jobNumber,
+      qrCode: alterationJob.qrCode,
+      partyName,
+      memberName,
+      memberRole,
+      eventDate,
+      customerPhone,
+      measurements,
+      createdAt: alterationJob.createdAt,
+      parts: alterationJob.jobParts?.map(part => ({
+        partName: part.partName,
+        qrCode: part.qrCode,
+        alterations: part.tasks?.map(task => task.taskName) || []
+      })) || []
+    };
+
+    res.json({
+      success: true,
+      ticketData,
+      message: 'Alterations ticket generated successfully'
+    });
+
+  } catch (error) {
+    logger.error('Error generating alterations ticket:', error);
+    res.status(500).json({ error: 'Failed to generate alterations ticket' });
+  }
+}
+
+/**
+ * Get all alterations with status, due dates, and party information
+ */
+export async function getAllAlterations(req: Request, res: Response) {
+  try {
+    const { search, status, tailorId } = req.query;
+    
+    // Build where clause
+    const where: any = {};
+    
+    if (status) {
+      where.status = status;
+    }
+    
+    if (tailorId) {
+      where.tailorId = Number(tailorId);
+    }
+    
+    if (search) {
+      where.OR = [
+        { jobNumber: { contains: search as string, mode: 'insensitive' } },
+        { notes: { contains: search as string, mode: 'insensitive' } },
+        { partyMember: { 
+          notes: { contains: search as string, mode: 'insensitive' }
+        }},
+        { party: { 
+          name: { contains: search as string, mode: 'insensitive' }
+        }},
+        { customer: { 
+          name: { contains: search as string, mode: 'insensitive' }
+        }}
+      ];
+    }
+
+    const alterations = await prisma.alterationJob.findMany({
+      where,
+      include: {
+        party: {
+          include: {
+            customer: true
+          }
+        },
+        partyMember: true,
+        customer: true,
         tailor: true,
         jobParts: {
           include: {
-            assignedUser: true,
+            tasks: true,
+            assignedUser: true
+          },
+          orderBy: {
+            partName: 'asc'
+          }
+        }
+      },
+      orderBy: [
+        // First by due date (earliest first)
+        { dueDate: 'asc' },
+        // Then by party event date (earliest wedding first)
+        { party: { eventDate: 'asc' } },
+        // Then by creation date (oldest first)
+        { createdAt: 'asc' }
+      ]
+    });
+
+    // Calculate due dates and enrich the data
+    const enrichedAlterations = alterations.map(alteration => {
+      let dueDate: Date | null = null;
+      let dueDateType: 'custom' | 'wedding' | null = null;
+      
+      // If there's a custom due date, use it
+      if (alteration.dueDate) {
+        dueDate = alteration.dueDate;
+        dueDateType = 'custom';
+      }
+      // Otherwise, calculate 7 days before wedding
+      else if (alteration.party?.eventDate) {
+        dueDate = new Date(alteration.party.eventDate);
+        dueDate.setDate(dueDate.getDate() - 7);
+        dueDateType = 'wedding';
+      }
+      
+      // Calculate completion percentage
+      const totalParts = alteration.jobParts.length;
+      const completedParts = alteration.jobParts.filter(part => part.status === 'COMPLETE').length;
+      const completionPercentage = totalParts > 0 ? Math.round((completedParts / totalParts) * 100) : 0;
+      
+      // Check if overdue
+      const isOverdue = dueDate ? new Date() > dueDate : false;
+      
+      return {
+        ...alteration,
+        calculatedDueDate: dueDate,
+        dueDateType,
+        completionPercentage,
+        isOverdue,
+        totalParts,
+        completedParts
+      };
+    });
+
+    res.json({
+      alterations: enrichedAlterations,
+      summary: {
+        total: enrichedAlterations.length,
+        overdue: enrichedAlterations.filter(a => a.isOverdue).length,
+        inProgress: enrichedAlterations.filter(a => a.status === 'IN_PROGRESS').length,
+        notStarted: enrichedAlterations.filter(a => a.status === 'NOT_STARTED').length,
+        complete: enrichedAlterations.filter(a => a.status === 'COMPLETE').length
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error getting alterations:', error);
+    res.status(500).json({ error: 'Failed to get alterations' });
+  }
+}
+
+/**
+ * Update alteration due date
+ */
+export async function updateAlterationDueDate(req: Request, res: Response) {
+  try {
+    const { jobId } = req.params;
+    const { dueDate } = req.body;
+    
+    if (!dueDate) {
+      return res.status(400).json({ error: 'dueDate is required' });
+    }
+
+    const alterationJob = await prisma.alterationJob.update({
+      where: { id: Number(jobId) },
+      data: { 
+        dueDate: new Date(dueDate)
+      },
+      include: {
+        party: true,
+        partyMember: true
+      }
+    });
+
+    // Log audit event
+    await logChange(
+      (req as any).user?.id,
+      'update',
+      'AlterationJob',
+      alterationJob.id,
+      {
+        dueDate: new Date(dueDate),
+        partyName: alterationJob.party?.name
+      },
+      req
+    );
+
+    res.json({
+      success: true,
+      alterationJob,
+      message: 'Due date updated successfully'
+    });
+
+  } catch (error) {
+    logger.error('Error updating alteration due date:', error);
+    res.status(500).json({ error: 'Failed to update due date' });
+  }
+}
+
+// Helper function to map part names to GarmentPartType
+function getPartType(partName: string): 'JACKET' | 'PANTS' | 'VEST' | 'SHIRT' | 'DRESS' | 'SKIRT' | 'OTHER' {
+  const partMap: { [key: string]: 'JACKET' | 'PANTS' | 'VEST' | 'SHIRT' | 'DRESS' | 'SKIRT' | 'OTHER' } = {
+    'jacket': 'JACKET',
+    'pants': 'PANTS',
+    'vest': 'VEST',
+    'shirt': 'SHIRT',
+    'dress': 'DRESS',
+    'skirt': 'SKIRT'
+  };
+  
+  return partMap[partName.toLowerCase()] || 'OTHER';
+}
+
+// Missing controller functions for routes
+export async function listAlterations(req: Request, res: Response) {
+  try {
+    const alterations = await prisma.alterationJob.findMany({
+      include: {
+        party: true,
+        partyMember: true,
+        customer: true,
+        jobParts: {
+          include: {
+            tasks: true,
+            assignedUser: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json(alterations);
+  } catch (error) {
+    logger.error('Error listing alterations:', error);
+    res.status(500).json({ error: 'Failed to list alterations' });
+  }
+}
+
+export async function getAlteration(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    
+    const alteration = await prisma.alterationJob.findUnique({
+      where: { id: Number(id) },
+      include: {
+        party: true,
+        partyMember: true,
+        customer: true,
+        jobParts: {
+          include: {
+            tasks: true,
+            assignedUser: true
+          }
+        }
+      }
+    });
+
+    if (!alteration) {
+      return res.status(404).json({ error: 'Alteration not found' });
+    }
+
+    res.json(alteration);
+  } catch (error) {
+    logger.error('Error getting alteration:', error);
+    res.status(500).json({ error: 'Failed to get alteration' });
+  }
+}
+
+export async function updateAlteration(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+
+    const alteration = await prisma.alterationJob.update({
+      where: { id: Number(id) },
+      data: updateData,
+      include: {
+        party: true,
+        partyMember: true,
+        customer: true,
+        jobParts: {
+          include: {
+            tasks: true,
+            assignedUser: true
+          }
+        }
+      }
+    });
+
+    res.json(alteration);
+  } catch (error) {
+    logger.error('Error updating alteration:', error);
+    res.status(500).json({ error: 'Failed to update alteration' });
+  }
+}
+
+export async function deleteAlteration(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+
+    await prisma.alterationJob.delete({
+      where: { id: Number(id) }
+    });
+
+    res.json({ message: 'Alteration deleted successfully' });
+  } catch (error) {
+    logger.error('Error deleting alteration:', error);
+    res.status(500).json({ error: 'Failed to delete alteration' });
+  }
+}
+
+export async function getAlterationJobs(req: Request, res: Response) {
+  try {
+    const jobs = await prisma.alterationJob.findMany({
+      include: {
+        party: true,
+        partyMember: true,
+        customer: true,
+        jobParts: {
+          include: {
+            tasks: true,
+            assignedUser: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json(jobs);
+  } catch (error) {
+    logger.error('Error getting alteration jobs:', error);
+    res.status(500).json({ error: 'Failed to get alteration jobs' });
+  }
+}
+
+export async function updateAlterationJob(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+
+    const job = await prisma.alterationJob.update({
+      where: { id: Number(id) },
+      data: updateData,
+      include: {
+        party: true,
+        partyMember: true,
+        customer: true,
+        jobParts: {
+          include: {
+            tasks: true,
+            assignedUser: true
+          }
+        }
+      }
+    });
+
+    res.json(job);
+  } catch (error) {
+    logger.error('Error updating alteration job:', error);
+    res.status(500).json({ error: 'Failed to update alteration job' });
+  }
+}
+
+export async function deleteAlterationJob(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+
+    await prisma.alterationJob.delete({
+      where: { id: Number(id) }
+    });
+
+    res.json({ message: 'Alteration job deleted successfully' });
+  } catch (error) {
+    logger.error('Error deleting alteration job:', error);
+    res.status(500).json({ error: 'Failed to delete alteration job' });
+  }
+}
+
+export async function getScanLogs(req: Request, res: Response) {
+  try {
+    const logs = await prisma.qRScanLog.findMany({
+      include: {
+        user: true,
+        part: {
+          include: {
+            job: true
+          }
+        }
+      },
+      orderBy: { timestamp: 'desc' }
+    });
+
+    res.json(logs);
+  } catch (error) {
+    logger.error('Error getting scan logs:', error);
+    res.status(500).json({ error: 'Failed to get scan logs' });
+  }
+}
+
+export async function getDashboardStats(req: Request, res: Response) {
+  try {
+    const [
+      totalJobs,
+      inProgressJobs,
+      completedJobs,
+      overdueJobs
+    ] = await Promise.all([
+      prisma.alterationJob.count(),
+      prisma.alterationJob.count({ where: { status: 'IN_PROGRESS' } }),
+      prisma.alterationJob.count({ where: { status: 'COMPLETE' } }),
+      prisma.alterationJob.count({
+        where: {
+          dueDate: { lt: new Date() },
+          status: { not: 'COMPLETE' }
+        }
+      })
+    ]);
+
+    res.json({
+      totalJobs,
+      inProgressJobs,
+      completedJobs,
+      overdueJobs
+    });
+  } catch (error) {
+    logger.error('Error getting dashboard stats:', error);
+    res.status(500).json({ error: 'Failed to get dashboard stats' });
+  }
+}
+
+export async function updateWorkflowStep(req: Request, res: Response) {
+  try {
+    const { jobId, stepId } = req.params;
+    const { completed, notes } = req.body;
+
+    const step = await prisma.alterationWorkflowStep.update({
+      where: { id: Number(stepId) },
+      data: {
+        completed: completed || false,
+        completedAt: completed ? new Date() : null,
+        completedBy: completed ? (req as any).user?.id : null,
+        notes
+      }
+    });
+
+    res.json(step);
+  } catch (error) {
+    logger.error('Error updating workflow step:', error);
+    res.status(500).json({ error: 'Failed to update workflow step' });
+  }
+}
+
+export async function autoAssignTailors(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+
+    // This is a placeholder - implement actual auto-assignment logic
+    res.json({ message: 'Auto-assignment feature not yet implemented' });
+  } catch (error) {
+    logger.error('Error auto-assigning tailors:', error);
+    res.status(500).json({ error: 'Failed to auto-assign tailors' });
+  }
+}
+
+export async function getAlterationsByMember(req: Request, res: Response) {
+  try {
+    const { memberId } = req.params;
+
+    const alterations = await prisma.alterationJob.findMany({
+      where: { partyMemberId: Number(memberId) },
+      include: {
+        party: true,
+        partyMember: true,
+        customer: true,
+        jobParts: {
+          include: {
+            tasks: true,
+            assignedUser: true
+          }
+        }
+      }
+    });
+
+    res.json(alterations);
+  } catch (error) {
+    logger.error('Error getting alterations by member:', error);
+    res.status(500).json({ error: 'Failed to get alterations by member' });
+  }
+}
+
+/**
+ * Assign tailor to alteration job part
+ */
+export async function assignTailorToPart(req: Request, res: Response) {
+  try {
+    const { partId } = req.params;
+    const { tailorId, reason } = req.body;
+    const userId = (req as any).user?.id;
+
+    if (!tailorId) {
+      return res.status(400).json({ error: 'tailorId is required' });
+    }
+
+    // Get current assignment
+    const currentPart = await prisma.alterationJobPart.findUnique({
+      where: { id: Number(partId) },
+      include: { job: true }
+    });
+
+    if (!currentPart) {
+      return res.status(404).json({ error: 'Alteration job part not found' });
+    }
+
+    const oldTailorId = currentPart.assignedTo;
+
+    // Update assignment
+    const updatedPart = await prisma.alterationJobPart.update({
+      where: { id: Number(partId) },
+      data: { assignedTo: Number(tailorId) },
+      include: {
+        assignedUser: true,
+        job: true
+      }
+    });
+
+    // Log assignment change
+    await prisma.assignmentLog.create({
+      data: {
+        jobId: currentPart.jobId,
+        partId: Number(partId),
+        oldTailorId,
+        newTailorId: Number(tailorId),
+        userId,
+        method: 'manual',
+        reason: reason || 'Manual assignment'
+      }
+    });
+
+    // Log audit event
+    await logChange(
+      userId,
+      'assign',
+      'AlterationJobPart',
+      Number(partId),
+      {
+        oldTailorId,
+        newTailorId: tailorId,
+        reason
+      },
+      req
+    );
+
+    res.json({
+      success: true,
+      part: updatedPart,
+      message: 'Tailor assigned successfully'
+    });
+
+  } catch (error) {
+    logger.error('Error assigning tailor to part:', error);
+    res.status(500).json({ error: 'Failed to assign tailor' });
+  }
+}
+
+/**
+ * Start work on alteration task
+ */
+export async function startTask(req: Request, res: Response) {
+  try {
+    const { taskId } = req.params;
+    const { tailorId, notes } = req.body;
+    const userId = (req as any).user?.id;
+
+    if (!tailorId) {
+      return res.status(400).json({ error: 'tailorId is required' });
+    }
+
+    const task = await prisma.alterationTask.findUnique({
+      where: { id: Number(taskId) },
+      include: { part: { include: { job: true } } }
+    });
+
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    // Update task
+    const updatedTask = await prisma.alterationTask.update({
+      where: { id: Number(taskId) },
+      data: {
+        status: 'IN_PROGRESS',
+        startTime: new Date(),
+        assignedTo: Number(tailorId)
+      },
+      include: {
+        assignedUser: true,
+        part: { include: { job: true } }
+      }
+    });
+
+    // Log task start
+    await prisma.alterationTaskLog.create({
+      data: {
+        taskId: Number(taskId),
+        userId: Number(tailorId),
+        action: 'started',
+        notes: notes || 'Work started'
+      }
+    });
+
+    // Update part status if this is the first task started
+    const partTasks = await prisma.alterationTask.findMany({
+      where: { partId: task.partId }
+    });
+
+    const hasStartedTasks = partTasks.some(t => t.status === 'IN_PROGRESS' || t.status === 'COMPLETE');
+    if (hasStartedTasks) {
+      await prisma.alterationJobPart.update({
+        where: { id: task.partId },
+        data: { status: 'IN_PROGRESS' }
+      });
+    }
+
+    res.json({
+      success: true,
+      task: updatedTask,
+      message: 'Task started successfully'
+    });
+
+  } catch (error) {
+    logger.error('Error starting task:', error);
+    res.status(500).json({ error: 'Failed to start task' });
+  }
+}
+
+/**
+ * Finish work on alteration task
+ */
+export async function finishTask(req: Request, res: Response) {
+  try {
+    const { taskId } = req.params;
+    const { timeSpent, notes, initials } = req.body;
+    const userId = (req as any).user?.id;
+
+    const task = await prisma.alterationTask.findUnique({
+      where: { id: Number(taskId) },
+      include: { part: { include: { job: true } } }
+    });
+
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    // Update task
+    const updatedTask = await prisma.alterationTask.update({
+      where: { id: Number(taskId) },
+      data: {
+        status: 'COMPLETE',
+        finishTime: new Date(),
+        timeSpent: timeSpent ? Number(timeSpent) : null,
+        initials: initials || null
+      },
+      include: {
+        assignedUser: true,
+        part: { include: { job: true } }
+      }
+    });
+
+    // Log task completion
+    await prisma.alterationTaskLog.create({
+      data: {
+        taskId: Number(taskId),
+        userId: task.assignedTo || userId,
+        action: 'finished',
+        notes: notes || 'Work completed'
+      }
+    });
+
+    // Check if all tasks in part are complete
+    const partTasks = await prisma.alterationTask.findMany({
+      where: { partId: task.partId }
+    });
+
+    const allTasksComplete = partTasks.every(t => t.status === 'COMPLETE');
+    if (allTasksComplete) {
+      await prisma.alterationJobPart.update({
+        where: { id: task.partId },
+        data: { status: 'COMPLETE' }
+      });
+    }
+
+    res.json({
+      success: true,
+      task: updatedTask,
+      message: 'Task completed successfully'
+    });
+
+  } catch (error) {
+    logger.error('Error finishing task:', error);
+    res.status(500).json({ error: 'Failed to finish task' });
+  }
+}
+
+/**
+ * Get available tailors for specific task types
+ */
+export async function getAvailableTailors(req: Request, res: Response) {
+  try {
+    const { taskType, estimatedTime, preferredDate } = req.query;
+
+    // Get tailors with specific abilities
+    const tailors = await prisma.user.findMany({
+      where: {
+        role: 'tailor'
+      },
+      include: {
+        tailorAbilities: {
+          include: {
+            taskType: true
+          }
+        },
+        userSchedules: true
+      }
+    });
+
+    // Filter by task type ability if specified
+    const availableTailors = tailors.filter(tailor => {
+      if (taskType) {
+        const hasAbility = tailor.tailorAbilities?.some(ability => 
+          ability.taskType.name.toLowerCase().includes(taskType.toString().toLowerCase())
+        );
+        if (!hasAbility) return false;
+      }
+
+      // TODO: Add availability checking based on userSchedule and estimatedTime
+      // This will be enhanced when calendar integration is implemented
+
+      return true;
+    });
+
+    res.json({
+      success: true,
+      tailors: availableTailors.map(tailor => ({
+        id: tailor.id,
+        name: tailor.name,
+        abilities: tailor.tailorAbilities?.map(ability => ability.taskType.name) || [],
+        availability: 'Available' // Placeholder for future calendar integration
+      }))
+    });
+
+  } catch (error) {
+    logger.error('Error getting available tailors:', error);
+    res.status(500).json({ error: 'Failed to get available tailors' });
+  }
+}
+
+/**
+ * Get alteration job history with detailed tracking
+ */
+export async function getAlterationJobHistory(req: Request, res: Response) {
+  try {
+    const { jobId } = req.params;
+
+    const job = await prisma.alterationJob.findUnique({
+      where: { id: Number(jobId) },
+      include: {
+        party: true,
+        partyMember: true,
+        customer: true,
+        tailor: true,
+        jobParts: {
+          include: {
             tasks: {
               include: {
                 assignedUser: true,
@@ -413,7 +1294,8 @@ export const getAlterationJob = async (req: Request, res: Response) => {
                 }
               }
             },
-            scanLogs: {
+            assignedUser: true,
+            assignmentLogs: {
               include: {
                 user: true
               },
@@ -421,351 +1303,27 @@ export const getAlterationJob = async (req: Request, res: Response) => {
             }
           }
         },
-        workflowSteps: {
+        assignmentLogs: {
           include: {
-            completedByUser: true
+            user: true
           },
-          orderBy: { sortOrder: 'asc' }
+          orderBy: { timestamp: 'desc' }
         }
       }
     });
+
     if (!job) {
       return res.status(404).json({ error: 'Alteration job not found' });
     }
-    res.json(job);
-  } catch (error: any) {
-    console.error('Error fetching alteration job:', error);
-    res.status(500).json({ error: 'Failed to fetch alteration job' });
-  }
-};
 
-export const updateAlterationJob = async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const updates = req.body;
-    delete updates.id;
-    delete updates.jobNumber;
-    delete updates.qrCode;
-    delete updates.createdAt;
-    const job = await prisma.alterationJob.update({
-      where: { id: Number(id) },
-      data: {
-        ...updates,
-        status: updates.status ? (typeof updates.status === 'string' ? AlterationJobStatus[updates.status as keyof typeof AlterationJobStatus] : updates.status) : undefined,
-        orderStatus: updates.orderStatus ? (typeof updates.orderStatus === 'string' ? OrderStatus[updates.orderStatus as keyof typeof OrderStatus] : updates.orderStatus) : undefined,
-        dueDate: updates.dueDate ? new Date(updates.dueDate) : undefined,
-      },
-      include: {
-        customer: true,
-        party: true,
-        partyMember: true,
-        tailor: true,
-        jobParts: {
-          include: {
-            assignedUser: true,
-            tasks: true
-          }
-        },
-        workflowSteps: {
-          orderBy: { sortOrder: 'asc' }
-        }
-      }
-    });
-    res.json(job);
-  } catch (error: any) {
-    console.error('Error updating alteration job:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-};
-
-export const deleteAlterationJob = async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    await prisma.alterationJob.delete({ where: { id: Number(id) } });
-    res.json({ message: 'Alteration job deleted successfully' });
-  } catch (error: any) {
-    console.error('Error deleting alteration job:', error);
-    res.status(500).json({ error: 'Failed to delete alteration job' });
-  }
-};
-
-// Helper to bypass TS2345 for alterationJobPart lookup
-function findAlterationJobPartById(id: any, prisma: any) {
-  return prisma.alterationJobPart.findUnique({
-    where: { id: id as any },
-    include: {
-      job: {
-        include: {
-          customer: true,
-          party: true
-        }
-      },
-      tasks: true,
-      assignedUser: true
-    }
-  });
-}
-
-export const scanQRCode = async (req: Request, res: Response) => {
-  try {
-    const { qrCode } = req.params;
-    const { scanType, location, notes } = req.body;
-    const userId = (req as any).user?.id;
-    if (!userId) {
-      return res.status(401).json({ error: 'User authentication required' });
-    }
-
-    // Use findUniqueOrThrow so jobPart is non-null and typed correctly
-    const jobPart = await prisma.alterationJobPart.findUniqueOrThrow({
-      where: { qrCode },
-      include: {
-        job: {
-          include: {
-            customer: true,
-            party: true,
-          },
-        },
-        tasks: true,
-        assignedUser: true,
-      },
-    });
-
-    let result = 'Success';
-    let newStatus = jobPart.status;
-
-    switch (scanType) {
-      case 'START_WORK':
-        if (jobPart.status === 'NOT_STARTED') {
-          newStatus = 'IN_PROGRESS';
-          await prisma.alterationJobPart.update({
-            where: { id: jobPart.id },
-            data: {
-              status: newStatus,
-              assignedTo: jobPart.assignedTo ?? userId,
-            },
-          });
-        } else {
-          result = 'Work already started';
-        }
-        break;
-
-      case 'FINISH_WORK':
-        if (jobPart.status === 'IN_PROGRESS') {
-          newStatus = 'COMPLETE';
-          await prisma.alterationJobPart.update({
-            where: { id: jobPart.id },
-            data: { status: newStatus },
-          });
-        } else {
-          result = 'Work not in progress';
-        }
-        break;
-
-      case 'PICKUP':
-        if (jobPart.status === 'COMPLETE') {
-          newStatus = 'PICKED_UP';
-          await prisma.alterationJobPart.update({
-            where: { id: jobPart.id },
-            data: { status: newStatus },
-          });
-        } else {
-          result = 'Part not ready for pickup';
-        }
-        break;
-
-      case 'STATUS_CHECK':
-        // no updates
-        break;
-
-      default:
-        return res.status(400).json({ error: 'Invalid scan type' });
-    }
-
-    // Log the scan
-    await prisma.qRScanLog.create({
-      data: {
-        qrCode,
-        partId: jobPart.id,
-        scannedBy: userId,
-        scanType,
-        location,
-        result,
-        metadata: { notes },
-      },
-    });
-
-    // Update overall job status if needed
-    const allParts = await prisma.alterationJobPart.findMany({
-      where: { jobId: jobPart.jobId },
-    });
-    const allComplete = allParts.every((p: { status: string }) => p.status === 'COMPLETE' || p.status === 'PICKED_UP');
-    const allPickedUp = allParts.every((p: { status: string }) => p.status === 'PICKED_UP');
-
-    if (allPickedUp) {
-      await prisma.alterationJob.update({
-        where: { id: jobPart.jobId },
-        data: { status: 'PICKED_UP' },
-      });
-    } else if (allComplete) {
-      await prisma.alterationJob.update({
-        where: { id: jobPart.jobId },
-        data: { status: 'COMPLETE' },
-      });
-    }
-
-    res.json({ result });
-  } catch (error: any) {
-    console.error('Error scanning QR code:', error);
-    if (error.code === 'P2025') {
-      return res.status(404).json({ error: 'Invalid QR code' });
-    }
-    res.status(500).json({ error: 'Failed to process QR scan' });
-  }
-};
-
-export const getScanLogs = async (req: Request, res: Response) => {
-  try {
-    const { qrCode, partId, userId, limit = 50 } = req.query as any;
-    const where: any = {};
-    if (qrCode) where.qrCode = qrCode;
-    if (partId) where.partId = Number(partId);
-    if (userId) where.scannedBy = Number(userId);
-    const logs = await prisma.qRScanLog.findMany({
-      where,
-      include: {
-        user: true,
-        part: {
-          include: {
-            job: true
-          }
-        }
-      },
-      orderBy: { timestamp: 'desc' },
-      take: Number(limit)
-    });
-    res.json(logs);
-  } catch (error: any) {
-    console.error('Error fetching scan logs:', error);
-    res.status(500).json({ error: 'Failed to fetch scan logs' });
-  }
-};
-
-export const getDashboardStats = async (req: Request, res: Response) => {
-  try {
-    const { tailorId, dateFrom, dateTo } = req.query as any;
-    const dateFilter: any = {};
-    if (dateFrom) dateFilter.gte = new Date(dateFrom);
-    if (dateTo) dateFilter.lte = new Date(dateTo);
-    const where: any = {};
-    if (tailorId) where.tailorId = Number(tailorId);
-    if (Object.keys(dateFilter).length > 0) where.createdAt = dateFilter;
-    const [
-      totalJobs,
-      inProgressJobs,
-      completedJobs,
-      overdueJobs,
-      partsByStatus,
-      recentActivity
-    ] = await Promise.all([
-      prisma.alterationJob.count({ where }),
-      prisma.alterationJob.count({ where: { ...where, status: 'IN_PROGRESS' } }),
-      prisma.alterationJob.count({ where: { ...where, status: 'COMPLETE' } }),
-      prisma.alterationJob.count({
-        where: {
-          ...where,
-          dueDate: { lt: new Date() },
-          status: { notIn: ['COMPLETE', 'PICKED_UP'] }
-        }
-      }),
-      prisma.alterationJobPart.groupBy({
-        by: ['status'],
-        _count: { status: true },
-        where: tailorId ? { assignedTo: Number(tailorId) } : {}
-      }),
-      prisma.qRScanLog.findMany({
-        take: 10,
-        orderBy: { timestamp: 'desc' },
-        include: {
-          user: true,
-          part: {
-            include: {
-              job: {
-                include: {
-                  customer: true,
-                  party: true
-                }
-              }
-            }
-          }
-        }
-      })
-    ]);
     res.json({
-      summary: {
-        totalJobs,
-        inProgressJobs,
-        completedJobs,
-        overdueJobs
-      },
-      partsByStatus: partsByStatus.reduce((acc: any, item: any) => {
-        acc[item.status] = item._count.status;
-        return acc;
-      }, {}),
-      recentActivity
+      success: true,
+      job,
+      message: 'Job history retrieved successfully'
     });
-  } catch (error: any) {
-    console.error('Error fetching dashboard stats:', error);
-    res.status(500).json({ error: 'Failed to fetch dashboard stats' });
-  }
-};
 
-export const updateWorkflowStep = async (req: Request, res: Response) => {
-  try {
-    const { jobId, stepId } = req.params;
-    const { completed, notes } = req.body;
-    const userId = (req as any).user?.id;
-    const step = await prisma.alterationWorkflowStep.update({
-      where: { id: Number(stepId) },
-      data: {
-        completed,
-        completedAt: completed ? new Date() : null,
-        completedBy: completed ? userId : null,
-        notes
-      },
-      include: {
-        completedByUser: true
-      }
-    });
-    res.json(step);
-  } catch (error: any) {
-    console.error('Error updating workflow step:', error);
-    res.status(500).json({ error: 'Failed to update workflow step' });
+  } catch (error) {
+    logger.error('Error getting alteration job history:', error);
+    res.status(500).json({ error: 'Failed to get job history' });
   }
-};
-
-export const autoAssignTailors = async (req: Request, res: Response) => {
-  try {
-    const jobId = req.params.id;
-    const { assignments } = req.body || {};
-    if (Array.isArray(assignments) && assignments.length > 0) {
-      const updates = assignments.map((a: any) =>
-        prisma.alterationJobPart.update({
-          where: { id: Number(a.partId) },
-          data: { assignedTo: a.assignedTailorId ? Number(a.assignedTailorId) : null },
-        })
-      );
-      await Promise.all(updates);
-      res.json({ success: true, assignments });
-      return;
-    }
-    const result = await autoAssignTailorsForJob(Number(jobId));
-    res.json({ success: true, assignments: result });
-  } catch (err: any) {
-    logger.error('Error in auto-assign:', err.message);
-    res.status(500).json({ error: 'Failed to auto-assign tailors', details: err.message });
-  }
-};
-
-// ...
-// The rest of the functions (createAlteration, getAlterationsByMember, getAlteration, updateAlteration, deleteAlteration, createAlterationJob, getAlterationJobs, getAlterationJob, updateAlterationJob, deleteAlterationJob, scanQRCode, getScanLogs, getDashboardStats, updateWorkflowStep, autoAssignTailors) should be migrated in the same style, using async/await, type annotations, and ES module exports.
-// ... 
+} 

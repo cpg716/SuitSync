@@ -9,6 +9,18 @@ The SuitSync API provides comprehensive endpoints for managing customers, partie
 - ✅ **Enhanced Error Handling** - Standardized error responses with circuit breaker
 - ✅ **Session Management** - Prevents header size issues (431 errors)
 - ✅ **Database Error Handling** - Proper Prisma error management
+- ✅ **API Compliance Audit** - Customers API 80% compliant with Lightspeed X-Series API 2.0
+
+## 📋 API Compliance Status
+
+| API Section | Compliance Score | Status | Notes |
+|-------------|------------------|--------|-------|
+| **Customers** | 80% | 🟡 Partial | Missing DELETE endpoint |
+| **Parties** | TBD | ⏳ Pending | Audit needed |
+| **Products** | TBD | ⏳ Pending | Audit needed |
+| **Sales** | TBD | ⏳ Pending | Audit needed |
+
+**Full compliance reports**: [Customers API Audit](./CUSTOMERS_API_AUDIT.md) | [Compliance Summary](./CUSTOMERS_API_COMPLIANCE_SUMMARY.md)
 
 ## Base URL
 
@@ -167,6 +179,8 @@ Content-Type: application/json
 ```http
 DELETE /customers/{id}
 ```
+
+**⚠️ Implementation Status**: This endpoint is documented but not yet implemented. See [Compliance Summary](./CUSTOMERS_API_COMPLIANCE_SUMMARY.md) for implementation details.
 
 ## Parties
 
@@ -333,10 +347,35 @@ Authorization: Bearer <token>
 
 ### Trigger Sync
 ```http
-POST /sync/{resource}
+POST /sync/trigger/{resource}
 Authorization: Bearer <token>
 
-# Resources: customers, parties, products, sales
+# Resources: customers, sales, users
+```
+
+### Manual Sync Endpoints
+```http
+POST /sync/customers
+POST /sync/sales  
+POST /sync/users
+Authorization: Bearer <token>
+```
+
+### Internal Sync Endpoints (No Auth Required)
+```http
+POST /sync/internal/customers
+POST /sync/internal/sales
+POST /sync/internal/users
+```
+
+### Manual Trigger with Resource
+```http
+POST /sync/manual/trigger
+Content-Type: application/json
+
+{
+  "resource": "customers" | "sales" | "users"
+}
 ```
 
 ## Webhooks

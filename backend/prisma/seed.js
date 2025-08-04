@@ -6,13 +6,123 @@ const bcrypt = require('bcryptjs');
 async function main() {
   // SuitSync is production-ready with no demo data
   // All users authenticate through Lightspeed OAuth
-  console.log("🚫 SuitSync uses production Lightspeed authentication only - no demo data seeded");
-  console.log("🔐 To use SuitSync:");
-  console.log("1. Start the backend server: npm run dev");
-  console.log("2. Navigate to the frontend: http://localhost:3001");
-  console.log("3. Click 'Sign in with Lightspeed' to authenticate");
-  console.log("4. Users and roles will be synced from your Lightspeed account");
-  return;
+  console.log("🎭 Creating test party for workflow demonstration...");
+  
+  // Create test customer (groom)
+  const testCustomer = await prisma.customer.create({
+    data: {
+      name: "John Smith",
+      email: "john.smith@email.com",
+      phone: "716-555-0123",
+      measurements: {
+        chest: 42,
+        waist: 36,
+        hips: 40,
+        shoulder: 18,
+        sleeve: 25,
+        neck: 16,
+        inseam: 32,
+        outseam: 44
+      }
+    }
+  });
+
+  // Create test party
+  const testParty = await prisma.party.create({
+    data: {
+      name: "Smith Wedding Party",
+      eventDate: new Date("2024-12-15"),
+      notes: "Test party for workflow demonstration",
+      customerId: testCustomer.id
+    }
+  });
+
+  // Create test party members with different statuses
+  const testMembers = [
+    {
+      role: "Groom",
+      status: "ordered",
+      notes: "John Smith - Groom",
+      suitOrderId: "SUIT-001",
+      accessoriesOrderId: "ACC-001",
+      orderedAt: new Date("2024-11-01"),
+      measurements: {
+        chest: 42,
+        waist: 36,
+        hips: 40,
+        shoulder: 18,
+        sleeve: 25,
+        neck: 16,
+        inseam: 32,
+        outseam: 44
+      }
+    },
+    {
+      role: "Best Man",
+      status: "need_to_order",
+      notes: "Mike Johnson - Best Man",
+      measurements: {
+        chest: 44,
+        waist: 38,
+        hips: 42,
+        shoulder: 19,
+        sleeve: 26,
+        neck: 17,
+        inseam: 33,
+        outseam: 45
+      }
+    },
+    {
+      role: "Groomsman",
+      status: "awaiting_measurements",
+      notes: "David Wilson - Groomsman #1"
+    },
+    {
+      role: "Groomsman",
+      status: "being_altered",
+      notes: "Tom Brown - Groomsman #2",
+      suitOrderId: "SUIT-002",
+      accessoriesOrderId: "ACC-002",
+      orderedAt: new Date("2024-10-15"),
+      receivedAt: new Date("2024-11-10"),
+      alteredAt: new Date("2024-11-20"),
+      measurements: {
+        chest: 40,
+        waist: 34,
+        hips: 38,
+        shoulder: 17,
+        sleeve: 24,
+        neck: 15,
+        inseam: 31,
+        outseam: 43
+      }
+    }
+  ];
+
+  for (const memberData of testMembers) {
+    await prisma.partyMember.create({
+      data: {
+        partyId: testParty.id,
+        role: memberData.role,
+        status: memberData.status,
+        notes: memberData.notes,
+        suitOrderId: memberData.suitOrderId,
+        accessoriesOrderId: memberData.accessoriesOrderId,
+        orderedAt: memberData.orderedAt,
+        receivedAt: memberData.receivedAt,
+        alteredAt: memberData.alteredAt,
+        measurements: memberData.measurements
+      }
+    });
+  }
+
+  console.log("✅ Test party created successfully!");
+  console.log("📋 Test Party Details:");
+  console.log(`   - Name: ${testParty.name}`);
+  console.log(`   - Event Date: ${testParty.eventDate.toDateString()}`);
+  console.log(`   - Groom: ${testCustomer.name} (${testCustomer.phone})`);
+  console.log(`   - Members: ${testMembers.length} total`);
+  console.log("🎯 You can now test the workflow status system!");
 
   // Seed demo admin user
   const users = [];

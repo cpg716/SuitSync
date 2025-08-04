@@ -73,7 +73,7 @@ async function refreshAccessToken(req: any) {
   const LS_CLIENT_ID = process.env.LS_CLIENT_ID || '';
   const LS_CLIENT_SECRET = process.env.LS_CLIENT_SECRET || '';
   if (!domainPrefix || !refreshToken) throw new Error('Missing domain or refresh token for Lightspeed refresh');
-  const tokenUrl = 'https://x-series-api.lightspeedhq.com/oauth/token';
+  const tokenUrl = `https://${domainPrefix}.retail.lightspeed.app/oauth/token`;
   const response = await axios.post(
     tokenUrl,
     querystring.stringify({

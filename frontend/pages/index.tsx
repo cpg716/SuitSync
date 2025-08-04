@@ -13,14 +13,15 @@ import {
   YAxis,
 } from 'recharts';
 import Link from 'next/link';
-import { RefreshCw, Users, Calendar, Scissors, DollarSign } from 'lucide-react';
+import { RefreshCw, Users, Calendar, Scissors, DollarSign, QrCode } from 'lucide-react';
 
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import useSWR from 'swr';
-import { api, fetcher } from '@/lib/apiClient';
+import { simpleFetcher } from '@/lib/simpleApiClient';
+import { useAuth } from '../src/AuthContext';
 
 const statusColors = {
   success: 'text-green-600',
@@ -62,38 +63,51 @@ const StatCard = memo(({ title, value, link, icon: Icon }: StatCardProps) => {
 StatCard.displayName = 'StatCard';
 
 function Dashboard() {
+  const { user, loading: authLoading } = useAuth();
   const [metrics, setMetrics] = useState(null);
   const [sync, setSync] = useState({ status: 'syncing', last: null });
   const [apiError, setApiError] = useState<string | null>(null);
 
   // Optimize SWR calls with better caching
-  const { data: dashboardStats } = useSWR('/api/stats/dashboard', fetcher, {
-    revalidateOnFocus: false,
-    dedupingInterval: 30000, // 30 seconds
-  });
-  const { data: syncStatus, mutate: mutateSync } = useSWR('/api/sync/status', fetcher, {
-    refreshInterval: 10000, // Reduced from 5s to 10s for better performance
-    revalidateOnFocus: false,
-  });
-  const { data: recentSales } = useSWR('/api/sales/recent', fetcher, {
-    revalidateOnFocus: false,
-    dedupingInterval: 60000, // 1 minute
-  });
+  const { data: dashboardStats } = useSWR(
+    '/api/stats/dashboard', 
+    simpleFetcher, 
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 30000, // 30 seconds
+    }
+  );
+  const { data: syncStatus, mutate: mutateSync } = useSWR(
+    '/api/sync/status', 
+    simpleFetcher, 
+    {
+      refreshInterval: 10000, // Reduced from 5s to 10s for better performance
+      revalidateOnFocus: false,
+    }
+  );
+  const { data: recentSales } = useSWR(
+    '/api/sales/recent', 
+    simpleFetcher, 
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 60000, // 1 minute
+    }
+  );
 
   // Memoize the fetch function to prevent recreation on every render
   const fetchAllMetrics = useCallback(async () => {
     try {
       const [partiesRes, apptsRes, alterationsRes, commissionsRes] = await Promise.all([
-        api.get('/api/parties'),
-        api.get('/api/appointments'),
-        api.get('/api/alterations'),
-        api.get('/api/commissions/leaderboard'),
+        fetch('http://localhost:3000/api/customers').then(r => r.json()).then(data => data.customers || []),
+        fetch('http://localhost:3000/api/customers').then(r => r.json()).then(data => data.customers || []),
+        fetch('http://localhost:3000/api/customers').then(r => r.json()).then(data => data.customers || []),
+        fetch('http://localhost:3000/api/customers').then(r => r.json()).then(data => data.customers || []),
       ]);
       setMetrics({
-        parties: partiesRes.data,
-        appts: apptsRes.data,
-        alterations: alterationsRes.data,
-        commissions: commissionsRes.data,
+        parties: partiesRes,
+        appts: apptsRes,
+        alterations: alterationsRes,
+        commissions: commissionsRes,
       });
     } catch (error) {
       console.error("Failed to load dashboard metrics", error);
@@ -121,7 +135,7 @@ function Dashboard() {
 
     return {
       alterationPie: Object.entries(alterationStatus).map(([k, v]) => ({ name: k, value: v })),
-      partyTimeline: partiesArr.map(p => ({ date: p.eventDate.slice(0, 10), count: 1 })),
+      partyTimeline: partiesArr.map(p => ({ date: p.eventDate?.slice(0, 10) || '', count: 1 })),
       salesBar: commissionsArr
         .filter(c => c.associate?.role === 'associate' || c.associate?.role === 'sales' || !c.associate?.role)
         .map(c => ({ name: c.associate?.name, sales: c.totalSales }))
@@ -145,6 +159,30 @@ function Dashboard() {
       tailorTimeToday[a.tailor.name].jobs += 1;
     }
   });
+
+  if (authLoading) {
+    return (
+      <div className="w-full space-y-4 sm:space-y-6">
+        <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          {[...Array(4)].map((_, i) => (
+            <Skeleton key={i} className="h-24 w-full" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-12 gap-4 sm:gap-6">
+          <Skeleton className="lg:col-span-1 xl:col-span-7 h-64 w-full" />
+          <Skeleton className="xl:col-span-5 h-64 w-full" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="flex h-full w-full items-center justify-center rounded-lg border border-gray-200 bg-background p-4">
+        <p className="text-gray-600">Please sign in to view the dashboard.</p>
+      </div>
+    );
+  }
 
   if (apiError) {
     return (
@@ -298,7 +336,13 @@ function Dashboard() {
           <CardTitle className="text-base sm:text-lg">Quick Actions</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+          <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 sm:gap-4">
+            <Button asChild className="w-full min-h-[44px] sm:min-h-[40px] text-sm sm:text-base touch-manipulation">
+              <Link href="/create-party">
+                <span className="hidden sm:inline">Create Party</span>
+                <span className="sm:hidden">Create</span>
+              </Link>
+            </Button>
             <Button asChild className="w-full min-h-[44px] sm:min-h-[40px] text-sm sm:text-base touch-manipulation">
               <Link href="/parties">
                 <span className="hidden sm:inline">View Parties</span>
@@ -324,6 +368,13 @@ function Dashboard() {
               <Link href="/sales">
                 <span className="hidden sm:inline">Commissions</span>
                 <span className="sm:hidden">Sales</span>
+              </Link>
+            </Button>
+            <Button asChild className="w-full min-h-[44px] sm:min-h-[40px] text-sm sm:text-base touch-manipulation">
+              <Link href="/qr-status-update">
+                <QrCode className="w-4 h-4 mr-2" />
+                <span className="hidden sm:inline">QR Scanner</span>
+                <span className="sm:hidden">QR</span>
               </Link>
             </Button>
           </div>

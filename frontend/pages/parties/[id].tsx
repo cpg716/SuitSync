@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { Pagination } from '../../components/ui/Pagination';
 import { Button } from '../../components/ui/Button';
@@ -8,7 +8,6 @@ import AppointmentModal from '../../components/ui/AppointmentModal';
 import TagPreview from '../../components/ui/TagPreview';
 import { AlterationModal } from '../../components/ui/AlterationModal';
 import { useToast } from '../../components/ToastContext';
-import React from 'react';
 import { Modal } from '../../components/ui/Modal';
 
 const PHASES = [
@@ -54,16 +53,24 @@ function ProgressBar({ phase }) {
 }
 
 const STATUS_COLORS = {
-  Selected: 'bg-gray-300 text-gray-800',
-  Measured: 'bg-blue-200 text-blue-800',
-  Ordered: 'bg-indigo-200 text-indigo-800',
-  Fitted: 'bg-yellow-200 text-yellow-800',
-  Altered: 'bg-pink-200 text-pink-800',
-  Ready: 'bg-green-200 text-green-800',
-  PickedUp: 'bg-purple-200 text-purple-800',
+  awaiting_measurements: 'bg-red-500 text-white',
+  need_to_order: 'bg-orange-500 text-white',
+  ordered: 'bg-blue-500 text-white',
+  received: 'bg-purple-500 text-white',
+  being_altered: 'bg-yellow-500 text-black',
+  ready_for_pickup: 'bg-green-500 text-white',
 };
 
-const WORKFLOW_STATUSES = ['Selected','Measured','Ordered','Fitted','Altered','Ready','PickedUp'];
+const WORKFLOW_STATUSES = ['awaiting_measurements', 'need_to_order', 'ordered', 'received', 'being_altered', 'ready_for_pickup'];
+
+const STATUS_LABELS = {
+  awaiting_measurements: 'Awaiting Measurements',
+  need_to_order: 'Need to Order',
+  ordered: 'Ordered',
+  received: 'Received',
+  being_altered: 'Being Altered',
+  ready_for_pickup: 'Ready for Pickup',
+};
 
 function MemberStepper({ status }) {
   const idx = WORKFLOW_STATUSES.indexOf(status);
@@ -90,7 +97,7 @@ export default function PartyDetail() {
   const [showAdd, setShowAdd] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [editMember, setEditMember] = useState(null);
-  const [form, setForm] = useState({ role: '', measurements: '', status: 'Selected', notes: '' });
+  const [form, setForm] = useState({ role: '', measurements: '', status: 'awaiting_measurements', notes: '' });
   const [page, setPage] = useState(1);
   const [showAppt, setShowAppt] = useState(false);
   const pageSize = 10;
@@ -98,6 +105,8 @@ export default function PartyDetail() {
   const now = new Date();
   const [memberAlterations, setMemberAlterations] = useState({});
   const [showAlterationModal, setShowAlterationModal] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [statusMember, setStatusMember] = useState(null);
   const [alterationMemberId, setAlterationMemberId] = useState(null);
   const [editAlteration, setEditAlteration] = useState(null);
   const [printJob, setPrintJob] = useState(null);
@@ -167,20 +176,44 @@ export default function PartyDetail() {
   };
 
   // Timeline action handlers
-  const handleAdvanceStatus = async (memberId, newStatus) => {
-    await fetch(`/api/parties/${id}/members/${memberId}/advance-status`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ newStatus }),
-      credentials: 'include',
-    }).then(res => {
-      if (res.ok) {
-        showToast('Status updated', 'success');
-        fetch(`/api/parties/${id}/timeline`, { credentials: 'include' }).then(res => res.json()).then(setTimeline);
+  const handleStatusUpdate = async (formData) => {
+    try {
+      const response = await fetch(`/api/parties/members/${statusMember.id}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+      if (response.ok) {
+        showToast('Status updated successfully');
+        fetchMembers();
+        setShowStatusModal(false);
+        setStatusMember(null);
       } else {
         showToast('Failed to update status', 'error');
       }
-    });
+    } catch (error) {
+      console.error('Error updating status:', error);
+      showToast('Error updating status', 'error');
+    }
+  };
+
+  const handleAdvanceStatus = async (memberId, newStatus) => {
+    try {
+      const response = await fetch(`/api/parties/members/${memberId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (response.ok) {
+        showToast('Status updated successfully');
+        fetchMembers();
+      } else {
+        showToast('Failed to update status', 'error');
+      }
+    } catch (error) {
+      console.error('Error updating status:', error);
+      showToast('Error updating status', 'error');
+    }
   };
   const handleTriggerBulkOrder = async () => {
     await fetch(`/api/parties/${id}/trigger-bulk-order`, { method: 'POST', credentials: 'include' }).then(res => {
@@ -432,16 +465,25 @@ export default function PartyDetail() {
                             <div className="flex items-center gap-2 mb-1">
                               <select className="border rounded p-1 text-xs" defaultValue={row.status} onChange={e => handleAdvanceStatus(row.memberId, e.target.value)} title="Change status">
                                 {WORKFLOW_STATUSES.map(s => (
-                                  <option key={s} value={s}>{s}</option>
+                                  <option key={s} value={s}>{STATUS_LABELS[s]}</option>
                                 ))}
                               </select>
                               <button className="px-2 py-1 bg-green-600 text-white rounded flex items-center gap-1 text-xs" onClick={() => handleAdvanceStatus(row.memberId, row.status)} title="Advance status">
                                 <span role="img" aria-label="advance">⏩</span> Advance
                               </button>
                             </div>
-                            <button className="px-2 py-1 bg-orange-500 text-white rounded flex items-center gap-1 text-xs" onClick={() => handleNotifyPickup(row.memberId)} title="Notify pickup">
-                              <span role="img" aria-label="notify">📲</span> Notify Pickup
-                            </button>
+                            <div className="flex gap-1">
+                              <button 
+                                className="px-2 py-1 bg-blue-600 text-white rounded flex items-center gap-1 text-xs flex-1" 
+                                onClick={() => { setStatusMember(row); setShowStatusModal(true); }} 
+                                title="Update status details"
+                              >
+                                <span role="img" aria-label="edit">✏️</span> Details
+                              </button>
+                              <button className="px-2 py-1 bg-orange-500 text-white rounded flex items-center gap-1 text-xs" onClick={() => handleNotifyPickup(row.memberId)} title="Notify pickup">
+                                <span role="img" aria-label="notify">📲</span> Notify
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -480,7 +522,135 @@ export default function PartyDetail() {
           </Tabs>
         </div>
       </div>
+
+      {/* Status Update Modal */}
+      <StatusUpdateModal
+        open={showStatusModal}
+        onClose={() => { setShowStatusModal(false); setStatusMember(null); }}
+        member={statusMember}
+        onSubmit={handleStatusUpdate}
+      />
     </div>
+  );
+}
+
+function StatusUpdateModal({ open, onClose, member, onSubmit }) {
+  const [form, setForm] = useState({
+    status: member?.status || 'awaiting_measurements',
+    suitOrderId: member?.suitOrderId || '',
+    accessoriesOrderId: member?.accessoriesOrderId || '',
+    notes: member?.notes || ''
+  });
+  const [saving, setSaving] = useState(false);
+
+  // Update form when member changes
+  React.useEffect(() => {
+    if (member) {
+      setForm({
+        status: member.status || 'awaiting_measurements',
+        suitOrderId: member.suitOrderId || '',
+        accessoriesOrderId: member.accessoriesOrderId || '',
+        notes: member.notes || ''
+      });
+    }
+  }, [member]);
+
+  const statusOptions = [
+    { value: 'awaiting_measurements', label: 'Awaiting Measurements' },
+    { value: 'need_to_order', label: 'Need to Order' },
+    { value: 'ordered', label: 'Ordered' },
+    { value: 'received', label: 'Received' },
+    { value: 'being_altered', label: 'Being Altered' },
+    { value: 'ready_for_pickup', label: 'Ready for Pickup' }
+  ];
+
+  const handleSubmit = async () => {
+    setSaving(true);
+    try {
+      await onSubmit(form);
+    } catch (error) {
+      console.error('Error updating status:', error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) return null;
+
+  return (
+    <Modal open={open} onClose={onClose}>
+      <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+        <div className="bg-white dark:bg-neutral-900 p-6 rounded shadow-lg w-96 max-h-[90vh] overflow-y-auto">
+          <h2 className="text-xl font-bold mb-4">Update Member Status</h2>
+          
+          {member && (
+            <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-800 rounded">
+              <p className="font-medium">{member.name || member.notes || `${member.role} Member`}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">{member.role}</p>
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Status</label>
+              <select 
+                className="w-full border rounded p-2 dark:bg-gray-800 dark:border-gray-700"
+                value={form.status}
+                onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
+              >
+                {statusOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Suit Order ID</label>
+              <input
+                type="text"
+                className="w-full border rounded p-2 dark:bg-gray-800 dark:border-gray-700"
+                value={form.suitOrderId}
+                onChange={e => setForm(f => ({ ...f, suitOrderId: e.target.value }))}
+                placeholder="Enter suit order ID"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Accessories Order ID</label>
+              <input
+                type="text"
+                className="w-full border rounded p-2 dark:bg-gray-800 dark:border-gray-700"
+                value={form.accessoriesOrderId}
+                onChange={e => setForm(f => ({ ...f, accessoriesOrderId: e.target.value }))}
+                placeholder="Enter accessories order ID"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Notes</label>
+              <textarea
+                className="w-full border rounded p-2 dark:bg-gray-800 dark:border-gray-700"
+                value={form.notes}
+                onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                placeholder="Add any notes..."
+                rows={3}
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-2 justify-end mt-6">
+            <Button onClick={onClose} className="bg-gray-300 text-black dark:bg-gray-800 dark:text-gray-100">
+              Cancel
+            </Button>
+            <Button onClick={handleSubmit} disabled={saving}>
+              {saving ? 'Saving...' : 'Update Status'}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

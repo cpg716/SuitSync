@@ -33,6 +33,7 @@ model Customer {
   tags              CustomerTag[]     @relation("CustomerTags")
   customFields      CustomerCustomField[]
   groups            CustomerGroup[]   @relation("CustomerGroups")
+  notifications     NotificationHistory[] @relation("CustomerNotifications")
 
   @@index([lightspeedId])
   @@index([email])
@@ -91,6 +92,7 @@ model User {
   photoUrl             String?
   notificationPrefs    Json?
   createdCustomers     Customer[]          @relation("CustomerCreator")
+  createdWeddingSuits  WeddingSuit[]       @relation("WeddingSuitCreator")
   taskLogs             AlterationTaskLog[] @relation("TaskLogUser")
   qrScans              QRScanLog[]         @relation("QRScanUser")
   workflowStepsCompleted AlterationWorkflowStep[] @relation("WorkflowStepUser")
@@ -98,6 +100,9 @@ model User {
   assignmentLogs       AssignmentLog[]
   userSchedules        UserSchedule[]
   userSessions         UserSession[]       @relation("UserSessions")
+  parties              Party[]             @relation("PartySalesPerson")
+  notifications        NotificationHistory[] @relation("UserNotifications")
+  createdTemplates     NotificationTemplate[] @relation("TemplateCreator")
   
   // Checklists & Tasks relations
   createdChecklists    Checklist[]         @relation("ChecklistCreator")
@@ -147,10 +152,14 @@ model TailorSchedule {
 
 model Party {
   id                Int             @id @default(autoincrement())
-  name              String
+  name              String?
   eventDate         DateTime
   customerId        Int
   customer          Customer        @relation(fields: [customerId], references: [id])
+  salesPersonId     Int?
+  salesPerson       User?           @relation("PartySalesPerson", fields: [salesPersonId], references: [id])
+  suitStyle         String?
+  suitColor         String?
   externalId        String?
   syncedAt          DateTime?
   alterationJobs    AlterationJob[]
@@ -161,8 +170,10 @@ model Party {
   syncedToLs        Boolean         @default(false)
   lightspeedGroupId String?
   members           PartyMember[]
+  notifications     NotificationHistory[] @relation("PartyNotifications")
 
   @@index([customerId])
+  @@index([salesPersonId])
 }
 
 model AlterationJob {
@@ -247,6 +258,7 @@ model AlterationJobPart {
   scanLogs        QRScanLog[]           @relation("PartScanLogs")
   assignmentLogs  AssignmentLog[]
 
+
   @@index([jobId])
   @@index([assignedTo])
   @@index([qrCode])
@@ -270,12 +282,19 @@ enum PartPriority {
   RUSH
 }
 
+enum TaskType {
+  ALTERATION
+  BUTTON_WORK
+  MEASUREMENT
+  CUSTOM
+}
+
 model AlterationTask {
   id          Int                   @id @default(autoincrement())
   partId      Int
   part        AlterationJobPart     @relation("PartTasks", fields: [partId], references: [id], onDelete: Cascade)
   taskName    String                // e.g., "Hem", "Shorten Sleeves", "Take in Sides"
-  taskType    String                // Category of task
+  taskType    TaskType              @default(ALTERATION)
   status      AlterationJobStatus   @default(NOT_STARTED)
   startTime   DateTime?
   finishTime  DateTime?
@@ -288,6 +307,7 @@ model AlterationTask {
   createdAt   DateTime              @default(now())
   updatedAt   DateTime              @updatedAt
   taskLogs    AlterationTaskLog[]   @relation("TaskLogs")
+
 
   @@index([partId])
   @@index([assignedTo])
@@ -403,6 +423,7 @@ model Appointment {
   remindersScheduled Boolean           @default(false)
   remindersSent      Json?             // Track which reminders have been sent
   notificationSchedules NotificationSchedule[]
+  notifications      NotificationHistory[] @relation("AppointmentNotifications")
 
   @@index([partyId])
   @@index([parentId])
@@ -434,6 +455,7 @@ enum AppointmentStatus {
   canceled
   completed
   confirmed
+  no_show
 }
 
 model SyncLog {
@@ -477,6 +499,16 @@ model AuditLog {
   @@index([userId])
 }
 
+enum PartyMemberStatus {
+  awaiting_measurements
+  need_to_order
+  ordered
+  received
+  being_altered
+  ready_for_pickup
+  Selected
+}
+
 model PartyMember {
   id             Int             @id @default(autoincrement())
   partyId        Int
@@ -484,12 +516,21 @@ model PartyMember {
   lsCustomerId   String? // Lightspeed customer ID
   role           String
   notes          String?
-  status         String          @default("Selected")
+  status         PartyMemberStatus @default(awaiting_measurements)
+  suitOrderId    String?
+  accessoriesOrderId String?
+  orderedAt      DateTime?
+  receivedAt     DateTime?
+  alteredAt      DateTime?
+  readyForPickupAt DateTime?
+  pickupDate      DateTime?      // Customer-selected pickup date (not time)
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   appointments   Appointment[]   @relation("MemberAppointments")
   measurements   Json?
   alterationJobs AlterationJob[]
+  weddingSuitId  Int?
+  weddingSuit    WeddingSuit?    @relation(fields: [weddingSuitId], references: [id])
 }
 
 model SaleAssignment {
@@ -596,6 +637,74 @@ model CommunicationLog {
   sentAt    DateTime @default(now())
 }
 
+// Comprehensive notification tracking and management
+model NotificationHistory {
+  id              Int      @id @default(autoincrement())
+  type            String   // appointment_confirmation, appointment_reminder, party_invitation, etc.
+  method          String   // email, sms, both
+  recipient       String   // email or phone
+  subject         String?
+  message         String
+  status          String   // sent, failed, pending
+  sentAt          DateTime @default(now())
+  deliveredAt     DateTime?
+  failedAt        DateTime?
+  errorMessage    String?
+  
+  // Related entities
+  customerId      Int?
+  customer        Customer? @relation("CustomerNotifications", fields: [customerId], references: [id])
+  partyId         Int?
+  party           Party? @relation("PartyNotifications", fields: [partyId], references: [id])
+  appointmentId   Int?
+  appointment     Appointment? @relation("AppointmentNotifications", fields: [appointmentId], references: [id])
+  userId          Int?
+  user            User? @relation("UserNotifications", fields: [userId], references: [id])
+  
+  // Template tracking
+  templateId      Int?
+  template        NotificationTemplate? @relation("TemplateNotifications", fields: [templateId], references: [id])
+  
+  // Metadata
+  metadata        Json?    // Additional context like party name, wedding date, staff name, etc.
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([partyId])
+  @@index([appointmentId])
+  @@index([userId])
+  @@index([type])
+  @@index([status])
+  @@index([sentAt])
+  @@index([templateId])
+}
+
+model NotificationTemplate {
+  id              Int      @id @default(autoincrement())
+  name            String   @unique
+  type            String   // appointment_confirmation, appointment_reminder, party_invitation, etc.
+  subject         String?
+  emailBody       String
+  smsBody         String
+  isDefault       Boolean  @default(false)
+  isActive        Boolean  @default(true)
+  description     String?
+  variables       Json?    // Available placeholders like {customerName}, {partyName}, etc.
+  createdBy       Int?
+  createdByUser   User? @relation("TemplateCreator", fields: [createdBy], references: [id])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Related notifications
+  notifications   NotificationHistory[] @relation("TemplateNotifications")
+
+  @@index([type])
+  @@index([isDefault])
+  @@index([isActive])
+  @@index([createdBy])
+}
+
 // These are read-only mirrors of Lightspeed data for local querying
 model Product {
   id                Int              @id @default(autoincrement())
@@ -610,6 +719,31 @@ model Product {
   saleLineItems     SaleLineItem[]
 
   @@index([lightspeedId])
+}
+
+model WeddingSuit {
+  id          Int      @id @default(autoincrement())
+  vendor      String   // e.g., "Tommy Hilfiger", "Calvin Klein"
+  style       String   // e.g., "Classic Fit", "Slim Fit", "Modern Fit"
+  color       String   // e.g., "Navy", "Charcoal", "Black"
+  size        String   // e.g., "40R", "42L", "44S"
+  price       Float?
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   Int?
+  createdByUser User?  @relation("WeddingSuitCreator", fields: [createdBy], references: [id])
+
+  // Relations
+  partyMembers PartyMember[]
+
+  @@index([vendor])
+  @@index([style])
+  @@index([color])
+  @@index([size])
+  @@index([isActive])
+  @@index([createdBy])
 }
 
 model Sale {
@@ -672,31 +806,43 @@ model AssignmentLog {
   @@index([userId])
 }
 
+model UserSession {
+  id                    String   @id @default(cuid())
+  lightspeedUserId      String   @unique // Lightspeed user ID for persistent sessions
+  lightspeedEmployeeId  String   // Lightspeed employee ID
+  email                 String
+  name                  String
+  role                  String
+  photoUrl              String?
+  lastActiveAt          DateTime @default(now())
+  isActive              Boolean  @default(true)
+  deviceInfo            String?  // JSON string with device information
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  // Legacy fields for backward compatibility
+  userId                Int?     // Optional link to local User
+  user                  User?    @relation("UserSessions", fields: [userId], references: [id], onDelete: SetNull)
+  browserSessionId      String?  // Optional for browser sessions
+  lsAccessToken         String?  @db.Text
+  lsRefreshToken        String?  @db.Text
+  lsDomainPrefix        String?
+  expiresAt             DateTime?
+
+  @@unique([userId, browserSessionId])
+  @@index([browserSessionId])
+  @@index([userId])
+  @@index([lightspeedUserId])
+  @@index([isActive])
+  @@index([lastActiveAt])
+  @@index([expiresAt])
+}
+
 model Session {
   id      String   @id @default(cuid())
   sid     String   @unique
   data    String
   expires DateTime
-}
-
-model UserSession {
-  id              String   @id @default(cuid())
-  userId          Int
-  user            User     @relation("UserSessions", fields: [userId], references: [id], onDelete: Cascade)
-  browserSessionId String  // Links to express session ID
-  lsAccessToken   String   @db.Text
-  lsRefreshToken  String   @db.Text
-  lsDomainPrefix  String
-  expiresAt       DateTime
-  lastActive      DateTime @default(now())
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@unique([userId, browserSessionId])
-  @@index([browserSessionId])
-  @@index([userId])
-  @@index([expiresAt])
-  @@index([lastActive])
 }
 
 // Checklists & Tasks System

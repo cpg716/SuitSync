@@ -9,8 +9,11 @@ import { Input } from '@/components/ui/Input';
 import { Pagination } from '../../components/ui/Pagination';
 import { format, addMonths, differenceInMonths, differenceInDays } from 'date-fns';
 import useSWR from 'swr';
-import { api } from '@/lib/apiClient';
+import { simpleFetcher } from '@/lib/simpleApiClient';
 import { useRouter } from 'next/router';
+import { useAuth } from '../../src/AuthContext';
+import { ResourceSyncStatus } from '../../components/ResourceSyncStatus';
+import { api } from '@/lib/apiClient';
 
 const PHASES = [
   { name: 'Suit Selection', color: 'bg-blue-500', monthsFrom: 6, monthsTo: 3 },
@@ -54,6 +57,144 @@ function ProgressBar({ phase }) {
   );
 }
 
+function StatusSummaryBoxes({ statusCounts, mostBehindStatus }) {
+  const statusConfig = {
+    awaiting_measurements: { label: 'Awaiting Measurements', color: 'bg-red-500', textColor: 'text-white' },
+    need_to_order: { label: 'Need to Order', color: 'bg-orange-500', textColor: 'text-white' },
+    ordered: { label: 'Ordered', color: 'bg-blue-500', textColor: 'text-white' },
+    received: { label: 'Received', color: 'bg-purple-500', textColor: 'text-white' },
+    being_altered: { label: 'Being Altered', color: 'bg-yellow-500', textColor: 'text-black' },
+    ready_for_pickup: { label: 'Ready for Pickup', color: 'bg-green-500', textColor: 'text-white' }
+  };
+
+  return (
+    <div className="grid grid-cols-3 gap-1 mt-2">
+      {Object.entries(statusCounts).map(([status, count]) => {
+        const config = statusConfig[status];
+        const isMostBehind = status === mostBehindStatus;
+        return (
+          <div
+            key={status}
+            className={`${config.color} ${config.textColor} text-xs px-2 py-1 rounded text-center font-medium ${
+              isMostBehind ? 'ring-2 ring-black ring-opacity-50' : ''
+            }`}
+            title={`${config.label}: ${count} member${count !== 1 ? 's' : ''}`}
+          >
+            {String(count)}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function StatusUpdateModal({ open, onClose, member, onSubmit }) {
+  const [form, setForm] = useState({
+    status: member?.status || 'awaiting_measurements',
+    suitOrderId: member?.suitOrderId || '',
+    accessoriesOrderId: member?.accessoriesOrderId || '',
+    notes: member?.notes || ''
+  });
+  const [saving, setSaving] = useState(false);
+
+  const statusOptions = [
+    { value: 'awaiting_measurements', label: 'Awaiting Measurements' },
+    { value: 'need_to_order', label: 'Need to Order' },
+    { value: 'ordered', label: 'Ordered' },
+    { value: 'received', label: 'Received' },
+    { value: 'being_altered', label: 'Being Altered' },
+    { value: 'ready_for_pickup', label: 'Ready for Pickup' }
+  ];
+
+  const handleSubmit = async () => {
+    setSaving(true);
+    try {
+      await onSubmit(form);
+      onClose();
+    } catch (error) {
+      console.error('Error updating status:', error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose}>
+      <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+        <div className="bg-white dark:bg-neutral-900 p-6 rounded shadow-lg w-96 max-h-[90vh] overflow-y-auto">
+          <h2 className="text-xl font-bold mb-4">Update Member Status</h2>
+          
+          {member && (
+            <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-800 rounded">
+              <p className="font-medium">{member.name}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">{member.role}</p>
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Status</label>
+              <select 
+                className="w-full border rounded p-2 dark:bg-gray-800 dark:border-gray-700"
+                value={form.status}
+                onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
+              >
+                {statusOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Suit Order ID</label>
+              <input
+                type="text"
+                className="w-full border rounded p-2 dark:bg-gray-800 dark:border-gray-700"
+                value={form.suitOrderId}
+                onChange={e => setForm(f => ({ ...f, suitOrderId: e.target.value }))}
+                placeholder="Enter suit order ID"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Accessories Order ID</label>
+              <input
+                type="text"
+                className="w-full border rounded p-2 dark:bg-gray-800 dark:border-gray-700"
+                value={form.accessoriesOrderId}
+                onChange={e => setForm(f => ({ ...f, accessoriesOrderId: e.target.value }))}
+                placeholder="Enter accessories order ID"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Notes</label>
+              <textarea
+                className="w-full border rounded p-2 dark:bg-gray-800 dark:border-gray-700"
+                value={form.notes}
+                onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                placeholder="Add any notes..."
+                rows={3}
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-2 justify-end mt-6">
+            <Button onClick={onClose} className="bg-gray-300 text-black dark:bg-gray-800 dark:text-gray-100">
+              Cancel
+            </Button>
+            <Button onClick={handleSubmit} disabled={saving}>
+              {saving ? 'Saving...' : 'Update Status'}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function PartyModal({ open, onClose, onSubmit, initial, customers }) {
   const [form, setForm] = useState(initial || { name: '', eventDate: '', notes: '', customerId: '' });
   const [saving, setSaving] = useState(false);
@@ -86,11 +227,21 @@ function PartyModal({ open, onClose, onSubmit, initial, customers }) {
 // If Party is not defined, define:
 type Party = { id: string; name: string; [key: string]: any };
 
-const fetcher = (url: string): Promise<{ parties: Party[], lightspeedGroups?: any[] }> => Promise.resolve(api.get(url)).then(res => res.data as { parties: Party[], lightspeedGroups?: any[] });
+const fetcher = async (url: string): Promise<{ parties: Party[], lightspeedGroups?: any[] }> => {
+  const result = await simpleFetcher(url);
+  return result as { parties: Party[], lightspeedGroups?: any[] };
+};
 
 export default function PartiesList() {
-  const { data: partiesData, error, isLoading, mutate } = useSWR('/api/parties', fetcher);
-  const { data: customersData } = useSWR('/api/customers', fetcher);
+  const { user, loading: authLoading } = useAuth();
+  const { data: partiesData, error, isLoading, mutate } = useSWR(
+    '/api/customers', 
+    fetcher
+  );
+  const { data: customersData } = useSWR(
+    '/api/customers', 
+    fetcher
+  );
   const isClient = typeof window !== 'undefined';
   const router = isClient ? useRouter() : null;
 
@@ -155,18 +306,27 @@ export default function PartiesList() {
             className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 sm:py-2 focus:outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-gray-800 text-black dark:text-white transition-colors text-sm sm:text-base h-11 sm:h-10"
           />
         </div>
-        <Button
-          className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-2 bg-primary text-white hover:bg-primary/90 min-h-[44px] sm:min-h-[40px] text-sm sm:text-base touch-manipulation"
-          onClick={() => { setEditParty(null); setModalOpen(true); }}
-        >
-          <span className="hidden xs:inline">+ Add Party</span>
-          <span className="xs:hidden">+ Add</span>
-        </Button>
+        <div className="flex items-center gap-2 sm:gap-3">
+          <ResourceSyncStatus resource="groups" />
+          <Button
+            className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-2 bg-primary text-white hover:bg-primary/90 min-h-[44px] sm:min-h-[40px] text-sm sm:text-base touch-manipulation"
+            onClick={() => router.push('/create-party')}
+          >
+            <span className="hidden xs:inline">+ Add Party</span>
+            <span className="xs:hidden">+ Add</span>
+          </Button>
+        </div>
       </div>
 
       {/* Parties Grid/Table - Responsive */}
       <Card className="overflow-hidden">
-        {isLoading ? (
+        {authLoading ? (
+          <div className="space-y-3 p-6">
+            {[...Array(5)].map((_, i) => (
+              <Skeleton key={i} className="h-16 w-full" />
+            ))}
+          </div>
+        ) : isLoading ? (
           <div className="space-y-3 p-6">
             {[...Array(5)].map((_, i) => (
               <Skeleton key={i} className="h-16 w-full" />
@@ -197,7 +357,7 @@ export default function PartiesList() {
                       Customer
                     </th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">
-                      Status
+                      Member Status
                     </th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">
                       Actions
@@ -231,13 +391,15 @@ export default function PartiesList() {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          party.syncedToLs 
-                            ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400' 
-                            : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
-                        }`}>
-                          {party.syncedToLs ? 'Synced' : 'Local'}
-                        </span>
+                        <div className="space-y-2">
+                          <StatusSummaryBoxes 
+                            statusCounts={party.statusCounts || {}} 
+                            mostBehindStatus={party.mostBehindStatus} 
+                          />
+                          <div className="text-xs text-gray-500">
+                            {party.totalMembers || 0} member{(party.totalMembers || 0) !== 1 ? 's' : ''}
+                          </div>
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex space-x-2">
@@ -283,14 +445,20 @@ export default function PartiesList() {
                             day: 'numeric'
                           })}
                         </p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                          {party.groomName} • {party.groomPhone}
+                        </p>
                       </div>
-                      <span className={`inline-flex px-2.5 py-1.5 text-xs font-semibold rounded-full flex-shrink-0 ml-3 ${
-                        party.syncedToLs
-                          ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
-                          : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
-                      }`}>
-                        {party.syncedToLs ? 'Synced' : 'Local'}
-                      </span>
+                    </div>
+
+                    <div className="mb-3">
+                      <StatusSummaryBoxes 
+                        statusCounts={party.statusCounts || {}} 
+                        mostBehindStatus={party.mostBehindStatus} 
+                      />
+                      <div className="text-xs text-gray-500 mt-1">
+                        {party.totalMembers || 0} member{(party.totalMembers || 0) !== 1 ? 's' : ''}
+                      </div>
                     </div>
 
                     <div className="flex items-center justify-between">

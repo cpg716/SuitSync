@@ -8,7 +8,7 @@
   "scripts": {
     "tsoa:routes": "tsoa routes",
     "tsoa:spec": "tsoa spec",
-    "build": "cd backend && pnpm run build",
+    "build": "cd backend && npm run build",
     "seed": "node dist/seed.js",
     "start": "node dist/index.js",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
@@ -21,7 +21,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
     "postinstall": "prisma generate",
-    "sync-types": "cd backend && pnpm run tsoa:spec && cd ../frontend && pnpm run gen:openapi-types"
+    "sync-types": "cd backend && npm run tsoa:spec && cd ../frontend && npm run gen:openapi-types"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.17",

@@ -3,32 +3,30 @@ import logger from '../utils/logger';
 
 const prisma = new PrismaClient();
 
-export interface AppointmentProgress {
-  customerId?: number;
-  partyMemberId?: number;
-  currentStage: number; // 1=first_fitting, 2=alterations_fitting, 3=pickup
-  completedStages: string[];
-  nextStage?: string;
-  nextSuggestedDate?: Date;
-  isComplete: boolean;
-  appointments: {
-    first_fitting?: any;
-    alterations_fitting?: any;
-    pickup?: any;
-  };
-}
-
 export interface TimelineStage {
   stage: number;
   type: string;
   name: string;
   description: string;
-  defaultDuration: number; // in minutes
-  suggestedDaysFromEvent: number; // days before event date
+  defaultDuration: number;
+  suggestedDaysFromEvent: number;
   autoCreateNext: boolean;
+  workflowStatus: string; // Maps to the 7-stage workflow
 }
 
-// Wedding appointment timeline configuration
+export interface AppointmentProgress {
+  customerId?: number;
+  partyMemberId?: number;
+  currentStage: number;
+  completedStages: string[];
+  nextStage?: string;
+  isComplete: boolean;
+  appointments: Record<string, any>;
+  workflowStatus: string;
+  progressPercentage: number;
+}
+
+// Enhanced wedding appointment timeline configuration with 7-stage workflow mapping
 export const WEDDING_TIMELINE: TimelineStage[] = [
   {
     stage: 1,
@@ -37,7 +35,8 @@ export const WEDDING_TIMELINE: TimelineStage[] = [
     description: 'Initial measurements and suit selection',
     defaultDuration: 90,
     suggestedDaysFromEvent: 90, // 3 months before
-    autoCreateNext: true
+    autoCreateNext: true,
+    workflowStatus: 'Measured'
   },
   {
     stage: 2,
@@ -46,7 +45,8 @@ export const WEDDING_TIMELINE: TimelineStage[] = [
     description: 'Alterations and adjustments',
     defaultDuration: 60,
     suggestedDaysFromEvent: 45, // 1.5 months before
-    autoCreateNext: true
+    autoCreateNext: true,
+    workflowStatus: 'Altered'
   },
   {
     stage: 3,
@@ -55,8 +55,20 @@ export const WEDDING_TIMELINE: TimelineStage[] = [
     description: 'Final garment collection',
     defaultDuration: 30,
     suggestedDaysFromEvent: 7, // 1 week before
-    autoCreateNext: false
+    autoCreateNext: false,
+    workflowStatus: 'PickedUp'
   }
+];
+
+// Complete 7-stage workflow mapping
+export const WORKFLOW_STAGES = [
+  { stage: 1, status: 'Selected', description: 'Suit selected, customer added to party' },
+  { stage: 2, status: 'Measured', description: 'First fitting completed, measurements taken' },
+  { stage: 3, status: 'Ordered', description: 'Suit ordered from manufacturer' },
+  { stage: 4, status: 'Fitted', description: 'Initial fitting with ordered suit' },
+  { stage: 5, status: 'Altered', description: 'Alterations fitting completed' },
+  { stage: 6, status: 'Ready', description: 'Suit ready for pickup' },
+  { stage: 7, status: 'PickedUp', description: 'Suit picked up by customer' }
 ];
 
 /**
@@ -99,7 +111,9 @@ export async function getAppointmentProgress(
         completedStages: [],
         nextStage: 'first_fitting',
         isComplete: false,
-        appointments: {}
+        appointments: {},
+        workflowStatus: 'Selected',
+        progressPercentage: 0
       };
     }
 
@@ -139,21 +153,30 @@ export async function getAppointmentProgress(
       nextStage = 'pickup';
     }
 
-    // Calculate next suggested date
-    let nextSuggestedDate: Date | undefined;
-    if (nextStage) {
-      const nextStageConfig = WEDDING_TIMELINE.find(s => s.type === nextStage);
-      if (nextStageConfig) {
-        // Get event date from party
-        const eventDate = appointments[0]?.party?.eventDate;
-        if (eventDate) {
-          nextSuggestedDate = new Date(eventDate);
-          nextSuggestedDate.setDate(
-            nextSuggestedDate.getDate() - nextStageConfig.suggestedDaysFromEvent
-          );
-        }
-      }
+    // Determine workflow status based on completed appointments
+    let workflowStatus = 'Selected';
+    if (completedStages.includes('first_fitting')) {
+      workflowStatus = 'Measured';
     }
+    if (completedStages.includes('first_fitting') && appointmentsByType.first_fitting?.status === 'completed') {
+      workflowStatus = 'Ordered'; // Assume order is placed after first fitting
+    }
+    if (completedStages.includes('alterations_fitting')) {
+      workflowStatus = 'Fitted';
+    }
+    if (completedStages.includes('alterations_fitting') && appointmentsByType.alterations_fitting?.status === 'completed') {
+      workflowStatus = 'Altered';
+    }
+    if (completedStages.includes('pickup') && appointmentsByType.pickup?.status === 'scheduled') {
+      workflowStatus = 'Ready';
+    }
+    if (completedStages.includes('pickup') && appointmentsByType.pickup?.status === 'completed') {
+      workflowStatus = 'PickedUp';
+    }
+
+    // Calculate progress percentage
+    const workflowStageIndex = WORKFLOW_STAGES.findIndex(stage => stage.status === workflowStatus);
+    const progressPercentage = workflowStageIndex >= 0 ? ((workflowStageIndex + 1) / WORKFLOW_STAGES.length) * 100 : 0;
 
     return {
       customerId,
@@ -161,9 +184,10 @@ export async function getAppointmentProgress(
       currentStage,
       completedStages,
       nextStage,
-      nextSuggestedDate,
-      isComplete: completedStages.length === WEDDING_TIMELINE.length,
-      appointments: appointmentsByType
+      isComplete: completedStages.includes('pickup'),
+      appointments: appointmentsByType,
+      workflowStatus,
+      progressPercentage
     };
 
   } catch (error) {
@@ -223,20 +247,29 @@ export async function getPartyProgress(partyId: number) {
 }
 
 /**
- * Suggest next appointment date based on timeline and event date
+ * Suggest the next appointment date based on event date and appointment type
  */
-export function suggestNextAppointmentDate(
-  eventDate: Date,
-  appointmentType: string,
-  existingAppointments: any[] = []
-): Date | null {
-  const stageConfig = WEDDING_TIMELINE.find(s => s.type === appointmentType);
-  if (!stageConfig) {
-    return null;
-  }
+export function suggestNextAppointmentDate(eventDate: string | Date, appointmentType: string): Date | undefined {
+  const weddingDate = new Date(eventDate);
+  const suggestedDate = new Date(weddingDate);
 
-  const suggestedDate = new Date(eventDate);
-  suggestedDate.setDate(suggestedDate.getDate() - stageConfig.suggestedDaysFromEvent);
+  switch (appointmentType) {
+    case 'first_fitting':
+      // First fitting: 3 months before wedding
+      suggestedDate.setMonth(weddingDate.getMonth() - 3);
+      break;
+    case 'alterations_fitting':
+      // Alterations fitting: 1.5 months (6 weeks) before wedding
+      suggestedDate.setMonth(weddingDate.getMonth() - 1);
+      suggestedDate.setDate(weddingDate.getDate() - 14); // Additional 2 weeks
+      break;
+    case 'pickup':
+      // Pickup: 1 week before wedding
+      suggestedDate.setDate(weddingDate.getDate() - 7);
+      break;
+    default:
+      return undefined;
+  }
 
   // Adjust for weekends (move to Friday if weekend)
   const dayOfWeek = suggestedDate.getDay();
@@ -253,18 +286,19 @@ export function suggestNextAppointmentDate(
 }
 
 /**
- * Check if automatic next appointment should be created
+ * Determine if the next appointment should be created
  */
-export async function shouldCreateNextAppointment(
-  appointmentId: number
-): Promise<{ shouldCreate: boolean; nextType?: string; suggestedDate?: Date }> {
+export async function shouldCreateNextAppointment(appointmentId: number): Promise<{
+  shouldCreate: boolean;
+  nextType?: string;
+  suggestedDate?: Date;
+}> {
   try {
     const appointment = await prisma.appointment.findUnique({
       where: { id: appointmentId },
       include: {
         party: true,
-        member: true,
-        individualCustomer: true
+        member: true
       }
     });
 
@@ -272,21 +306,27 @@ export async function shouldCreateNextAppointment(
       return { shouldCreate: false };
     }
 
-    const currentStageConfig = WEDDING_TIMELINE.find(s => s.type === appointment.type);
-    if (!currentStageConfig || !currentStageConfig.autoCreateNext) {
+    // Check if auto-schedule is enabled
+    if (!appointment.autoScheduleNext) {
       return { shouldCreate: false };
     }
 
-    const nextStageIndex = currentStageConfig.stage;
-    const nextStageConfig = WEDDING_TIMELINE.find(s => s.stage === nextStageIndex + 1);
-    
-    if (!nextStageConfig) {
-      return { shouldCreate: false };
+    // Determine next appointment type based on current type
+    let nextType: string | undefined;
+    switch (appointment.type) {
+      case 'first_fitting':
+        nextType = 'alterations_fitting';
+        break;
+      case 'alterations_fitting':
+        nextType = 'pickup';
+        break;
+      default:
+        return { shouldCreate: false };
     }
 
     // Check if next appointment already exists
     const whereClause: any = {
-      type: nextStageConfig.type
+      type: nextType
     };
     
     if (appointment.memberId) {
@@ -304,18 +344,15 @@ export async function shouldCreateNextAppointment(
     }
 
     // Calculate suggested date
-    let suggestedDate: Date | null = null;
+    let suggestedDate: Date | undefined;
     if (appointment.party?.eventDate) {
-      suggestedDate = suggestNextAppointmentDate(
-        appointment.party.eventDate,
-        nextStageConfig.type
-      );
+      suggestedDate = suggestNextAppointmentDate(appointment.party.eventDate, nextType);
     }
 
     return {
       shouldCreate: true,
-      nextType: nextStageConfig.type,
-      suggestedDate: suggestedDate || undefined
+      nextType,
+      suggestedDate
     };
 
   } catch (error) {
@@ -336,4 +373,42 @@ export function getTimelineStage(appointmentType: string): TimelineStage | null 
  */
 export function getAllTimelineStages(): TimelineStage[] {
   return WEDDING_TIMELINE;
+}
+
+/**
+ * Get workflow status for a party member
+ */
+export async function getPartyMemberWorkflowStatus(memberId: number): Promise<{
+  status: string;
+  stage: number;
+  progressPercentage: number;
+  nextAction?: string;
+}> {
+  const progress = await getAppointmentProgress(undefined, memberId);
+  
+  if (!progress) {
+    return {
+      status: 'Selected',
+      stage: 1,
+      progressPercentage: 0
+    };
+  }
+
+  const workflowStage = WORKFLOW_STAGES.find(stage => stage.status === progress.workflowStatus);
+  const stage = workflowStage ? workflowStage.stage : 1;
+
+  let nextAction: string | undefined;
+  if (progress.nextStage) {
+    const nextStageConfig = WEDDING_TIMELINE.find(s => s.type === progress.nextStage);
+    if (nextStageConfig) {
+      nextAction = `Schedule ${nextStageConfig.name}`;
+    }
+  }
+
+  return {
+    status: progress.workflowStatus,
+    stage,
+    progressPercentage: progress.progressPercentage,
+    nextAction
+  };
 }

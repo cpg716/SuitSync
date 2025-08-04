@@ -12,6 +12,14 @@ export interface WorkflowTriggerResult {
   nextAppointmentId?: number;
   alterationJobId?: number;
   orderStubId?: string;
+  requiresNextScheduling?: boolean;
+  suggestedNextAppointment?: {
+    type: string;
+    name: string;
+    description: string;
+    suggestedDate: Date;
+    defaultDuration: number;
+  };
 }
 
 /**
@@ -25,96 +33,222 @@ export async function executeWorkflowTriggers(appointmentId: number): Promise<Wo
   };
 
   try {
+    // Get the completed appointment with party and member info
     const appointment = await prisma.appointment.findUnique({
       where: { id: appointmentId },
       include: {
-        party: true,
+        party: {
+          include: {
+            members: {
+              include: {
+                appointments: {
+                  orderBy: { dateTime: 'asc' }
+                }
+              }
+            }
+          }
+        },
         member: true,
-        individualCustomer: true,
-        tailor: true
+        individualCustomer: true
       }
     });
 
     if (!appointment) {
-      result.success = false;
       result.errors.push('Appointment not found');
-      return result;
-    }
-
-    if (appointment.status !== 'completed') {
       result.success = false;
-      result.errors.push('Appointment must be completed to trigger workflow');
       return result;
     }
 
-    logger.info(`Executing workflow triggers for appointment ${appointmentId} (type: ${appointment.type})`);
-
-    // 1. Auto-schedule next appointment
-    const nextAppointmentResult = await autoScheduleNextAppointment(appointment);
-    if (nextAppointmentResult.success) {
-      result.actions.push(...nextAppointmentResult.actions);
-      if (nextAppointmentResult.nextAppointmentId) {
-        result.nextAppointmentId = nextAppointmentResult.nextAppointmentId;
-      }
-    } else {
-      result.errors.push(...nextAppointmentResult.errors);
-    }
-
-    // 2. Create alteration card for alterations fitting
-    if (appointment.type === 'alterations_fitting') {
-      const alterationResult = await createAlterationCard(appointment);
-      if (alterationResult.success) {
-        result.actions.push(...alterationResult.actions);
-        if (alterationResult.alterationJobId) {
-          result.alterationJobId = alterationResult.alterationJobId;
-        }
-      } else {
-        result.errors.push(...alterationResult.errors);
-      }
-    }
-
-    // 3. Generate order stub for first fitting
-    if (appointment.type === 'first_fitting') {
-      const orderResult = await generateOrderStub(appointment);
-      if (orderResult.success) {
-        result.actions.push(...orderResult.actions);
-        if (orderResult.orderStubId) {
-          result.orderStubId = orderResult.orderStubId;
-        }
-      } else {
-        result.errors.push(...orderResult.errors);
-      }
-    }
-
-    // 4. Schedule pickup notifications for completed suits
-    if (appointment.type === 'pickup') {
-      const notificationResult = await schedulePickupNotifications(appointment);
-      if (notificationResult.success) {
-        result.actions.push(...notificationResult.actions);
-      } else {
-        result.errors.push(...notificationResult.errors);
-      }
-    }
-
-    logger.info(`Workflow triggers completed for appointment ${appointmentId}`, {
-      actions: result.actions,
-      errors: result.errors
+    // Mark appointment as completed
+    await prisma.appointment.update({
+      where: { id: appointmentId },
+      data: { status: 'completed' }
     });
+    result.actions.push('Marked appointment as completed');
 
-    return result;
+    // Handle party-based appointments
+    if (appointment.partyId && appointment.memberId) {
+      const party = appointment.party;
+      const member = appointment.member;
+      
+      if (!party || !member) {
+        result.errors.push('Party or member not found');
+        result.success = false;
+        return result;
+      }
 
-  } catch (error: any) {
+      // Update member's workflow status based on appointment type
+      const newStatus = getNextWorkflowStatus(appointment.type || 'fitting', member.status || 'Selected');
+      await prisma.partyMember.update({
+        where: { id: member.id },
+        data: { status: newStatus as any }
+      });
+      result.actions.push(`Updated member workflow status to: ${newStatus}`);
+
+      // Check if we need to schedule the next appointment
+      const nextAppointmentInfo = getNextAppointmentInfo(appointment.type || 'fitting', party.eventDate);
+      
+      if (nextAppointmentInfo && nextAppointmentInfo.type !== 'pickup') {
+        // Instead of auto-scheduling, indicate that next appointment needs to be scheduled
+        result.requiresNextScheduling = true;
+        result.suggestedNextAppointment = {
+          type: nextAppointmentInfo.type,
+          name: nextAppointmentInfo.name,
+          description: nextAppointmentInfo.description,
+          suggestedDate: nextAppointmentInfo.suggestedDate,
+          defaultDuration: nextAppointmentInfo.defaultDuration
+        };
+        result.actions.push('Next appointment scheduling required');
+      }
+
+      // Handle specific appointment type actions
+      switch (appointment.type) {
+        case 'first_fitting':
+          // After first fitting, member should be in "awaiting_measurements" status
+          // This triggers the need to input measurements
+          result.actions.push('Member status set to awaiting_measurements - measurements need to be input');
+          result.actions.push('After measurements are input, status will automatically change to need_to_order');
+          break;
+
+        case 'alterations_fitting':
+          // After alterations fitting, member should be in "being_altered" status
+          // This triggers the need to create alterations job and input alterations
+          result.actions.push('Member status set to being_altered - alterations need to be input');
+          result.actions.push('Create alterations job with specific alterations needed');
+          result.actions.push('Print alterations ticket with QR codes for each part');
+          break;
+
+        case 'pickup':
+          // Final pickup - no more appointments needed
+          result.actions.push('Final pickup completed - workflow finished');
+          break;
+      }
+    }
+
+    // Handle individual customer appointments
+    if (appointment.individualCustomerId) {
+      // For individual customers, just mark as completed
+      result.actions.push('Individual customer appointment completed');
+    }
+
+    // Schedule reminders for the completed appointment (if needed)
+    try {
+      await scheduleAppointmentReminders(appointmentId);
+      result.actions.push('Scheduled appointment reminders');
+    } catch (error) {
+      logger.error('Error scheduling reminders:', error);
+      result.errors.push('Failed to schedule reminders');
+    }
+
+  } catch (error) {
     logger.error('Error executing workflow triggers:', error);
     result.success = false;
-    result.errors.push(error.message || 'Unknown error occurred');
-    return result;
+    result.errors.push('Internal server error');
+  }
+
+  return result;
+}
+
+/**
+ * Get the next workflow status based on current appointment type and status
+ */
+function getNextWorkflowStatus(appointmentType: string, currentStatus: string): string {
+  // Map old status names to new enum values for backward compatibility
+  const statusMapping: { [key: string]: string } = {
+    'Selected': 'awaiting_measurements',
+    'Measured': 'need_to_order',
+    'Ordered': 'ordered',
+    'Fitted': 'being_altered',
+    'Altered': 'ready_for_pickup',
+    'Ready': 'ready_for_pickup',
+    'Picked Up': 'ready_for_pickup'
+  };
+
+  // Convert old status to new status if needed
+  const normalizedStatus = statusMapping[currentStatus] || currentStatus;
+
+  switch (appointmentType) {
+    case 'first_fitting':
+      // After first fitting, member should be in "awaiting_measurements" status
+      // Measurements will be taken and status will change to "need_to_order"
+      return 'awaiting_measurements';
+    case 'alterations_fitting':
+      // After alterations fitting, member should be in "being_altered" status
+      return 'being_altered';
+    case 'pickup':
+      // After pickup, member should be in "ready_for_pickup" status
+      return 'ready_for_pickup';
+    default:
+      return normalizedStatus;
   }
 }
 
 /**
- * Auto-schedule the next appointment in the timeline
+ * Get information about the next appointment that needs to be scheduled
  */
-async function autoScheduleNextAppointment(appointment: any): Promise<WorkflowTriggerResult> {
+function getNextAppointmentInfo(currentAppointmentType: string, eventDate: Date) {
+  const weddingDate = new Date(eventDate);
+  
+  switch (currentAppointmentType) {
+    case 'first_fitting':
+      return {
+        type: 'alterations_fitting',
+        name: 'Alterations Fitting',
+        description: 'Alterations and adjustments',
+        suggestedDate: calculateSuggestedDate(weddingDate, -42), // 6 weeks before
+        defaultDuration: 60
+      };
+    
+    case 'alterations_fitting':
+      return {
+        type: 'pickup',
+        name: 'Final Pickup',
+        description: 'Pick up completed suit',
+        suggestedDate: calculateSuggestedDate(weddingDate, -7), // 1 week before
+        defaultDuration: 30
+      };
+    
+    case 'pickup':
+      return null; // No more appointments needed
+    
+    default:
+      return null;
+  }
+}
+
+/**
+ * Calculate suggested date with weekend adjustment
+ */
+function calculateSuggestedDate(weddingDate: Date, daysBefore: number): Date {
+  const suggestedDate = new Date(weddingDate);
+  suggestedDate.setDate(weddingDate.getDate() + daysBefore);
+  
+  // Adjust for weekends - move to Friday
+  const dayOfWeek = suggestedDate.getDay();
+  if (dayOfWeek === 0) { // Sunday
+    suggestedDate.setDate(suggestedDate.getDate() - 2);
+  } else if (dayOfWeek === 6) { // Saturday
+    suggestedDate.setDate(suggestedDate.getDate() - 1);
+  }
+  
+  // Set default time to 10:00 AM
+  suggestedDate.setHours(10, 0, 0, 0);
+  
+  return suggestedDate;
+}
+
+/**
+ * Manually schedule the next appointment after user selects date/time
+ */
+export async function scheduleNextAppointment(
+  partyId: number,
+  memberId: number,
+  appointmentType: string,
+  dateTime: Date,
+  durationMinutes: number,
+  tailorId?: number,
+  notes?: string
+): Promise<WorkflowTriggerResult> {
   const result: WorkflowTriggerResult = {
     success: true,
     actions: [],
@@ -122,268 +256,36 @@ async function autoScheduleNextAppointment(appointment: any): Promise<WorkflowTr
   };
 
   try {
-    const shouldCreate = await shouldCreateNextAppointment(appointment.id);
-    
-    if (!shouldCreate.shouldCreate || !shouldCreate.nextType) {
-      result.actions.push('No next appointment needed');
-      return result;
-    }
-
-    // Check if next appointment already exists
-    const whereClause: any = {
-      type: shouldCreate.nextType
-    };
-    
-    if (appointment.memberId) {
-      whereClause.memberId = appointment.memberId;
-    } else if (appointment.individualCustomerId) {
-      whereClause.individualCustomerId = appointment.individualCustomerId;
-    }
-
-    const existingNext = await prisma.appointment.findFirst({
-      where: whereClause
-    });
-
-    if (existingNext) {
-      result.actions.push(`Next appointment (${shouldCreate.nextType}) already exists`);
-      return result;
-    }
-
-    // Create the next appointment
-    const nextStageConfig = WEDDING_TIMELINE.find(s => s.type === shouldCreate.nextType);
-    if (!nextStageConfig) {
-      result.errors.push(`Invalid next appointment type: ${shouldCreate.nextType}`);
-      return result;
-    }
-
-    const appointmentData: any = {
-      type: shouldCreate.nextType,
-      status: 'scheduled',
-      durationMinutes: nextStageConfig.defaultDuration,
-      notes: `Auto-scheduled ${nextStageConfig.name} following completed ${appointment.type}`,
-      autoScheduleNext: true,
-      workflowStage: nextStageConfig.stage
-    };
-
-    // Set the date if suggested
-    if (shouldCreate.suggestedDate) {
-      appointmentData.dateTime = shouldCreate.suggestedDate;
-    } else if (appointment.party?.eventDate) {
-      const suggestedDate = suggestNextAppointmentDate(
-        appointment.party.eventDate,
-        shouldCreate.nextType
-      );
-      if (suggestedDate) {
-        appointmentData.dateTime = suggestedDate;
-      }
-    }
-
-    // Copy customer/party information
-    if (appointment.memberId) {
-      appointmentData.memberId = appointment.memberId;
-      appointmentData.partyId = appointment.partyId;
-    } else if (appointment.individualCustomerId) {
-      appointmentData.individualCustomerId = appointment.individualCustomerId;
-    }
-
-    // Link to previous appointment
-    appointmentData.parentId = appointment.id;
-
-    const nextAppointment = await prisma.appointment.create({
-      data: appointmentData
-    });
-
-    // Update the current appointment to link to the next one
-    await prisma.appointment.update({
-      where: { id: appointment.id },
-      data: { nextAppointmentId: nextAppointment.id }
-    });
-
-    result.nextAppointmentId = nextAppointment.id;
-    result.actions.push(`Auto-scheduled ${nextStageConfig.name} appointment for ${appointmentData.dateTime ? new Date(appointmentData.dateTime).toLocaleDateString() : 'TBD'}`);
-
-    // Schedule reminder notifications for the new appointment
-    if (appointmentData.dateTime) {
-      try {
-        await scheduleAppointmentReminders(nextAppointment.id);
-        result.actions.push('Scheduled reminder notifications for new appointment');
-      } catch (notificationError: any) {
-        logger.error('Error scheduling reminders for new appointment:', notificationError);
-        result.errors.push('Failed to schedule reminder notifications');
-      }
-    }
-
-    return result;
-
-  } catch (error: any) {
-    logger.error('Error auto-scheduling next appointment:', error);
-    result.success = false;
-    result.errors.push(error.message || 'Failed to auto-schedule next appointment');
-    return result;
-  }
-}
-
-/**
- * Create alteration card when alterations fitting is completed
- */
-async function createAlterationCard(appointment: any): Promise<WorkflowTriggerResult> {
-  const result: WorkflowTriggerResult = {
-    success: true,
-    actions: [],
-    errors: []
-  };
-
-  try {
-    // Check if alteration job already exists
-    const whereClause: any = {};
-    if (appointment.memberId) {
-      whereClause.partyMemberId = appointment.memberId;
-    } else if (appointment.individualCustomerId) {
-      whereClause.customerId = appointment.individualCustomerId;
-    }
-
-    const existingJob = await prisma.alterationJob.findFirst({
-      where: whereClause
-    });
-
-    if (existingJob) {
-      result.actions.push('Alteration job already exists');
-      return result;
-    }
-
-    // Generate job number
-    const jobCount = await prisma.alterationJob.count();
-    const jobNumber = `ALT-${String(jobCount + 1).padStart(6, '0')}`;
-
-    // Create alteration job
-    const alterationJob = await prisma.alterationJob.create({
+    const appointment = await prisma.appointment.create({
       data: {
-        jobNumber,
-        customerId: appointment.individualCustomerId,
-        partyId: appointment.partyId,
-        partyMemberId: appointment.memberId,
-        status: 'pending',
-        notes: `Auto-created from ${appointment.type} appointment`,
-        receivedDate: new Date(),
-        // Set due date based on pickup appointment or event date
-        dueDate: appointment.party?.eventDate 
-          ? new Date(new Date(appointment.party.eventDate).getTime() - (7 * 24 * 60 * 60 * 1000)) // 1 week before event
-          : new Date(Date.now() + (14 * 24 * 60 * 60 * 1000)) // 2 weeks from now
+        partyId,
+        memberId,
+        type: appointmentType as any, // Cast to AppointmentType enum
+        dateTime,
+        durationMinutes,
+        tailorId,
+        notes,
+        status: 'scheduled'
       }
     });
 
-    result.alterationJobId = alterationJob.id;
-    result.actions.push(`Created alteration job ${jobNumber}`);
+    result.nextAppointmentId = appointment.id;
+    result.actions.push(`Scheduled ${appointmentType} appointment`);
 
-    return result;
-
-  } catch (error: any) {
-    logger.error('Error creating alteration card:', error);
-    result.success = false;
-    result.errors.push(error.message || 'Failed to create alteration card');
-    return result;
-  }
-}
-
-/**
- * Generate order stub for suit ordering (4 weeks before alterations fitting)
- */
-async function generateOrderStub(appointment: any): Promise<WorkflowTriggerResult> {
-  const result: WorkflowTriggerResult = {
-    success: true,
-    actions: [],
-    errors: []
-  };
-
-  try {
-    // Calculate order date (4 weeks before alterations fitting)
-    let orderDate = new Date();
-    
-    if (appointment.party?.eventDate) {
-      // Calculate alterations fitting date (1.5 months before event)
-      const alterationsFittingDate = new Date(appointment.party.eventDate);
-      alterationsFittingDate.setDate(alterationsFittingDate.getDate() - 45);
-      
-      // Order date is 4 weeks before alterations fitting
-      orderDate = new Date(alterationsFittingDate);
-      orderDate.setDate(orderDate.getDate() - 28);
+    // Schedule reminders for the new appointment
+    try {
+      await scheduleAppointmentReminders(appointment.id);
+      result.actions.push('Scheduled appointment reminders');
+    } catch (error) {
+      logger.error('Error scheduling reminders:', error);
+      result.errors.push('Failed to schedule reminders');
     }
 
-    // For now, just log the order stub creation
-    // In a real implementation, this would integrate with inventory/ordering system
-    const orderStubId = `ORDER-${Date.now()}`;
-    
-    result.orderStubId = orderStubId;
-    result.actions.push(`Generated order stub ${orderStubId} for ${orderDate.toLocaleDateString()}`);
-
-    // TODO: Integrate with actual ordering system
-    // - Create order in inventory system
-    // - Schedule order reminder notifications
-    // - Link to customer measurements
-
-    return result;
-
-  } catch (error: any) {
-    logger.error('Error generating order stub:', error);
+  } catch (error) {
+    logger.error('Error scheduling next appointment:', error);
     result.success = false;
-    result.errors.push(error.message || 'Failed to generate order stub');
-    return result;
+    result.errors.push('Failed to schedule appointment');
   }
-}
 
-/**
- * Schedule pickup notifications when suit is completed
- */
-async function schedulePickupNotifications(appointment: any): Promise<WorkflowTriggerResult> {
-  const result: WorkflowTriggerResult = {
-    success: true,
-    actions: [],
-    errors: []
-  };
-
-  try {
-    // This would typically be triggered when tailoring is marked as complete
-    // For now, we'll schedule a pickup ready notification
-    
-    // Get customer contact info
-    let customerEmail: string | null = null;
-    let customerPhone: string | null = null;
-    let customerName: string = '';
-
-    if (appointment.individualCustomer) {
-      customerEmail = appointment.individualCustomer.email;
-      customerPhone = appointment.individualCustomer.phone;
-      customerName = appointment.individualCustomer.name;
-    } else if (appointment.member && appointment.party) {
-      // For party members, we'd need to get contact info from the party or member
-      customerName = `${appointment.party.name} - ${appointment.member.role}`;
-    }
-
-    if (customerEmail || customerPhone) {
-      // Schedule pickup ready notification
-      await prisma.notificationSchedule.create({
-        data: {
-          appointmentId: appointment.id,
-          type: 'pickup_ready',
-          scheduledFor: new Date(), // Send immediately when suit is ready
-          method: customerEmail && customerPhone ? 'both' : customerEmail ? 'email' : 'sms',
-          recipient: customerEmail || customerPhone || '',
-          subject: 'Your garment is ready for pickup!',
-          message: `Hi ${customerName}, your garment is ready for pickup at our store.`
-        }
-      });
-
-      result.actions.push('Scheduled pickup ready notification');
-    } else {
-      result.actions.push('No contact info available for pickup notification');
-    }
-
-    return result;
-
-  } catch (error: any) {
-    logger.error('Error scheduling pickup notifications:', error);
-    result.success = false;
-    result.errors.push(error.message || 'Failed to schedule pickup notifications');
-    return result;
-  }
+  return result;
 }

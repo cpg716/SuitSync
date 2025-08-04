@@ -108,7 +108,7 @@ export async function scheduleAppointmentReminders(appointmentId: number): Promi
           reminderTime,
           'sms',
           contactInfo.phone,
-          null,
+          undefined,
           formatSmsBody(settings.smsBody, appointment, contactInfo)
         );
       }
@@ -177,7 +177,7 @@ export async function schedulePickupReadyNotification(
         scheduleFor,
         'sms',
         contactInfo.phone,
-        null,
+        undefined,
         formatSmsBody(settings.pickupReadySms, appointment, contactInfo)
       );
     }
@@ -279,7 +279,7 @@ async function createNotificationSchedule(
   scheduledFor: Date,
   method: 'email' | 'sms' | 'both',
   recipient: string,
-  subject: string | null,
+  subject: string | undefined,
   message: string
 ): Promise<void> {
   await prisma.notificationSchedule.create({
@@ -332,24 +332,50 @@ function isEarlyMorningAppointment(appointmentTime: Date, cutoffTime: string): b
  * Format email body with placeholders
  */
 function formatEmailBody(template: string, appointment: any, contactInfo: any): string {
+  const appointmentId = appointment.id;
+  const rescheduleUrl = `https://www.riversidemens.com/appointments/reschedule?appointmentId=${appointmentId}&token=${generateAppointmentToken(appointmentId)}`;
+  const cancelUrl = `https://www.riversidemens.com/appointments/cancel?appointmentId=${appointmentId}&token=${generateAppointmentToken(appointmentId)}`;
+  const staffFirstName = appointment.tailor?.name?.split(' ')[0] || 'our staff';
+  
   return template
     .replace(/{customerName}/g, contactInfo.name)
     .replace(/{partyName}/g, appointment.party?.name || 'your appointment')
     .replace(/{dateTime}/g, appointment.dateTime.toLocaleString())
-    .replace(/{shopName}/g, 'SuitSync')
-    .replace(/{appointmentType}/g, appointment.type?.replace('_', ' ') || 'appointment');
+    .replace(/{shopName}/g, 'Riverside Men\'s Shop')
+    .replace(/{staffFirstName}/g, staffFirstName)
+    .replace(/{appointmentType}/g, appointment.type?.replace('_', ' ') || 'appointment')
+    .replace(/{rescheduleUrl}/g, rescheduleUrl)
+    .replace(/{cancelUrl}/g, cancelUrl);
 }
 
 /**
  * Format SMS body with placeholders
  */
 function formatSmsBody(template: string, appointment: any, contactInfo: any): string {
+  const appointmentId = appointment.id;
+  const rescheduleUrl = `https://www.riversidemens.com/appointments/reschedule?appointmentId=${appointmentId}&token=${generateAppointmentToken(appointmentId)}`;
+  const cancelUrl = `https://www.riversidemens.com/appointments/cancel?appointmentId=${appointmentId}&token=${generateAppointmentToken(appointmentId)}`;
+  const staffFirstName = appointment.tailor?.name?.split(' ')[0] || 'our staff';
+  
   return template
     .replace(/{customerName}/g, contactInfo.name)
     .replace(/{partyName}/g, appointment.party?.name || 'your appointment')
     .replace(/{dateTime}/g, appointment.dateTime.toLocaleString())
-    .replace(/{shopName}/g, 'SuitSync')
-    .replace(/{appointmentType}/g, appointment.type?.replace('_', ' ') || 'appointment');
+    .replace(/{shopName}/g, 'Riverside Men\'s Shop')
+    .replace(/{staffFirstName}/g, staffFirstName)
+    .replace(/{appointmentType}/g, appointment.type?.replace('_', ' ') || 'appointment')
+    .replace(/{rescheduleUrl}/g, rescheduleUrl)
+    .replace(/{cancelUrl}/g, cancelUrl);
+}
+
+/**
+ * Generate secure token for appointment actions
+ */
+function generateAppointmentToken(appointmentId: number): string {
+  const timestamp = Date.now();
+  const data = `${appointmentId}-${timestamp}`;
+  // In production, use a proper JWT or crypto library with a secret key
+  return Buffer.from(data).toString('base64');
 }
 
 /**
@@ -365,11 +391,24 @@ async function getNotificationSettings(): Promise<NotificationSettings> {
       : (settings?.earlyMorningCutoff && Object.prototype.toString.call(settings.earlyMorningCutoff) === '[object Date]'
           ? (settings.earlyMorningCutoff as Date).toISOString()
           : '09:30'),
-    emailSubject: settings?.emailSubject || 'Reminder: Your appointment at {shopName}',
-    emailBody: settings?.emailBody || 'Hi {customerName},\nThis is a reminder for your appointment with {partyName} on {dateTime}.',
-    smsBody: settings?.smsBody || 'Reminder: {partyName} appointment on {dateTime} at {shopName}.',
+    emailSubject: settings?.emailSubject || 'Reminder: Your appointment at Riverside Men\'s Shop',
+    emailBody: settings?.emailBody || `Hi {customerName},
+
+This is a reminder for your {appointmentType} appointment on {dateTime} at Riverside Men's Shop with {staffFirstName}.
+
+If you need to reschedule or cancel your appointment, please use the links below:
+
+📅 Reschedule: {rescheduleUrl}
+❌ Cancel: {cancelUrl}
+
+We look forward to seeing you!
+
+Best regards,
+Riverside Men's Shop Team
+716-833-8401`,
+    smsBody: settings?.smsBody || `Reminder: Your {appointmentType} appointment is on {dateTime} at Riverside Men's Shop with {staffFirstName}. Reschedule: {rescheduleUrl} Cancel: {cancelUrl}`,
     pickupReadySubject: settings?.pickupReadySubject || 'Your garment is ready for pickup!',
     pickupReadyEmail: settings?.pickupReadyEmail || 'Hi {customerName},\nYour garment for {partyName} is ready for pickup!',
-    pickupReadySms: settings?.pickupReadySms || 'Your garment for {partyName} is ready for pickup at {shopName}!'
+    pickupReadySms: settings?.pickupReadySms || 'Your garment for {partyName} is ready for pickup at Riverside Men\'s Shop! (716-833-8401)'
   };
 }

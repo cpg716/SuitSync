@@ -33,27 +33,22 @@ export function UnifiedSyncStatus() {
   );
 
   const syncStatuses = data?.syncStatuses || [];
-  const anyFailed = syncStatuses.some(s => s.status === 'FAILED');
-  const anySyncing = syncStatuses.some(s => s.status === 'SYNCING');
-  const allSuccess = syncStatuses.length > 0 && syncStatuses.every(s => s.status === 'SUCCESS');
+  const overallStatus = data?.lightspeedConnection === 'ERROR' ? 'ERROR' : 'OK';
+  const hasErrors = data?.lightspeedApiError || data?.databaseError || false;
 
   let summaryIcon, summaryColor, summaryText;
-  if (anyFailed) {
+  if (overallStatus === 'ERROR' || hasErrors) {
     summaryIcon = <WarningCircle size={20} className="text-red-500" />;
     summaryColor = 'text-red-600 dark:text-red-400';
-    summaryText = 'Sync Issue';
-  } else if (anySyncing) {
-    summaryIcon = <ArrowsClockwise size={20} className="text-blue-500 animate-spin" />;
-    summaryColor = 'text-blue-600 dark:text-blue-400';
-    summaryText = 'Syncing...';
-  } else if (allSuccess) {
+    summaryText = 'ERROR';
+  } else if (overallStatus === 'OK') {
     summaryIcon = <CheckCircle size={20} className="text-green-500" />;
     summaryColor = 'text-green-600 dark:text-green-400';
-    summaryText = 'Synced';
+    summaryText = 'OK';
   } else {
     summaryIcon = <Info size={20} className="text-gray-500" />;
     summaryColor = 'text-gray-600 dark:text-gray-400';
-    summaryText = 'Idle';
+    summaryText = 'IDLE';
   }
 
   const handleSync = async (resource: string) => {
@@ -98,7 +93,7 @@ export function UnifiedSyncStatus() {
             <span className="text-sm font-medium">{summaryText}</span>
           </Button>
         </TooltipTrigger>
-        <TooltipContent side="bottom" className="min-w-[260px]">
+        <TooltipContent side="bottom" className="min-w-[300px]">
           <div className="font-semibold mb-2">Sync Status Details</div>
           <table className="w-full text-xs mb-2">
             <thead>
@@ -126,50 +121,24 @@ export function UnifiedSyncStatus() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => setModalOpen(true)}
+                      onClick={() => handleSync(s.resource)}
+                      disabled={syncingResource === s.resource}
                       className="px-2 py-0 text-xs"
                     >
-                      Sync
+                      {syncingResource === s.resource ? 'Syncing...' : 'Sync'}
                     </Button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          {hasErrors && (
+            <div className="text-xs text-red-600 mt-2">
+              ⚠️ Some sync operations have failed. Check individual resource status above.
+            </div>
+          )}
         </TooltipContent>
       </Tooltip>
-      {/* Sync Modal */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)}>
-        <div className="p-6 min-w-[320px] max-w-xs">
-          <h2 className="text-lg font-bold mb-2">Manual Sync</h2>
-          <div className="mb-4 text-sm text-gray-700 dark:text-gray-200">
-            Select a resource to sync:
-          </div>
-          {syncError && <div className="text-red-600 mb-2">{syncError}</div>}
-          <div className="space-y-2">
-            {syncStatuses.map(s => (
-              <Button
-                key={s.resource}
-                onClick={() => handleSync(s.resource)}
-                disabled={syncingResource === s.resource}
-                className="w-full justify-start"
-                variant="outline"
-              >
-                {syncingResource === s.resource ? (
-                  <span className="flex items-center gap-2"><ArrowsClockwise className="animate-spin" size={16} /> Syncing...</span>
-                ) : (
-                  <span className="capitalize">Sync {s.resource}</span>
-                )}
-              </Button>
-            ))}
-          </div>
-          <div className="flex justify-end mt-6">
-            <Button variant="secondary" onClick={() => setModalOpen(false)}>
-              Close
-            </Button>
-          </div>
-        </div>
-      </Modal>
     </TooltipProvider>
   );
 } 

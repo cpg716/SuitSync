@@ -9,7 +9,7 @@ interface UserSessionData {
   lsRefreshToken: string;
   lsDomainPrefix: string;
   expiresAt: Date;
-  lastActive: Date;
+  lastActiveAt: Date;
   loginTime: Date;
 }
 
@@ -51,7 +51,7 @@ export class MultiUserSessionService {
       // Add to in-memory session cache
       req.session.userSessions[userId] = {
         ...sessionData,
-        lastActive: now,
+                  lastActiveAt: now,
         loginTime: now,
       };
 
@@ -77,17 +77,23 @@ export class MultiUserSessionService {
           lsRefreshToken: sessionData.lsRefreshToken,
           lsDomainPrefix: sessionData.lsDomainPrefix,
           expiresAt: sessionData.expiresAt,
-          lastActive: now,
+          lastActiveAt: now,
         },
         create: {
-          userId,
-          browserSessionId: sessionId,
+          userId: userId,
+          browserSessionId: req.sessionID,
+          lastActiveAt: now,
           lsAccessToken: sessionData.lsAccessToken,
           lsRefreshToken: sessionData.lsRefreshToken,
           lsDomainPrefix: sessionData.lsDomainPrefix,
           expiresAt: sessionData.expiresAt,
-          lastActive: now,
-        },
+          // Add required fields for new schema
+          lightspeedUserId: userId.toString(),
+          lightspeedEmployeeId: userId.toString(),
+          email: 'legacy@example.com',
+          name: 'Legacy User',
+          role: 'sales'
+        }
       });
 
       // Clean up old sessions if we exceed the limit
@@ -161,7 +167,7 @@ export class MultiUserSessionService {
         req.session.lsDomainPrefix = userSession.lsDomainPrefix;
 
         // Update last active time
-        userSession.lastActive = new Date();
+        userSession.lastActiveAt = new Date();
         
         // Update database
         await prisma.userSession.updateMany({
@@ -170,7 +176,7 @@ export class MultiUserSessionService {
             browserSessionId: req.sessionID,
           },
           data: {
-            lastActive: new Date(),
+            lastActiveAt: new Date(),
           },
         });
 
@@ -208,7 +214,7 @@ export class MultiUserSessionService {
           lsRefreshToken: dbSession.lsRefreshToken,
           lsDomainPrefix: dbSession.lsDomainPrefix,
           expiresAt: dbSession.expiresAt,
-          lastActive: new Date(),
+          lastActiveAt: new Date(),
           loginTime: dbSession.createdAt,
         };
 
@@ -257,7 +263,7 @@ export class MultiUserSessionService {
             if (sessionData) {
               cachedUsers.push({
                 ...user,
-                lastActive: sessionData.lastActive,
+                lastActive: sessionData.lastActiveAt,
                 loginTime: sessionData.loginTime,
               });
             }
@@ -288,14 +294,14 @@ export class MultiUserSessionService {
 
       // Add any database sessions not already in the list
       for (const dbSession of dbSessions) {
-        if (!cachedUsers.find(u => u.id === dbSession.userId)) {
+        if (dbSession.user && !cachedUsers.find(u => u.id === dbSession.userId)) {
           cachedUsers.push({
             id: dbSession.user.id,
             name: dbSession.user.name,
             email: dbSession.user.email,
             role: dbSession.user.role,
             photoUrl: dbSession.user.photoUrl,
-            lastActive: dbSession.lastActive,
+            lastActive: dbSession.lastActiveAt,
             loginTime: dbSession.createdAt,
           });
         }
@@ -356,7 +362,7 @@ export class MultiUserSessionService {
       if (userSessions.length > maxUsers) {
         // Sort by last active time (oldest first)
         const typedSessions = userSessions as [string, UserSessionData][];
-        typedSessions.sort(([, a], [, b]) => a.lastActive.getTime() - b.lastActive.getTime());
+        typedSessions.sort(([, a], [, b]) => a.lastActiveAt.getTime() - b.lastActiveAt.getTime());
 
         // Remove oldest sessions
         const sessionsToRemove = userSessions.slice(0, userSessions.length - maxUsers);
@@ -424,7 +430,7 @@ export class MultiUserSessionService {
         req.session.userSessions[userId].lsAccessToken = accessToken;
         req.session.userSessions[userId].lsRefreshToken = refreshToken;
         req.session.userSessions[userId].expiresAt = expiresAt;
-        req.session.userSessions[userId].lastActive = new Date();
+        req.session.userSessions[userId].lastActiveAt = new Date();
       }
 
       // Update legacy session if this is the active user
@@ -443,7 +449,7 @@ export class MultiUserSessionService {
           lsAccessToken: accessToken,
           lsRefreshToken: refreshToken,
           expiresAt,
-          lastActive: new Date(),
+          lastActiveAt: new Date(),
         },
       });
 
@@ -471,7 +477,7 @@ export class MultiUserSessionService {
         if (userSessions.length > 1) {
           // Keep only the most recently active session
           const typedSessions = userSessions as [string, UserSessionData][];
-          typedSessions.sort(([, a], [, b]) => b.lastActive.getTime() - a.lastActive.getTime());
+          typedSessions.sort(([, a], [, b]) => b.lastActiveAt.getTime() - a.lastActiveAt.getTime());
           const sessionToKeep = userSessions[0];
 
           // Remove all other sessions

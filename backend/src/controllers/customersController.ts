@@ -47,7 +47,7 @@ export const listCustomers = async (req: Request, res: Response): Promise<void> 
       const countResult = await prisma.$queryRawUnsafe(
         `SELECT COUNT(*) FROM "Customer" WHERE first_name ILIKE $1 OR last_name ILIKE $1 OR email ILIKE $1 OR phone ILIKE $1;`,
         `%${search}%`
-      );
+      ) as Array<{ count: string }>;
       total = parseInt(countResult[0].count, 10);
     } else {
       customers = await prisma.$queryRawUnsafe(
@@ -61,7 +61,7 @@ export const listCustomers = async (req: Request, res: Response): Promise<void> 
       );
       const countResult = await prisma.$queryRawUnsafe(
         `SELECT COUNT(*) FROM "Customer";`
-      );
+      ) as Array<{ count: string }>;
       total = parseInt(countResult[0].count, 10);
     }
     res.json({

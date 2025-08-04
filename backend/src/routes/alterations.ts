@@ -26,8 +26,8 @@ router.delete('/:id', requirePermission('alterations', 'write'), asyncHandler(al
 
 // Additional routes for alteration jobs
 router.get('/jobs', requirePermission('alterations', 'read'), asyncHandler(alterationsController.getAlterationJobs));
-router.post('/jobs', requirePermission('alterations', 'write'), asyncHandler(alterationsController.createAlterationJob));
-router.get('/jobs/:id', requirePermission('alterations', 'read'), asyncHandler(alterationsController.getAlterationJob));
+router.post('/jobs', requirePermission('alterations', 'write'), asyncHandler(alterationsController.createAlterationsJob));
+router.get('/jobs/:id', requirePermission('alterations', 'read'), asyncHandler(alterationsController.getAlterationsJob));
 router.put('/jobs/:id', requirePermission('alterations', 'write'), asyncHandler(alterationsController.updateAlterationJob));
 router.delete('/jobs/:id', requirePermission('alterations', 'write'), asyncHandler(alterationsController.deleteAlterationJob));
 
@@ -49,5 +49,27 @@ router.post('/jobs/:id/auto-assign', asyncHandler(alterationsController.autoAssi
 
 // Get alterations by member
 router.get('/member/:memberId', asyncHandler(alterationsController.getAlterationsByMember));
+
+// Scan QR code to mark part as started/finished
+router.post('/scan', asyncHandler(alterationsController.scanQRCode));
+
+// Schedule pickup date
+router.post('/pickup', asyncHandler(alterationsController.schedulePickup));
+
+// Generate alterations ticket for printing
+router.get('/jobs/:jobId/ticket', asyncHandler(alterationsController.generateAlterationsTicket));
+
+// Get all alterations with status and due dates
+router.get('/jobs', asyncHandler(alterationsController.getAllAlterations));
+
+// Update alteration due date
+router.put('/jobs/:jobId/due-date', asyncHandler(alterationsController.updateAlterationDueDate));
+
+// Tailor assignment and work tracking
+router.post('/parts/:partId/assign', requirePermission('alterations', 'write'), asyncHandler(alterationsController.assignTailorToPart));
+router.post('/tasks/:taskId/start', requirePermission('alterations', 'write'), asyncHandler(alterationsController.startTask));
+router.post('/tasks/:taskId/finish', requirePermission('alterations', 'write'), asyncHandler(alterationsController.finishTask));
+router.get('/available-tailors', requirePermission('alterations', 'read'), asyncHandler(alterationsController.getAvailableTailors));
+router.get('/jobs/:jobId/history', requirePermission('alterations', 'read'), asyncHandler(alterationsController.getAlterationJobHistory));
 
 export default router;
