@@ -416,7 +416,7 @@ export default function ChecklistWorkspace() {
   <ChecklistCreateModal open={showChecklistModal} onClose={() => setShowChecklistModal(false)} onCreated={() => window.location.reload()} />
       {/* Task Modal */}
       <TaskCreateModal open={showTaskModal} onClose={() => setShowTaskModal(false)} onCreated={() => window.location.reload()} />
-      {/* Assign Checklist Modal */}
+      {/* Assign/Edit Checklist Modal */}
       {showAssignModal && (
         <ChecklistAssignModal
           checklistId={showAssignModal.checklistId}
@@ -773,12 +773,31 @@ function ChecklistAssignModal({ checklistId, open, onClose, onAssigned }: { chec
   const [users, setUsers] = useState<any[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [dueDate, setDueDate] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [checklist, setChecklist] = useState<any>(null);
   const [saving, setSaving] = useState(false);
 
   React.useEffect(() => {
     if (!open) return;
-    fetch('/api/public/users').then(r => r.json()).then(setUsers).catch(() => setUsers([]));
-  }, [open]);
+    (async () => {
+      try {
+        setLoading(true);
+        const [u, c] = await Promise.all([
+          fetch('/api/public/users').then(r => r.json()).catch(() => []),
+          fetch(`/api/checklists/${checklistId}`, { credentials:'include' }).then(r => r.json()).catch(() => null)
+        ]);
+        setUsers(Array.isArray(u) ? u : []);
+        if (c && c.assignments) {
+          setChecklist(c);
+          setSelected(c.assignments.map((a:any)=> String(a.assignedTo?.id)).filter(Boolean));
+          const firstDue = c.assignments.find((a:any)=> a.dueDate)?.dueDate;
+          setDueDate(firstDue ? String(firstDue).slice(0,10) : '');
+        }
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [open, checklistId]);
 
   async function handleAssign() {
     setSaving(true);
@@ -802,6 +821,12 @@ function ChecklistAssignModal({ checklistId, open, onClose, onAssigned }: { chec
   return (
     <Modal open={open} onClose={onClose} title="Assign Checklist" size="md">
       <div className="space-y-3">
+        {checklist && (
+          <div className="p-3 rounded bg-gray-50">
+            <div className="font-semibold">{checklist.title}</div>
+            <div className="text-xs text-gray-500">{checklist.frequency}</div>
+          </div>
+        )}
         <div>
           <label className="text-sm">Select Users</label>
           <div className="max-h-64 overflow-auto border rounded p-2">
@@ -812,7 +837,10 @@ function ChecklistAssignModal({ checklistId, open, onClose, onAssigned }: { chec
                   checked={selected.includes(String(u.id))}
                   onChange={(e) => setSelected(arr => e.target.checked ? [...arr, String(u.id)] : arr.filter(x => x !== String(u.id)))}
                 />
-                <span>{u.name} ({u.role})</span>
+                <span className="flex items-center gap-2">
+                  <span className="inline-block w-6 h-6 rounded-full bg-gray-200" />
+                  {u.name} ({u.role})
+                </span>
               </label>
             ))}
           </div>

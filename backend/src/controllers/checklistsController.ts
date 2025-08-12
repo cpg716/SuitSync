@@ -40,6 +40,55 @@ export const getChecklists = async (req: Request, res: Response): Promise<void> 
   }
 };
 
+// Get single checklist with items and assignments
+export const getChecklistById = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = Number(req.params.id);
+    const checklist = await prisma.checklist.findUnique({
+      where: { id },
+      include: {
+        items: { orderBy: { order: 'asc' } },
+        assignments: {
+          include: {
+            assignedTo: { select: { id: true, name: true, photoUrl: true } },
+            assignedBy: { select: { id: true, name: true, photoUrl: true } }
+          }
+        },
+        createdBy: { select: { id: true, name: true, photoUrl: true } }
+      }
+    });
+    if (!checklist) { res.status(404).json({ error: 'Not found' }); return; }
+    res.json(checklist);
+  } catch (error) {
+    const { status, message } = handlePrismaError(error);
+    res.status(status).json({ error: message });
+  }
+};
+
+// Update checklist core fields and items (replace items)
+export const updateChecklist = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = Number(req.params.id);
+    const { title, description, frequency, isRequired, estimatedMinutes, items } = req.body as any;
+    const updated = await prisma.checklist.update({
+      where: { id },
+      data: {
+        ...(title !== undefined ? { title } : {}),
+        ...(description !== undefined ? { description } : {}),
+        ...(frequency !== undefined ? { frequency } : {}),
+        ...(isRequired !== undefined ? { isRequired: !!isRequired } : {}),
+        ...(estimatedMinutes !== undefined ? { estimatedMinutes } : {}),
+        ...(Array.isArray(items) ? { items: { deleteMany: {}, create: items.map((it: any, idx: number) => ({ title: it.title, description: it.description, isRequired: !!it.isRequired, order: idx })) } } : {})
+      },
+      include: { items: { orderBy: { order: 'asc' } } }
+    });
+    res.json(updated);
+    try { await AuditLogService.logAction((req as any).user?.id || null, 'update', 'Checklist', id, { title, frequency, isRequired, estimatedMinutes }); } catch {}
+  } catch (error) {
+    const { status, message } = handlePrismaError(error);
+    res.status(status).json({ error: message });
+  }
+};
 // Templates: list
 export const listChecklistTemplates = async (_req: Request, res: Response): Promise<void> => {
   const templates = await prisma.checklistTemplate.findMany({

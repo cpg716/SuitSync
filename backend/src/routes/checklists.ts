@@ -5,7 +5,9 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { z } from 'zod';
 import { 
   getChecklists,
+  getChecklistById,
   createChecklist,
+  updateChecklist,
   assignChecklist,
   getUserChecklists,
   startChecklistExecution,
@@ -64,12 +66,16 @@ router.get('/',
   asyncHandler(getChecklists)
 );
 
+router.get('/:id', authMiddleware, requirePermission('admin','read'), asyncHandler(getChecklistById));
+
 router.post('/', 
   authMiddleware, 
   requirePermission('admin', 'write'),
   validateBody(createChecklistSchema),
   asyncHandler(createChecklist)
 );
+
+router.put('/:id', authMiddleware, requirePermission('admin','write'), asyncHandler(updateChecklist));
 
 // Update/cancel checklist
 router.put('/:id',
