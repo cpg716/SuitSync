@@ -151,7 +151,7 @@ export default function ChecklistWorkspace() {
 
 
   return (
-    <Layout title="Checklist & Task Workspace">
+    <Layout title="Checklists & Task Management">
       <div className="w-full space-y-8">
         {/* Hero Header */}
         <div className="relative bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-600 rounded-xl shadow-lg p-6 sm:p-8 flex flex-col md:flex-row items-center gap-6 animate-fade-in">
@@ -317,7 +317,7 @@ export default function ChecklistWorkspace() {
         </TabsContent>
       </Tabs>
       {/* Checklist Modal */}
-      <ChecklistCreateModal open={showChecklistModal} onClose={() => setShowChecklistModal(false)} onCreated={() => window.location.reload()} />
+  <ChecklistCreateModal open={showChecklistModal} onClose={() => setShowChecklistModal(false)} onCreated={() => window.location.reload()} />
       {/* Task Modal */}
       <TaskCreateModal open={showTaskModal} onClose={() => setShowTaskModal(false)} onCreated={() => window.location.reload()} />
       {/* Assign Checklist Modal */}
@@ -346,6 +346,14 @@ function ChecklistCreateModal({ open, onClose, onCreated }: { open: boolean; onC
     { title: '' }
   ]);
   const [saving, setSaving] = useState(false);
+  const [users, setUsers] = useState<any[]>([]);
+  const [assignTo, setAssignTo] = useState<string[]>([]);
+  const [assignDue, setAssignDue] = useState('');
+
+  React.useEffect(() => {
+    if (!open) return;
+    fetch('/api/public/users').then(r => r.json()).then(setUsers).catch(() => setUsers([]));
+  }, [open]);
 
   async function handleSave() {
     setSaving(true);
@@ -354,7 +362,7 @@ function ChecklistCreateModal({ open, onClose, onCreated }: { open: boolean; onC
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ title, description, frequency, isRequired, items })
+        body: JSON.stringify({ title, description, frequency, isRequired, items, assignToUserIds: assignTo.map(Number), assignDueDate: assignDue || undefined })
       });
       if (!res.ok) throw new Error('Failed to create checklist');
       onClose();
@@ -385,6 +393,31 @@ function ChecklistCreateModal({ open, onClose, onCreated }: { open: boolean; onC
             <input type="checkbox" checked={isRequired} onChange={e => setIsRequired(e.target.checked)} />
             Required for completion
           </label>
+        </div>
+
+        {/* Optional Assignment at Creation */}
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm">Assign To (optional)</label>
+              <div className="max-h-40 overflow-auto border rounded p-2">
+                {users.map((u: any) => (
+                  <label key={u.id} className="flex items-center gap-2 py-1">
+                    <input
+                      type="checkbox"
+                      checked={assignTo.includes(String(u.id))}
+                      onChange={(e) => setAssignTo(arr => e.target.checked ? [...arr, String(u.id)] : arr.filter(x => x !== String(u.id)))}
+                    />
+                    <span>{u.name} ({u.role})</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="text-sm">Assignment Due Date (optional)</label>
+              <input type="date" className="w-full border rounded px-2 py-2" value={assignDue} onChange={e => setAssignDue(e.target.value)} />
+            </div>
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -418,11 +451,16 @@ function TaskCreateModal({ open, onClose, onCreated }: { open: boolean; onClose:
   const [dueDate, setDueDate] = useState('');
   const [estimatedMinutes, setEstimatedMinutes] = useState<number>(60);
   const [users, setUsers] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [customerId, setCustomerId] = useState<string>('');
   const [saving, setSaving] = useState(false);
 
   React.useEffect(() => {
     if (!open) return;
-    fetch('/api/public/users').then(r => r.json()).then(setUsers).catch(() => setUsers([]));
+    Promise.all([
+      fetch('/api/public/users').then(r => r.json()).catch(() => []),
+      fetch('/api/customers?limit=50').then(r => r.json()).then(d => Array.isArray(d?.customers) ? d.customers : (Array.isArray(d)? d: [])).catch(() => [])
+    ]).then(([u, c]) => { setUsers(u); setCustomers(c); });
   }, [open]);
 
   async function handleSave() {
@@ -432,7 +470,7 @@ function TaskCreateModal({ open, onClose, onCreated }: { open: boolean; onClose:
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ title, description, priority, assignedToId: Number(assignedToId), dueDate: dueDate || undefined, estimatedMinutes })
+        body: JSON.stringify({ title, description, priority, assignedToId: Number(assignedToId), dueDate: dueDate || undefined, estimatedMinutes, customerId: customerId? Number(customerId) : undefined })
       });
       if (!res.ok) throw new Error('Failed to create task');
       onClose();
@@ -466,6 +504,15 @@ function TaskCreateModal({ open, onClose, onCreated }: { open: boolean; onClose:
               {users.map((u: any) => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
             </select>
           </div>
+        </div>
+        <div>
+          <label className="text-sm">Related Customer (optional)</label>
+          <select className="w-full border rounded px-2 py-2" value={customerId} onChange={e => setCustomerId(e.target.value)}>
+            <option value="">None</option>
+            {customers.map((c: any) => (
+              <option key={c.id} value={c.id}>{(c.display_name || `${c.last_name || ''}${c.last_name && c.first_name ? ', ' : ''}${c.first_name || ''}`).trim() || `#${c.id}`}</option>
+            ))}
+          </select>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>

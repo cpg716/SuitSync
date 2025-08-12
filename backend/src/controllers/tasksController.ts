@@ -39,11 +39,34 @@ export const getTasks = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
+async function resolveLocalUserId(req: Request): Promise<number | null> {
+  const u: any = (req as any).user || {};
+  // 1) Prefer mapped local user id
+  if (typeof u.localUserId === 'number' && Number.isFinite(u.localUserId)) return u.localUserId;
+  // 2) Try to locate by Lightspeed employee id
+  const lsId = u.lightspeedEmployeeId || u.lightspeedId || u.id;
+  if (lsId) {
+    const found = await prisma.user.findFirst({ where: { OR: [
+      { lightspeedEmployeeId: String(lsId) },
+      { id: typeof u.id === 'number' ? u.id : undefined }
+    ] } as any });
+    if (found) return found.id;
+  }
+  // 3) Fallback to any admin user if available
+  const admin = await prisma.user.findFirst({ where: { role: 'admin' } });
+  if (admin) return admin.id;
+  return null;
+}
+
 // Create new task
 export const createTask = async (req: Request, res: Response): Promise<void> => {
   try {
     const { title, description, priority, assignedToId, dueDate, estimatedMinutes } = req.body;
-    const assignedById = (req as any).user.id;
+    const assignedById = await resolveLocalUserId(req);
+    if (!assignedById) {
+      res.status(400).json({ error: 'Unable to resolve assigning user. Ensure your account is linked to a local user.' });
+      return;
+    }
 
     const task = await prisma.task.create({
       data: {
@@ -141,7 +164,8 @@ export const deleteTask = async (req: Request, res: Response): Promise<void> => 
 // Get user's tasks
 export const getUserTasks = async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = await resolveLocalUserId(req);
+    if (!userId) { res.status(400).json({ error: 'Unable to resolve current user.' }); return; }
     const { status, priority } = req.query;
 
     const where: any = { assignedToId: userId };

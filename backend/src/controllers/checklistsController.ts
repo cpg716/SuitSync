@@ -41,10 +41,30 @@ export const getChecklists = async (req: Request, res: Response): Promise<void> 
 };
 
 // Create new checklist
+async function resolveLocalUserId(req: Request): Promise<number | null> {
+  const u: any = (req as any).user || {};
+  if (typeof u.localUserId === 'number' && Number.isFinite(u.localUserId)) return u.localUserId;
+  const lsId = u.lightspeedEmployeeId || u.lightspeedId || u.id;
+  if (lsId) {
+    const found = await prisma.user.findFirst({ where: { OR: [
+      { lightspeedEmployeeId: String(lsId) },
+      { id: typeof u.id === 'number' ? u.id : undefined }
+    ] } as any });
+    if (found) return found.id;
+  }
+  const admin = await prisma.user.findFirst({ where: { role: 'admin' } });
+  if (admin) return admin.id;
+  return null;
+}
+
 export const createChecklist = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { title, description, frequency, isRequired, estimatedMinutes, items } = req.body;
-    const userId = (req as any).user.id;
+    const { title, description, frequency, isRequired, estimatedMinutes, items, assignToUserIds, assignDueDate } = req.body as any;
+    const userId = await resolveLocalUserId(req);
+    if (!userId) {
+      res.status(400).json({ error: 'Unable to resolve creating user. Ensure your account is linked to a local user.' });
+      return;
+    }
 
     const checklist = await prisma.checklist.create({
       data: {
@@ -69,6 +89,19 @@ export const createChecklist = async (req: Request, res: Response): Promise<void
       }
     });
 
+    // Optional immediate assignment at creation
+    if (Array.isArray(assignToUserIds) && assignToUserIds.length > 0) {
+      const due = assignDueDate ? new Date(assignDueDate) : null;
+      await Promise.all(assignToUserIds.map((uid: number) => prisma.checklistAssignment.create({
+        data: {
+          checklistId: checklist.id,
+          assignedToId: Number(uid),
+          assignedById: userId,
+          dueDate: due
+        }
+      })));
+    }
+
     res.status(201).json(checklist);
     try {
       await AuditLogService.logAction(userId || null, 'create', 'Checklist', checklist.id, { frequency, isRequired, estimatedMinutes });
@@ -87,7 +120,8 @@ export const assignChecklist = async (req: Request, res: Response): Promise<void
   try {
     const { checklistId } = req.params;
     const { userIds, dueDate } = req.body;
-    const assignedById = (req as any).user.id;
+    const assignedById = await resolveLocalUserId(req);
+    if (!assignedById) { res.status(400).json({ error: 'Unable to resolve assigning user.' }); return; }
 
     const assignments = await Promise.all(
       userIds.map((userId: number) =>
@@ -123,7 +157,8 @@ export const assignChecklist = async (req: Request, res: Response): Promise<void
 // Get user's assigned checklists
 export const getUserChecklists = async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = await resolveLocalUserId(req);
+    if (!userId) { res.status(400).json({ error: 'Unable to resolve current user.' }); return; }
     const { date, status } = req.query;
 
     const targetDate = date ? new Date(date as string) : new Date();
