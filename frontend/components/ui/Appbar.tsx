@@ -32,6 +32,7 @@ const routeTitles = {
   '/sales': 'Sales',
   '/commission': 'Commissions',
   '/admin': 'Settings',
+  '/checklists': 'Checklists & Task Management',
 };
 
 export const Appbar: React.FC = () => {
