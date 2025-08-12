@@ -160,6 +160,20 @@ await prisma.partyMember.delete({ where: { id: Number(memberId) } });
 - `PUT /api/parties/members/:memberId/status` - Update member status
 - `PUT /api/parties/:partyId/members/:memberId/measurements` - Update member measurements
 
+### Progress & Gauges
+
+We compute party progress using appointment/workflow stages per member:
+
+1. Selected → 2. Measured → 3. Ordered → 4. Fitted → 5. Altered → 6. Ready → 7. PickedUp
+
+For each party, gauges display the percentage of members at or beyond each step (Measurements, Ordering, Fitting, Alteration, Pickup).
+
+Endpoints:
+- `GET /api/progress/parties/:partyId` returns per-member progress and overall party completion stats.
+
+UI:
+- The party dashboard renders compact gauges with icons and member-level badges.
+
 ## Error Handling
 
 The system includes comprehensive error handling:

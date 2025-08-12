@@ -14,6 +14,7 @@ This system mirrors the paper daily breakdown sheets. Each work day has fixed un
 ### API
 
 - `POST /api/alterations/jobs/:jobId/schedule` → schedules all unscheduled parts, returns assigned days and optional tailor assignment.
+- `POST /api/alterations/parts/:partId/schedule { date, lastMinute? }` → manually schedule a single part to a specific work day. Thursday requires `lastMinute=true`.
 - `POST /api/alterations/schedule/auto` → schedules all open jobs that are not yet planned.
 - `POST /api/alterations/schedule/rebalance { date }` → placeholder for future rebalancing.
 
@@ -243,7 +244,10 @@ Content-Type: application/json
 1. **Customer Consultation**: Sales staff creates alteration job
 2. **Part Definition**: Define garment parts and specific tasks
 3. **Priority Assignment**: Set priority based on event date/rush status
-4. **Initial Assignment**: Assign primary tailor or leave unassigned
+4. **Scheduling Choice**: After job creation, the UI prompts Auto vs Manual scheduling.
+   - Auto: server schedules by capacity, due date, garment type.
+   - Manual: select a date; each part is scheduled to that date.
+5. **Initial Assignment**: Assign primary tailor or leave unassigned
 
 ### 2. Tailor Assignment Workflow
 
