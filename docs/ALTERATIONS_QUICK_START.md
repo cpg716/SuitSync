@@ -1,3 +1,14 @@
+### Part Codes Mapping
+
+- W: Waist
+- W/S: Waist/Seat
+- B: Bottom (hem)
+- C: Crotch
+- P: Peg
+- Jacket: Sleeves and Sides
+
+These codes are accepted in alteration task names and are stored as tasks on `AlterationJobPart`.
+
 # Alterations Workflow Quick Start Guide
 
 ## Overview

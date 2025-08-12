@@ -148,6 +148,25 @@ export default function AppointmentsPage() {
     if (reschedule && token && appointmentId) {
       setEmbeddedReschedule({ token, appointmentId });
     }
+    // Support deep-link to open new appointment modal, optionally prefilled
+    const startNew = url.searchParams.get('new');
+    if (startNew) {
+      const customerId = url.searchParams.get('customerId');
+      const partyId = url.searchParams.get('partyId');
+      const partyMemberId = url.searchParams.get('partyMemberId');
+      const staffId = url.searchParams.get('staffId');
+      const when = url.searchParams.get('dateTime');
+      const initial: any = {};
+      if (customerId) initial.individualCustomerId = Number(customerId);
+      if (partyId) initial.partyId = Number(partyId);
+      if (partyMemberId) initial.memberId = Number(partyMemberId);
+      if (staffId) initial.tailorId = Number(staffId);
+      if (when) initial.dateTime = when;
+      setEditAppt(initial);
+      setModalOpen(true);
+      // Clean the URL
+      window.history.replaceState({}, '', '/appointments');
+    }
   }, []);
 
   // Load sales staff for availability filter

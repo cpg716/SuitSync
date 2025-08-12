@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { withAccelerate } from '@prisma/extension-accelerate';
 import logger from '../utils/logger';
+import AuditLogService from '../services/AuditLogService';
 import { handlePrismaError } from '../utils/dbErrorHandler';
 
 const prisma = new PrismaClient().$extends(withAccelerate());
@@ -69,6 +70,11 @@ export const createChecklist = async (req: Request, res: Response): Promise<void
     });
 
     res.status(201).json(checklist);
+    try {
+      await AuditLogService.logAction(userId || null, 'create', 'Checklist', checklist.id, { frequency, isRequired, estimatedMinutes });
+    } catch (e) {
+      logger.warn('Failed to write audit log for createChecklist', e);
+    }
   } catch (error) {
     logger.error('Error creating checklist:', error);
     const { status, message } = handlePrismaError(error);
@@ -102,6 +108,11 @@ export const assignChecklist = async (req: Request, res: Response): Promise<void
     );
 
     res.status(201).json(assignments);
+    try {
+      await AuditLogService.logAction(assignedById || null, 'assign', 'Checklist', Number(checklistId), { userIds, dueDate });
+    } catch (e) {
+      logger.warn('Failed to write audit log for assignChecklist', e);
+    }
   } catch (error) {
     logger.error('Error assigning checklist:', error);
     const { status, message } = handlePrismaError(error);
@@ -203,6 +214,11 @@ export const startChecklistExecution = async (req: Request, res: Response): Prom
     });
 
     res.status(201).json(execution);
+    try {
+      await AuditLogService.logAction(userId || null, 'start', 'ChecklistExecution', execution.id, { assignmentId, scheduledFor });
+    } catch (e) {
+      logger.warn('Failed to write audit log for startChecklistExecution', e);
+    }
   } catch (error) {
     logger.error('Error starting checklist execution:', error);
     const { status, message } = handlePrismaError(error);
@@ -262,6 +278,11 @@ export const updateChecklistItem = async (req: Request, res: Response): Promise<
     }
 
     res.json(itemExecution);
+    try {
+      await AuditLogService.logAction((req as any).user?.id || null, 'update', 'ChecklistItemExecution', itemExecution.id, { executionId, itemId, isCompleted });
+    } catch (e) {
+      logger.warn('Failed to write audit log for updateChecklistItem', e);
+    }
   } catch (error) {
     logger.error('Error updating checklist item:', error);
     const { status, message } = handlePrismaError(error);

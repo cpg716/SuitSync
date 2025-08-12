@@ -22,6 +22,7 @@ interface Alteration {
   tailorId: string;
   saleLineItemId?: string;
   itemDescription?: string;
+  lastMinute?: boolean;
 }
 
 interface Customer {
@@ -64,6 +65,7 @@ export const AlterationModal = function({ open, onClose, onSubmit, alteration, l
     estimatedMinutes: alteration?.estimatedMinutes || 60,
     notes: alteration?.notes || '',
     tailorId: alteration?.tailorId || '',
+    lastMinute: (alteration as any)?.lastMinute || false,
   });
 
   // State for dynamic data
@@ -128,7 +130,7 @@ export const AlterationModal = function({ open, onClose, onSubmit, alteration, l
   }, [searchTerm]);
 
   // Handle form changes
-  const handleChange = (field: keyof Alteration, value: string | number) => {
+  const handleChange = (field: keyof Alteration, value: string | number | boolean) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -290,6 +292,17 @@ export const AlterationModal = function({ open, onClose, onSubmit, alteration, l
                   step="15"
                   required
                 />
+              </div>
+
+              {/* Last Minute Flag */}
+              <div className="flex items-center gap-2">
+                <input
+                  id="lastMinute"
+                  type="checkbox"
+                  checked={!!formData.lastMinute}
+                  onChange={(e) => handleChange('lastMinute', e.target.checked ? true : false)}
+                />
+                <label htmlFor="lastMinute" className="text-sm dark:text-gray-300">Mark as Last Minute (allows Thursday scheduling)</label>
               </div>
             </div>
 

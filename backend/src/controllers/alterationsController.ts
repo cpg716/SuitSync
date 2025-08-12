@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import Scheduling from '../services/alterationSchedulingService.js';
 import logger from '../utils/logger';
 import AuditLogService, { logChange } from '../services/AuditLogService';
 
@@ -90,11 +91,14 @@ export async function createAlterationsJob(req: Request, res: Response) {
       req
     );
 
-    res.json({
-      alterationJob,
-      jobParts,
-      message: 'Alterations job created successfully'
-    });
+    // Attempt auto-scheduling (skip Thursdays)
+    try {
+      await Scheduling.scheduleJobParts(alterationJob.id, { respectNoThursday: true });
+    } catch (err) {
+      logger.warn('Auto-schedule failed for new alterations job', err);
+    }
+
+    res.json({ alterationJob, jobParts, message: 'Alterations job created and scheduled' });
 
   } catch (error) {
     logger.error('Error creating alterations job:', error);
@@ -107,7 +111,7 @@ export async function createAlterationsJob(req: Request, res: Response) {
  */
 export async function createAlteration(req: Request, res: Response) {
   try {
-    const { customerId, partyId, partyMemberId, notes, dueDate, rushOrder, jobParts } = req.body;
+    const { customerId, partyId, partyMemberId, notes, dueDate, rushOrder, jobParts, lastMinute } = req.body;
     
     if (!jobParts || !Array.isArray(jobParts) || jobParts.length === 0) {
       return res.status(400).json({ error: 'jobParts array is required and must not be empty' });
@@ -116,6 +120,14 @@ export async function createAlteration(req: Request, res: Response) {
     // Validate that either customerId or partyId is provided
     if (!customerId && !partyId) {
       return res.status(400).json({ error: 'Either customerId or partyId must be provided' });
+    }
+
+    // Guard: if party provided and dueDate is after eventDate → reject
+    if (partyId && dueDate) {
+      const party = await prisma.party.findUnique({ where: { id: Number(partyId) } });
+      if (party?.eventDate && new Date(dueDate) > new Date(party.eventDate)) {
+        return res.status(400).json({ error: 'Due date cannot be after the party/event date' });
+      }
     }
 
     // Generate unique job number and QR code
@@ -133,7 +145,8 @@ export async function createAlteration(req: Request, res: Response) {
         status: 'NOT_STARTED',
         notes: notes || '',
         dueDate: dueDate ? new Date(dueDate) : null,
-        rushOrder: rushOrder || false
+         rushOrder: rushOrder || false,
+         lastMinute: !!lastMinute
       }
     });
 
@@ -192,12 +205,14 @@ export async function createAlteration(req: Request, res: Response) {
       req
     );
 
-    res.json({
-      success: true,
-      alterationJob,
-      jobParts: createdJobParts,
-      message: 'Alteration job created successfully'
-    });
+    // Auto-schedule created job's parts
+    try {
+      await Scheduling.scheduleJobParts(alterationJob.id, { respectNoThursday: true });
+    } catch (err) {
+      logger.warn('Auto-schedule failed for created alteration', err);
+    }
+
+    res.json({ success: true, alterationJob, jobParts: createdJobParts, message: 'Alteration job created and scheduled' });
 
   } catch (error) {
     logger.error('Error creating alteration job:', error);
@@ -587,32 +602,14 @@ export async function getAllAlterations(req: Request, res: Response) {
     const alterations = await prisma.alterationJob.findMany({
       where,
       include: {
-        party: {
-          include: {
-            customer: true
-          }
-        },
+        party: { include: { customer: true } },
         partyMember: true,
         customer: true,
         tailor: true,
-        jobParts: {
-          include: {
-            tasks: true,
-            assignedUser: true
-          },
-          orderBy: {
-            partName: 'asc'
-          }
-        }
+        jobParts: { include: { tasks: true, assignedUser: true } },
       },
-      orderBy: [
-        // First by due date (earliest first)
-        { dueDate: 'asc' },
-        // Then by party event date (earliest wedding first)
-        { party: { eventDate: 'asc' } },
-        // Then by creation date (oldest first)
-        { createdAt: 'asc' }
-      ]
+      // Use a simple, reliable order in SQL; we'll refine ordering in JS using computed due dates
+      orderBy: [{ dueDate: 'asc' }, { createdAt: 'asc' }],
     });
 
     // Calculate due dates and enrich the data
@@ -640,6 +637,9 @@ export async function getAllAlterations(req: Request, res: Response) {
       // Check if overdue
       const isOverdue = dueDate ? new Date() > dueDate : false;
       
+      // Ensure parts are consistently ordered by name for display
+      const sortedParts = [...alteration.jobParts].sort((a: any, b: any) => String(a.partName || '').localeCompare(String(b.partName || '')));
+
       return {
         ...alteration,
         calculatedDueDate: dueDate,
@@ -647,22 +647,33 @@ export async function getAllAlterations(req: Request, res: Response) {
         completionPercentage,
         isOverdue,
         totalParts,
-        completedParts
+        completedParts,
+        jobParts: sortedParts,
       };
     });
 
+    // Final client-facing order: computed due date (earliest first), then createdAt
+    const ordered = [...enrichedAlterations].sort((a, b) => {
+      const ad = a.calculatedDueDate ? new Date(a.calculatedDueDate as any).getTime() : Number.MAX_SAFE_INTEGER;
+      const bd = b.calculatedDueDate ? new Date(b.calculatedDueDate as any).getTime() : Number.MAX_SAFE_INTEGER;
+      if (ad !== bd) return ad - bd;
+      return new Date(a.createdAt as any).getTime() - new Date(b.createdAt as any).getTime();
+    });
+
     res.json({
-      alterations: enrichedAlterations,
+      alterations: ordered,
       summary: {
-        total: enrichedAlterations.length,
-        overdue: enrichedAlterations.filter(a => a.isOverdue).length,
-        inProgress: enrichedAlterations.filter(a => a.status === 'IN_PROGRESS').length,
-        notStarted: enrichedAlterations.filter(a => a.status === 'NOT_STARTED').length,
-        complete: enrichedAlterations.filter(a => a.status === 'COMPLETE').length
-      }
+        total: ordered.length,
+        overdue: ordered.filter(a => a.isOverdue).length,
+        inProgress: ordered.filter(a => a.status === 'IN_PROGRESS').length,
+        notStarted: ordered.filter(a => a.status === 'NOT_STARTED').length,
+        complete: ordered.filter(a => a.status === 'COMPLETE').length,
+      },
     });
 
   } catch (error) {
+    // Log full error details to aid diagnosis in production
+    try { console.error('Error getting alterations:', (error as any)?.message, (error as any)?.stack); } catch {}
     logger.error('Error getting alterations:', error);
     res.status(500).json({ error: 'Failed to get alterations' });
   }
@@ -678,6 +689,16 @@ export async function updateAlterationDueDate(req: Request, res: Response) {
     
     if (!dueDate) {
       return res.status(400).json({ error: 'dueDate is required' });
+    }
+
+    // Guard: cannot set after party event date
+    const existing = await prisma.alterationJob.findUnique({
+      where: { id: Number(jobId) },
+      include: { party: true }
+    });
+
+    if (existing?.party?.eventDate && new Date(dueDate) > new Date(existing.party.eventDate)) {
+      return res.status(400).json({ error: 'Due date cannot be after the party/event date' });
     }
 
     const alterationJob = await prisma.alterationJob.update({
@@ -713,6 +734,69 @@ export async function updateAlterationDueDate(req: Request, res: Response) {
   } catch (error) {
     logger.error('Error updating alteration due date:', error);
     res.status(500).json({ error: 'Failed to update due date' });
+  }
+}
+
+/**
+ * Daily board summary for alterations capacity and scheduled items
+ */
+export async function getWorkDayBoard(req: Request, res: Response) {
+  try {
+    const start = new Date(String(req.query.start || new Date().toISOString().slice(0,10)) + 'T00:00:00Z');
+    const days = Math.min(60, Math.max(1, parseInt(String(req.query.days || '14'))));
+    const out: any[] = [];
+    for (let i = 0; i < days; i++) {
+      const date = new Date(start);
+      date.setUTCDate(start.getUTCDate() + i);
+      const plan = await (await import('../services/alterationSchedulingService.js')).default.getOrCreateWorkDay(date);
+      const weekday = date.getUTCDay();
+      const isThursday = weekday === 4;
+      const parts = await prisma.alterationJobPart.findMany({
+        where: { scheduledFor: { gte: date, lt: new Date(date.getTime() + 24*60*60*1000) } },
+        include: { job: true }
+      });
+      const lastMinuteParts = parts.filter(p => p.job?.lastMinute);
+      out.push({
+        date,
+        jacketCapacity: plan.jacketCapacity,
+        pantsCapacity: plan.pantsCapacity,
+        assignedJackets: plan.assignedJackets,
+        assignedPants: plan.assignedPants,
+        jacketsLeft: Math.max(0, plan.jacketCapacity - plan.assignedJackets),
+        pantsLeft: Math.max(0, plan.pantsCapacity - plan.assignedPants),
+        isThursday,
+        isClosed: !!plan.isClosed,
+        totalParts: parts.length,
+        lastMinuteParts: lastMinuteParts.length,
+        notes: plan.notes || (isThursday ? 'Thursday: only last-minute allowed' : undefined),
+      });
+    }
+    res.json({ days: out });
+  } catch (error) {
+    logger.error('Error building work day board:', error);
+    res.status(500).json({ error: 'Failed to build board' });
+  }
+}
+
+/**
+ * Items scheduled for a specific date (YYYY-MM-DD)
+ */
+export async function getWorkDayItems(req: Request, res: Response) {
+  try {
+    const { date } = req.params;
+    const day = new Date(date + 'T00:00:00Z');
+    const next = new Date(day.getTime() + 24*60*60*1000);
+    const parts = await prisma.alterationJobPart.findMany({
+      where: { scheduledFor: { gte: day, lt: next } },
+      include: {
+        job: { include: { party: true, partyMember: true, tailor: true } },
+        assignedUser: true,
+      }
+    });
+    res.json({ items: parts });
+  } catch (error) {
+    logger.error('Error getting work day items:', error);
+    res.status(500).json({ error: 'Failed to get items' });
   }
 }
 
@@ -972,9 +1056,8 @@ export async function updateWorkflowStep(req: Request, res: Response) {
 export async function autoAssignTailors(req: Request, res: Response) {
   try {
     const { id } = req.params;
-
-    // This is a placeholder - implement actual auto-assignment logic
-    res.json({ message: 'Auto-assignment feature not yet implemented' });
+    const results = await Scheduling.scheduleJobParts(Number(id), { respectNoThursday: true });
+    res.json({ success: true, results });
   } catch (error) {
     logger.error('Error auto-assigning tailors:', error);
     res.status(500).json({ error: 'Failed to auto-assign tailors' });
@@ -1217,6 +1300,78 @@ export async function finishTask(req: Request, res: Response) {
   } catch (error) {
     logger.error('Error finishing task:', error);
     res.status(500).json({ error: 'Failed to finish task' });
+  }
+}
+
+/**
+ * Manually schedule a single alteration job part on a specific date
+ * Increments WorkDayPlan counters accordingly
+ */
+export async function schedulePartManual(req: Request, res: Response) {
+  try {
+    const { partId } = req.params;
+    const { date, lastMinute } = req.body as { date?: string; lastMinute?: boolean };
+    if (!date) return res.status(400).json({ error: 'date is required (YYYY-MM-DD)' });
+
+    const targetDay = new Date(`${date}T00:00:00Z`);
+    const weekday = targetDay.getUTCDay();
+    if (weekday === 4 && !lastMinute) {
+      return res.status(400).json({ error: 'Thursday scheduling requires lastMinute=true' });
+    }
+
+    const part = await prisma.alterationJobPart.findUnique({
+      where: { id: Number(partId) },
+      include: { job: true },
+    });
+    if (!part) return res.status(404).json({ error: 'Part not found' });
+
+    // Create or get WorkDayPlan for the target date
+    const day = new Date(Date.UTC(targetDay.getUTCFullYear(), targetDay.getUTCMonth(), targetDay.getUTCDate()));
+    let plan = await prisma.workDayPlan.findUnique({ where: { date: day } });
+    if (!plan) {
+      plan = await prisma.workDayPlan.create({ data: { date: day } });
+    }
+
+    // Determine capacity unit
+    const isJacketUnit = ['JACKET', 'VEST', 'SHIRT', 'OTHER'].includes(String(part.partType));
+    const isPantsUnit = ['PANTS', 'SKIRT'].includes(String(part.partType));
+
+    // If rescheduling, decrement previous day counters
+    if (part.scheduledFor && part.workDayId) {
+      const prev = await prisma.workDayPlan.findUnique({ where: { id: part.workDayId } });
+      if (prev) {
+        await prisma.workDayPlan.update({
+          where: { id: prev.id },
+          data: {
+            assignedJackets: prev.assignedJackets - (isJacketUnit ? 1 : 0),
+            assignedPants: prev.assignedPants - (isPantsUnit ? 1 : 0),
+          },
+        });
+      }
+    }
+
+    // Update part and increment plan counters
+    const updatedPart = await prisma.alterationJobPart.update({
+      where: { id: Number(partId) },
+      data: {
+        scheduledFor: day,
+        workDay: { connect: { id: plan.id } },
+      },
+      include: { job: true },
+    });
+
+    await prisma.workDayPlan.update({
+      where: { id: plan.id },
+      data: {
+        assignedJackets: plan.assignedJackets + (isJacketUnit ? 1 : 0),
+        assignedPants: plan.assignedPants + (isPantsUnit ? 1 : 0),
+      },
+    });
+
+    return res.json({ success: true, part: updatedPart });
+  } catch (error) {
+    logger.error('Error manual scheduling part:', error);
+    return res.status(500).json({ error: 'Failed to schedule part' });
   }
 }
 

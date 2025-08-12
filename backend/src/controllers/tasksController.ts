@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { withAccelerate } from '@prisma/extension-accelerate';
 import logger from '../utils/logger';
+import AuditLogService from '../services/AuditLogService';
 import { handlePrismaError } from '../utils/dbErrorHandler';
 
 const prisma = new PrismaClient().$extends(withAccelerate());
@@ -61,6 +62,11 @@ export const createTask = async (req: Request, res: Response): Promise<void> => 
     });
 
     res.status(201).json(task);
+    try {
+      await AuditLogService.logAction(assignedById || null, 'create', 'Task', task.id, { assignedToId, priority, dueDate, estimatedMinutes });
+    } catch (e) {
+      logger.warn('Failed to write audit log for createTask', e);
+    }
   } catch (error) {
     logger.error('Error creating task:', error);
     const { status, message } = handlePrismaError(error);
@@ -98,6 +104,11 @@ export const updateTask = async (req: Request, res: Response): Promise<void> => 
     });
 
     res.json(task);
+    try {
+      await AuditLogService.logAction((req as any).user?.id || null, 'update', 'Task', Number(id), updateData);
+    } catch (e) {
+      logger.warn('Failed to write audit log for updateTask', e);
+    }
   } catch (error) {
     logger.error('Error updating task:', error);
     const { status, message } = handlePrismaError(error);
@@ -115,6 +126,11 @@ export const deleteTask = async (req: Request, res: Response): Promise<void> => 
     });
 
     res.status(204).send();
+    try {
+      await AuditLogService.logAction((req as any).user?.id || null, 'delete', 'Task', Number(id), {});
+    } catch (e) {
+      logger.warn('Failed to write audit log for deleteTask', e);
+    }
   } catch (error) {
     logger.error('Error deleting task:', error);
     const { status, message } = handlePrismaError(error);
@@ -212,6 +228,41 @@ export const getTaskAnalytics = async (req: Request, res: Response): Promise<voi
     });
   } catch (error) {
     logger.error('Error fetching task analytics:', error);
+    const { status, message } = handlePrismaError(error);
+    res.status(status).json({ error: message });
+  }
+};
+
+// Bulk create tasks for multiple users
+export const bulkCreateTasks = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { title, description, priority, assignedToIds, dueDate, estimatedMinutes } = req.body as any;
+    const assignedById = (req as any).user.id;
+    if (!Array.isArray(assignedToIds) || assignedToIds.length === 0) {
+      res.status(400).json({ error: 'assignedToIds must be a non-empty array' });
+      return;
+    }
+    const results = await Promise.all(assignedToIds.map((uid: number) => prisma.task.create({
+      data: {
+        title,
+        description,
+        priority: priority || 'MEDIUM',
+        assignedToId: Number(uid),
+        assignedById,
+        dueDate: dueDate ? new Date(dueDate) : null,
+        estimatedMinutes: estimatedMinutes ?? null,
+      },
+      include: {
+        assignedTo: { select: { id: true, name: true, photoUrl: true, role: true } },
+        assignedBy: { select: { id: true, name: true, photoUrl: true, role: true } }
+      }
+    })));
+    try {
+      await AuditLogService.logAction(assignedById || null, 'create', 'TaskBulk', 0, { count: results.length, assignedToIds });
+    } catch {}
+    res.status(201).json(results);
+  } catch (error) {
+    logger.error('Error bulk creating tasks:', error);
     const { status, message } = handlePrismaError(error);
     res.status(status).json({ error: message });
   }

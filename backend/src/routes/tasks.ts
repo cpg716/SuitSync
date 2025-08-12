@@ -9,9 +9,9 @@ import {
   updateTask,
   deleteTask,
   getUserTasks,
-  getTaskAnalytics
+  getTaskAnalytics,
+  bulkCreateTasks
 } from '../controllers/tasksController';
-
 const router = express.Router();
 
 // Validation schemas
@@ -34,6 +34,15 @@ const updateTaskSchema = z.object({
   notes: z.string().max(1000).optional()
 });
 
+const bulkCreateTaskSchema = z.object({
+  title: z.string().min(1).max(255),
+  description: z.string().max(1000).optional(),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
+  assignedToIds: z.array(z.number().int().positive()).min(1),
+  dueDate: z.string().datetime().optional(),
+  estimatedMinutes: z.number().int().min(1).max(480).optional()
+});
+
 // Routes
 router.get('/', 
   authMiddleware, 
@@ -46,6 +55,13 @@ router.post('/',
   requirePermission('admin', 'write'),
   validateBody(createTaskSchema),
   asyncHandler(createTask)
+);
+
+router.post('/bulk',
+  authMiddleware,
+  requirePermission('admin', 'write'),
+  validateBody(bulkCreateTaskSchema),
+  asyncHandler(bulkCreateTasks)
 );
 
 router.put('/:id', 

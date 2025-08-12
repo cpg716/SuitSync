@@ -1,10 +1,10 @@
 import axios from 'axios';
 
 // Simple API client for public or app data (always through Next proxy on client)
-const getBaseURL = () => (typeof window === 'undefined' ? (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3000') : '');
+const getBaseURL = () => (process.env.NEXT_PUBLIC_BACKEND_URL || '');
 
 const simpleApi = axios.create({
-  baseURL: getBaseURL(),
+  baseURL: '',
   withCredentials: true,
 });
 

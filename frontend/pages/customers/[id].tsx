@@ -4,6 +4,7 @@ import useSWR from 'swr';
 import { api, fetcher } from '@/lib/apiClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import AppointmentModal from '../../components/ui/AppointmentModal';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Tabs } from '../../components/ui/Tabs';
@@ -80,12 +81,11 @@ function CustomerHeader({ customer, onEdit }) {
   );
 }
 
-function AppointmentsTab({ customerId, appointments }) {
-  const router = useRouter();
+function AppointmentsTab({ customerId, appointments, onNew }) {
   return (
     <div>
       <div className="flex justify-end mb-4">
-        <Button onClick={() => router.push(`/create-appointment?customerId=${customerId}`)}>
+        <Button onClick={onNew}>
           <PlusCircle className="mr-2 h-4 w-4" /> Add Appointment
         </Button>
       </div>
@@ -187,6 +187,8 @@ export default function CustomerProfilePage() {
   );
 
   const [isEditModalOpen, setEditModalOpen] = useState(false);
+  const [apptModalOpen, setApptModalOpen] = useState(false);
+  const [apptInitial, setApptInitial] = useState<any | null>(null);
 
   const handleSaveCustomer = async (formData) => {
     try {
@@ -208,6 +210,23 @@ export default function CustomerProfilePage() {
     }
   };
 
+  const openNewAppointmentModal = () => {
+    if (!customer) return;
+    // Prefill to this customer for individual appointments
+    setApptInitial({ individualCustomerId: customer.id });
+    setApptModalOpen(true);
+  };
+
+  const handleSaveAppointment = async (data: any) => {
+    try {
+      await api.post('/api/appointments', data);
+      success('Appointment created successfully');
+      setApptModalOpen(false);
+    } catch (err: any) {
+      toastError('Failed to create appointment');
+    }
+  };
+
   if (customerError) return <div className="p-8 text-red-500">Failed to load customer data. Please try again.</div>;
   if (!customer) return <div className="p-8"><Skeleton className="h-48 w-full" /></div>;
 
@@ -222,7 +241,7 @@ export default function CustomerProfilePage() {
           <TabsTrigger value="measurements"><Ruler className="mr-2 h-4 w-4" />Measurements</TabsTrigger>
         </TabsList>
         <TabsContent value="appointments" className="mt-4">
-          <AppointmentsTab customerId={customer.id} appointments={customer.appointments} />
+          <AppointmentsTab customerId={customer.id} appointments={customer.appointments} onNew={openNewAppointmentModal} />
         </TabsContent>
         <TabsContent value="alterations" className="mt-4">
           <AlterationsTab customerId={customer.id} alterations={customer.alterations} />
@@ -240,6 +259,14 @@ export default function CustomerProfilePage() {
           onSave={handleSaveCustomer}
         />
       )}
+
+      <AppointmentModal
+        open={apptModalOpen}
+        onClose={() => { setApptModalOpen(false); setApptInitial(null); }}
+        onSubmit={handleSaveAppointment}
+        appointment={apptInitial}
+        loading={false}
+      />
     </div>
   );
 }

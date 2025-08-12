@@ -33,15 +33,31 @@ export class PartyController {
   }
 }
 
+// listParties
+// Lists parties and supports search by party name, member role/notes.
+// Future: can extend to search member phone normalized.
 export const listParties = async (req: Request, res: Response): Promise<void> => {
   try {
-    // Fetch local parties
+    const search = (req.query.search as string | undefined) || '';
+    const where: any = {};
+    if (search && search.trim().length > 0) {
+      const norm = search.replace(/[^0-9a-zA-Z@\.\s]/g, '');
+      const textLike = norm;
+      where.OR = [
+        { name: { contains: textLike, mode: 'insensitive' } },
+        { members: { some: { OR: [
+          { role: { contains: textLike, mode: 'insensitive' } },
+          { notes: { contains: textLike, mode: 'insensitive' } },
+        ] } } },
+      ];
+    }
+
+    // Fetch local parties (optionally filtered)
     const parties = await prisma.party.findMany({
+      where,
       include: {
         members: true,
-        _count: {
-          select: { members: true }
-        }
+        _count: { select: { members: true } },
       },
       orderBy: { eventDate: 'desc' },
     });

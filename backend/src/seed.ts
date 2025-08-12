@@ -44,8 +44,7 @@ async function main() {
       role: "Groom",
       status: "ordered",
       notes: "John Smith - Groom",
-      suitOrderId: "SUIT-001",
-      accessoriesOrderId: "ACC-001",
+      // optional legacy fields not present in all schemas (omit if not available)
       orderedAt: new Date("2024-11-01"),
       measurements: {
         chest: "42",
@@ -82,8 +81,7 @@ async function main() {
       role: "Groomsman",
       status: "being_altered",
       notes: "Tom Brown - Groomsman #2",
-      suitOrderId: "SUIT-002",
-      accessoriesOrderId: "ACC-002",
+      // optional legacy fields not present in all schemas (omit if not available)
       orderedAt: new Date("2024-10-15"),
       receivedAt: new Date("2024-11-10"),
       alteredAt: new Date("2024-11-20"),
@@ -101,20 +99,18 @@ async function main() {
   ];
 
   for (const memberData of testMembers) {
-    await prisma.partyMember.create({
-      data: {
-        partyId: testParty.id,
-        role: memberData.role,
-        status: memberData.status as any,
-        notes: memberData.notes,
-        suitOrderId: memberData.suitOrderId,
-        accessoriesOrderId: memberData.accessoriesOrderId,
-        orderedAt: memberData.orderedAt,
-        receivedAt: memberData.receivedAt,
-        alteredAt: memberData.alteredAt,
-        measurements: memberData.measurements
-      }
-    });
+    // Build data object without non-existent columns to prevent seed failures across migrations
+    const memberCreateData: any = {
+      partyId: testParty.id,
+      role: memberData.role,
+      status: memberData.status as any,
+      notes: memberData.notes,
+      orderedAt: memberData.orderedAt,
+      receivedAt: memberData.receivedAt,
+      alteredAt: memberData.alteredAt,
+      measurements: memberData.measurements,
+    };
+    await prisma.partyMember.create({ data: memberCreateData });
   }
 
   console.log("✅ Test party created successfully!");

@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import logger from '../utils/logger';
 import { shouldCreateNextAppointment, suggestNextAppointmentDate, WEDDING_TIMELINE } from './appointmentProgressService';
 import { scheduleAppointmentReminders } from './notificationSchedulingService';
+import Scheduling from './alterationSchedulingService.js';
 
 const prisma = new PrismaClient();
 
@@ -116,6 +117,35 @@ export async function executeWorkflowTriggers(appointmentId: number): Promise<Wo
           result.actions.push('Member status set to being_altered - alterations need to be input');
           result.actions.push('Create alterations job with specific alterations needed');
           result.actions.push('Print alterations ticket with QR codes for each part');
+
+          // Auto-create a shell alterations job if one does not exist yet, derive due date from party timeline
+          try {
+            const existingJob = await prisma.alterationJob.findFirst({ where: { partyMemberId: member.id } });
+            if (!existingJob) {
+              const jobNumber = `AJ-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+              const dueDate = party.eventDate ? new Date(new Date(party.eventDate).getTime() - 7 * 24 * 60 * 60 * 1000) : null;
+              const job = await prisma.alterationJob.create({
+                data: {
+                  jobNumber,
+                  partyId: party.id,
+                  partyMemberId: member.id,
+                  status: 'NOT_STARTED',
+                  notes: 'Auto-created after alterations fitting',
+                  dueDate,
+                },
+              });
+              result.alterationJobId = job.id;
+              // Attempt auto-scheduling (parts may be added later; this is a no-op if none)
+              try {
+                await Scheduling.scheduleJobParts(job.id, { respectNoThursday: true });
+              } catch (err) {
+                logger.warn('Auto-scheduling on workflow trigger failed', err);
+              }
+              result.actions.push('Auto-created alteration job from workflow');
+            }
+          } catch (e) {
+            logger.error('Error auto-creating alteration job from workflow', e);
+          }
           break;
 
         case 'pickup':

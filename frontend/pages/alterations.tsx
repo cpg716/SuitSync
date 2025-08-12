@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import useSWR from 'swr';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -25,9 +25,14 @@ import { useRouter } from 'next/router';
 import { useToast } from '@/components/ToastContext';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { simpleFetcher } from '@/lib/simpleApiClient';
+import { fetcher } from '../lib/apiClient';
 import { format, isAfter, isBefore, addDays } from 'date-fns';
 import { useAuth } from '../src/AuthContext';
 import { UserAvatar } from '../components/ui/UserAvatar';
+import { Calendar as RBCalendar, dateFnsLocalizer, View as RBCView } from 'react-big-calendar';
+import { format as dfFormat, parse, startOfWeek, getDay } from 'date-fns';
+import enUS from 'date-fns/locale/en-US/index.js';
+import 'react-big-calendar/lib/css/react-big-calendar.css';
 
 interface AlterationJob {
   id: number;
@@ -85,37 +90,51 @@ interface AlterationsResponse {
 }
 
 export default function AlterationsPage() {
+  const isClient = typeof window !== 'undefined';
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const { user, loading: authLoading } = useAuth();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [selectedJob, setSelectedJob] = useState<AlterationJob | null>(null);
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [selectedTailorId, setSelectedTailorId] = useState<string>('');
 
   const { data, error, isLoading, mutate } = useSWR<AlterationsResponse>(
-    '/api/alterations',
-    simpleFetcher,
-    { 
+    isClient ? '/api/alterations/jobs' : null,
+    fetcher as any,
+    {
       refreshInterval: 30000,
       revalidateOnFocus: false,
-      dedupingInterval: 10000
+      dedupingInterval: 10000,
+      revalidateOnMount: true,
     }
   );
 
   const alterations = data?.alterations || [];
   const summary = data?.summary;
 
-  // Filter alterations based on search and status
+  // Tailors for filtering (calendar)
+  const { data: tailorsData } = useSWR(isClient ? '/api/users?role=tailor' : null, fetcher as any);
+  const tailorsRaw = (tailorsData && (tailorsData as any).users)
+    ? (tailorsData as any).users
+    : Array.isArray(tailorsData)
+    ? (tailorsData as any)
+    : [];
+  const tailors = Array.isArray(tailorsRaw) ? tailorsRaw.filter((u: any) => (u?.role || '').toLowerCase() === 'tailor') : [];
+
+  // Filter alterations based on search and status (defensive for missing fields)
   const filteredAlterations = alterations.filter(alteration => {
-    const matchesSearch = search === '' || 
-      alteration.jobNumber.toLowerCase().includes(search.toLowerCase()) ||
-      alteration.notes.toLowerCase().includes(search.toLowerCase()) ||
-      alteration.party?.name.toLowerCase().includes(search.toLowerCase()) ||
-      alteration.partyMember?.notes.toLowerCase().includes(search.toLowerCase()) ||
-      alteration.customer?.name.toLowerCase().includes(search.toLowerCase());
-    
+    const q = (search || '').toLowerCase();
+    const matchesSearch = q === '' ||
+      (String(alteration.jobNumber || '').toLowerCase().includes(q)) ||
+      (String(alteration.notes || '').toLowerCase().includes(q)) ||
+      (String(alteration.party?.name || '').toLowerCase().includes(q)) ||
+      (String(alteration.partyMember?.notes || '').toLowerCase().includes(q)) ||
+      (String(alteration.customer?.name || '').toLowerCase().includes(q));
+
     const matchesStatus = statusFilter === '' || alteration.status === statusFilter;
-    
+
     return matchesSearch && matchesStatus;
   });
 
@@ -185,6 +204,51 @@ export default function AlterationsPage() {
   const handleViewJob = (job: AlterationJob) => {
     setSelectedJob(job);
   };
+
+  useEffect(() => {
+    // After creating a job, prompt for scheduling (auto/manual) then offer tag printing
+    const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+    if (params.get('newJob') && data && (data as any).alterations) {
+      const idStr = params.get('newJob');
+      const newJob = (data as any).alterations.find((a: any) => String(a.id) === idStr);
+      if (newJob) {
+        setSelectedJob(newJob);
+        const wantsPrompt = params.get('schedulePrompt') === '1';
+        if (wantsPrompt) {
+          setTimeout(() => {
+            const choice = window.confirm('Schedule this job now? Click OK for Auto-Schedule, Cancel for Manual Schedule.');
+            if (choice) {
+              // Auto-schedule
+              fetch(`/api/alterations/jobs/${newJob.id}/schedule`, { method: 'POST' })
+                .then(() => mutate())
+                .catch(() => {});
+            } else {
+              const date = window.prompt('Enter schedule date (YYYY-MM-DD)');
+              if (date) {
+                (async () => {
+                  try {
+                    for (const p of newJob.jobParts || []) {
+                      await fetch(`/api/alterations/parts/${p.id}/schedule`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ date }),
+                      });
+                    }
+                    mutate();
+                  } catch {}
+                })();
+              }
+            }
+          }, 100);
+        }
+        // Clean params so prompt doesn't repeat
+        params.delete('newJob');
+        params.delete('schedulePrompt');
+        const url = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
+        window.history.replaceState({}, '', url);
+      }
+    }
+  }, [data]);
 
   const handlePrintTicket = async (jobId: number, printType: 'all' | 'sections' = 'all') => {
     try {
@@ -349,10 +413,15 @@ export default function AlterationsPage() {
             Manage all alteration jobs and track progress
           </p>
         </div>
-        <Button onClick={() => router.push('/create-alteration')}>
-          <Plus className="w-4 h-4 mr-2" />
-          New Alteration Job
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant={viewMode==='list' ? 'default' : 'outline'} onClick={() => setViewMode('list')}>
+            List
+          </Button>
+          <Button variant={viewMode==='calendar' ? 'default' : 'outline'} onClick={() => setViewMode('calendar')}>
+            Calendar
+          </Button>
+          <CreateAlterationInlineButton />
+        </div>
       </div>
 
       {/* Filters */}
@@ -380,15 +449,28 @@ export default function AlterationsPage() {
               <option value="IN_PROGRESS">In Progress</option>
               <option value="COMPLETE">Complete</option>
             </select>
-            
-            <div className="text-sm text-gray-600 dark:text-gray-400 flex items-center">
-              {filteredAlterations.length} of {alterations.length} alterations
-            </div>
+            {viewMode==='calendar' ? (
+              <select
+                value={selectedTailorId}
+                onChange={e => setSelectedTailorId(e.target.value)}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+              >
+                <option value="">All Tailors</option>
+                {tailors.map((t: any) => (
+                  <option key={t.id} value={String(t.id)}>{t.name}</option>
+                ))}
+              </select>
+            ) : (
+              <div className="text-sm text-gray-600 dark:text-gray-400 flex items-center">
+                {filteredAlterations.length} of {alterations.length} alterations
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Alterations List */}
+      {viewMode==='list' ? (
+      // Alterations List
       <div className="space-y-4">
         {filteredAlterations.length === 0 ? (
           <Card>
@@ -527,7 +609,7 @@ export default function AlterationsPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => router.push(`/alterations/${alteration.id}`)}
+                      onClick={() => router.push(`/alteration-job/${alteration.id}`)}
                       className="flex items-center gap-2"
                     >
                       <QrCode className="w-4 h-4" />
@@ -540,6 +622,14 @@ export default function AlterationsPage() {
           ))
         )}
       </div>
+      ) : (
+      // Alterations Calendar
+      <Card>
+        <CardContent>
+          <AlterationsCalendar alterations={filteredAlterations} selectedTailorId={selectedTailorId} onSelectJob={setSelectedJob} />
+        </CardContent>
+      </Card>
+      )}
 
       {/* Job Details Modal */}
       {selectedJob && (
@@ -642,7 +732,42 @@ export default function AlterationsPage() {
                 )}
               </div>
               
-              <div className="flex justify-end gap-2 mt-6">
+                <div className="flex justify-between items-center gap-2 mt-6">
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={async () => {
+                        try {
+                          await fetch(`/api/alterations/jobs/${selectedJob.id}/schedule`, { method: 'POST' });
+                          success('Auto-scheduled');
+                          mutate();
+                        } catch (e) { toastError('Failed to auto-schedule'); }
+                      }}
+                    >
+                      Auto-Schedule
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={async () => {
+                        const date = prompt('Enter schedule date (YYYY-MM-DD)');
+                        if (!date) return;
+                        try {
+                          // Schedule each part manually to selected day
+                          for (const p of selectedJob.jobParts) {
+                            await fetch(`/api/alterations/parts/${p.id}/schedule`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ date }),
+                            });
+                          }
+                          success('Scheduled manually');
+                          mutate();
+                        } catch (e) { toastError('Failed to schedule manually'); }
+                      }}
+                    >
+                      Manual Schedule
+                    </Button>
+                  </div>
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
@@ -660,7 +785,7 @@ export default function AlterationsPage() {
                   </Button>
                 </div>
                 <Button
-                  onClick={() => router.push(`/alterations/${selectedJob.id}`)}
+                  onClick={() => router.push(`/alteration-job/${selectedJob.id}`)}
                 >
                   <QrCode className="w-4 h-4 mr-2" />
                   Manage Job
@@ -671,5 +796,66 @@ export default function AlterationsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// Calendar implementation
+const locales = { 'en-US': enUS } as any;
+const realLocalizer = (dateFnsLocalizer as any)({ format: dfFormat, parse, startOfWeek, getDay, locales });
+
+function AlterationsCalendar({ alterations, selectedTailorId, onSelectJob }: { alterations: any[]; selectedTailorId: string; onSelectJob: (job: any)=>void }) {
+  const events = useMemo(() => {
+    const evts: any[] = [];
+    for (const job of alterations) {
+      const parts = Array.isArray(job.jobParts) ? job.jobParts : [];
+      for (const part of parts) {
+        const start = part.scheduledFor ? new Date(part.scheduledFor) : (job.dueDate ? new Date(job.dueDate) : null);
+        if (!start) continue;
+        if (selectedTailorId && String(part.assignedTo || job.tailorId || '') !== selectedTailorId) continue;
+        const end = new Date(start.getTime() + (part.estimatedTime ? part.estimatedTime : 60) * 60000);
+        evts.push({
+          id: `${job.id}-${part.id}`,
+          title: `${job.party?.name || 'Party'} • ${part.partName}`,
+          start,
+          end,
+          resource: { job, part },
+        });
+      }
+    }
+    return evts;
+  }, [alterations, selectedTailorId]);
+
+  const [view, setView] = useState<RBCView>('week');
+  const [date, setDate] = useState<Date>(new Date());
+
+  return (
+    <div style={{ height: 650 }}>
+      <RBCalendar
+        localizer={realLocalizer}
+        events={events}
+        startAccessor="start"
+        endAccessor="end"
+        view={view}
+        onView={setView as any}
+        date={date}
+        onNavigate={setDate}
+        onSelectEvent={(e: any) => onSelectJob(e.resource.job)}
+        popup
+      />
+    </div>
+  );
+}
+
+function CreateAlterationInlineButton() {
+  const [open, setOpen] = useState(false);
+  const CreateAlterationModal = require('../components/ui/CreateAlterationModal').default;
+  return (
+    <>
+      <Button onClick={() => setOpen(true)}>
+        <Plus className="w-4 h-4 mr-2" />
+        New Alteration Job
+      </Button>
+      <CreateAlterationModal open={open} onClose={() => setOpen(false)} />
+    </>
   );
 }

@@ -228,6 +228,7 @@ model AlterationJob {
   measurements             Json?
   receivedDate             DateTime            @default(now())
   dueDate                  DateTime?
+  lastMinute               Boolean             @default(false)
   rushOrder                Boolean             @default(false)
   createdAt                DateTime            @default(now())
   updatedAt                DateTime            @updatedAt
@@ -255,6 +256,7 @@ model AlterationJob {
   @@index([status, dueDate])
   @@index([customerId, status])
   @@index([tailorId, status])
+  @@index([lastMinute])
 }
 
 enum AlterationJobStatus {
@@ -288,6 +290,9 @@ model AlterationJobPart {
   notes           String?
   priority        PartPriority          @default(NORMAL)
   estimatedTime   Int?                  // estimated minutes
+  scheduledFor    DateTime?
+  workDayId       Int?
+  workDay         WorkDayPlan?          @relation(fields: [workDayId], references: [id])
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
   tasks           AlterationTask[]      @relation("PartTasks")
@@ -299,6 +304,8 @@ model AlterationJobPart {
   @@index([assignedTo])
   @@index([qrCode])
   @@index([status])
+  @@index([scheduledFor])
+  @@index([workDayId])
 }
 
 enum GarmentPartType {
@@ -667,6 +674,25 @@ enum NotificationMethod {
   email
   sms
   both
+}
+
+// Shop-level daily capacity planning for alterations. Based on paper forms:
+// - Jackets: 28 units/day
+// - Pants: 24 units/day
+// We also support a weekly rule not to schedule on Thursdays (enforced in services).
+model WorkDayPlan {
+  id              Int               @id @default(autoincrement())
+  date            DateTime          @unique
+  jacketCapacity  Int               @default(28)
+  pantsCapacity   Int               @default(24)
+  assignedJackets Int               @default(0)
+  assignedPants   Int               @default(0)
+  isClosed        Boolean           @default(false)
+  notes           String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  parts           AlterationJobPart[]
 }
 
 model AlterationTaskType {

@@ -89,8 +89,8 @@ export default function TailorSchedulePage() {
   const events = useMemo(() => safeJobs.map(job => ({
     id: job.id,
     title: `${job.partyName || job.party?.name || 'Party'} - ${job.memberName || job.member?.name || ''}`,
-    start: new Date(job.dueDate || job.scheduledDateTime || job.createdAt),
-    end: new Date(job.dueDate || job.scheduledDateTime || job.createdAt),
+    start: new Date(job.jobParts?.[0]?.scheduledFor || job.dueDate || job.scheduledDateTime || job.createdAt),
+    end: new Date(job.jobParts?.[0]?.scheduledFor || job.dueDate || job.scheduledDateTime || job.createdAt),
     resource: job,
     tailorId: job.tailorId,
   })), [safeJobs]);

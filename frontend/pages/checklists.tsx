@@ -10,6 +10,9 @@ import { Skeleton } from '../components/ui/Skeleton';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { UserAvatar } from '../components/ui/UserAvatar';
 import { Users, CheckCircle, ListChecks, ListTodo, PieChart } from 'lucide-react';
+import 'react-big-calendar/lib/css/react-big-calendar.css';
+import { Calendar as RBC, dateFnsLocalizer, View } from 'react-big-calendar';
+import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { useAuth } from '../src/AuthContext';
 
 /**
@@ -30,27 +33,112 @@ export default function ChecklistWorkspace() {
   const [tab, setTab] = useState('checklists');
   const [showChecklistModal, setShowChecklistModal] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
+  const [showAssignModal, setShowAssignModal] = useState<{ checklistId: number }|null>(null);
   const [filter, setFilter] = useState('all');
   const { user } = useAuth();
+  const [myView, setMyView] = useState(false);
+  const [users, setUsers] = useState<any[]>([]);
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [calView, setCalView] = useState<View>('month');
+  const [calDate, setCalDate] = useState<Date>(new Date());
+
+  const locales = { 'en-US': undefined as any };
+  const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
 
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
-      // Fetch checklists and tasks from backend (non-alteration)
-      const [cl, tk] = await Promise.all([
-        fetch('/api/checklists').then(r => r.json()).catch(() => []),
-        fetch('/api/tasks').then(r => r.json()).catch(() => []),
-      ]);
-      setChecklists(Array.isArray(cl.checklists) ? cl.checklists : []);
-      setTasks(Array.isArray(tk.tasks) ? tk.tasks : []);
+      const endpoints = myView
+        ? [
+            fetch('/api/checklists/my-checklists', { credentials: 'include' }).then(r => r.json()).catch(() => []),
+            fetch('/api/tasks/my-tasks', { credentials: 'include' }).then(r => r.json()).catch(() => []),
+          ]
+        : [
+            fetch('/api/checklists', { credentials: 'include' }).then(r => r.json()).catch(() => []),
+            fetch('/api/tasks', { credentials: 'include' }).then(r => r.json()).catch(() => []),
+          ];
+      const [cl, tk] = await Promise.all(endpoints);
+      setChecklists(Array.isArray(cl) ? cl : []);
+      setTasks(Array.isArray(tk) ? tk : []);
       setLoading(false);
     }
     fetchData();
+  }, [myView]);
+
+  useEffect(() => {
+    fetch('/api/public/users').then(r => r.json()).then(setUsers).catch(() => setUsers([]));
   }, []);
 
   // Filtering logic (stub, can be expanded)
   const filteredChecklists = filter === 'all' ? checklists : checklists.filter(c => c.status === filter);
   const filteredTasks = filter === 'all' ? tasks : tasks.filter(t => t.status === filter);
+  async function updateTaskStatus(id: number, status: string) {
+    const res = await fetch(`/api/tasks/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ status }) });
+    if (res.ok) setTasks(ts => ts.map((t: any) => t.id === id ? { ...t, status, completedAt: status === 'COMPLETED' ? new Date().toISOString() : t.completedAt } : t));
+  }
+
+  async function updateTaskNotes(id: number, notes: string) {
+    const res = await fetch(`/api/tasks/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ notes }) });
+    if (res.ok) setTasks(ts => ts.map((t: any) => t.id === id ? { ...t, notes } : t));
+  }
+
+  async function deleteTask(id: number) {
+    const res = await fetch(`/api/tasks/${id}`, { method: 'DELETE', credentials: 'include' });
+    if (res.ok) setTasks(ts => ts.filter((t: any) => t.id !== id));
+  }
+
+  async function startChecklistExecution(assignmentId: number) {
+    const res = await fetch(`/api/checklists/assignments/${assignmentId}/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ scheduledFor: new Date().toISOString() }) });
+    if (res.ok) {
+      const exec = await res.json();
+      // Refresh my view to include execution with items
+      if (myView) {
+        const cl = await fetch('/api/checklists/my-checklists', { credentials: 'include' }).then(r => r.json()).catch(() => []);
+        setChecklists(Array.isArray(cl) ? cl : []);
+      }
+    }
+  }
+
+  async function updateChecklistItem(executionId: number, itemId: number, isCompleted: boolean) {
+    const res = await fetch(`/api/checklists/executions/${executionId}/items/${itemId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ isCompleted }) });
+    if (res.ok) {
+      if (myView) {
+        setChecklists((cls: any[]) => cls.map((ex: any) => ex.id === executionId ? { ...ex, itemExecutions: ex.itemExecutions.map((ie: any) => ie.itemId === itemId ? { ...ie, isCompleted, completedAt: isCompleted ? new Date().toISOString() : null } : ie) } : ex));
+      }
+    }
+  }
+
+  const calendarEvents = React.useMemo(() => {
+    const evs: any[] = [];
+    if (myView) {
+      // My tasks
+      (Array.isArray(tasks) ? tasks : []).forEach((t: any) => {
+        if (t.dueDate) evs.push({ id: `task-${t.id}`, title: `Task: ${t.title}`, start: new Date(t.dueDate), end: new Date(t.dueDate), resource: { kind: 'task', task: t } });
+      });
+      // My checklist executions
+      (Array.isArray(checklists) ? checklists : []).forEach((ex: any) => {
+        const when = ex.scheduledFor || ex.assignment?.dueDate;
+        if (when) evs.push({ id: `chk-${ex.id}`, title: `Checklist: ${ex.assignment?.checklist?.title || 'Checklist'}`, start: new Date(when), end: new Date(when), resource: { kind: 'checklist', execution: ex } });
+      });
+    } else {
+      // Admin view
+      (Array.isArray(tasks) ? tasks : []).forEach((t: any) => {
+        if (t.dueDate) {
+          if (selectedUserIds.length === 0 || selectedUserIds.includes(String(t.assignedTo?.id))) {
+            evs.push({ id: `task-${t.id}`, title: `Task: ${t.title} (${t.assignedTo?.name || ''})`, start: new Date(t.dueDate), end: new Date(t.dueDate), resource: { kind: 'task', task: t } });
+          }
+        }
+      });
+      (Array.isArray(checklists) ? checklists : []).forEach((cl: any) => {
+        (cl.assignments || []).forEach((as: any) => {
+          if (as.dueDate && (selectedUserIds.length === 0 || selectedUserIds.includes(String(as.assignedTo?.id)))) {
+            evs.push({ id: `assign-${as.id}`, title: `Checklist: ${cl.title} (${as.assignedTo?.name || ''})`, start: new Date(as.dueDate), end: new Date(as.dueDate), resource: { kind: 'assignment', assignment: as, checklist: cl } });
+          }
+        });
+      });
+    }
+    return evs;
+  }, [myView, tasks, checklists, selectedUserIds]);
 
   // Summary data for dashboard export
   const summary = {
@@ -142,10 +230,15 @@ export default function ChecklistWorkspace() {
           <TabsList>
             <TabsTrigger value="checklists">Checklists</TabsTrigger>
             <TabsTrigger value="tasks">Tasks</TabsTrigger>
+            <TabsTrigger value="calendar">Calendar</TabsTrigger>
           </TabsList>
           <div className="flex gap-2 my-4">
-            <Button onClick={() => setShowChecklistModal(true)} variant="outline">New Checklist</Button>
-            <Button onClick={() => setShowTaskModal(true)} variant="outline">New Task</Button>
+          <Button onClick={() => setShowChecklistModal(true)} variant="outline">New Checklist</Button>
+          <Button onClick={() => setShowTaskModal(true)} variant="outline">New Task</Button>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={myView} onChange={e => setMyView(e.target.checked)} />
+              <span className="text-sm">My items only</span>
+            </label>
             <select value={filter} onChange={e => setFilter(e.target.value)} className="ml-auto border rounded px-2 py-1">
               <option value="all">All</option>
               <option value="NOT_STARTED">Not Started</option>
@@ -161,9 +254,18 @@ export default function ChecklistWorkspace() {
             <div className="text-center text-gray-500 py-8">No checklists found.</div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredChecklists.map(cl => (
-                <ChecklistCard key={cl.id} {...cl} />
-              ))}
+              {filteredChecklists.map((execOrCl: any) => {
+                // Support either checklist objects or execution objects
+                const cl = execOrCl.assignment ? execOrCl.assignment.checklist : execOrCl;
+                return (
+                  <div key={cl.id} className="relative">
+                    <ChecklistCard {...cl} />
+                    <div className="absolute top-2 right-2 flex gap-2">
+                      <Button size="sm" variant="outline" onClick={() => setShowAssignModal({ checklistId: cl.id })}>Assign</Button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </TabsContent>
@@ -174,29 +276,59 @@ export default function ChecklistWorkspace() {
             <div className="text-center text-gray-500 py-8">No tasks found.</div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredTasks.map(tk => (
-                <TaskCard key={tk.id} {...tk} />
+              {filteredTasks.map((tk: any) => (
+                <TaskCard
+                  key={tk.id}
+                  {...tk}
+                  canEdit={true}
+                  onUpdateStatus={(s) => updateTaskStatus(tk.id, s)}
+                  onUpdateNotes={(n) => updateTaskNotes(tk.id, n)}
+                  onDelete={() => deleteTask(tk.id)}
+                />
               ))}
             </div>
           )}
         </TabsContent>
+        <TabsContent value="calendar">
+          <div className="flex items-center gap-2 mb-3">
+            {!myView && (
+              <>
+                <span className="text-sm">Filter users</span>
+                <select multiple className="border rounded px-2 py-1" value={selectedUserIds} onChange={(e) => setSelectedUserIds(Array.from(e.target.selectedOptions).map(o => o.value))}>
+                  {users.map(u => <option key={u.id} value={String(u.id)}>{u.name} ({u.role})</option>)}
+                </select>
+                <Button size="sm" variant="outline" onClick={() => setSelectedUserIds([])}>Clear</Button>
+              </>
+            )}
+          </div>
+          <div className="h-[650px]">
+            <RBC
+              localizer={localizer}
+              events={calendarEvents}
+              startAccessor="start"
+              endAccessor="end"
+              date={calDate}
+              onNavigate={setCalDate}
+              view={calView}
+              onView={v => setCalView(v)}
+              popup
+            />
+          </div>
+        </TabsContent>
       </Tabs>
-      {/* Checklist Modal (stub) */}
-      <Modal open={showChecklistModal} onClose={() => setShowChecklistModal(false)}>
-        <div className="p-4">
-          <h2 className="text-lg font-bold mb-2">New Checklist</h2>
-          <Input placeholder="Checklist Title" className="mb-2" />
-          <Button className="w-full">Create</Button>
-        </div>
-      </Modal>
-      {/* Task Modal (stub) */}
-      <Modal open={showTaskModal} onClose={() => setShowTaskModal(false)}>
-        <div className="p-4">
-          <h2 className="text-lg font-bold mb-2">New Task</h2>
-          <Input placeholder="Task Title" className="mb-2" />
-          <Button className="w-full">Create</Button>
-        </div>
-      </Modal>
+      {/* Checklist Modal */}
+      <ChecklistCreateModal open={showChecklistModal} onClose={() => setShowChecklistModal(false)} onCreated={() => window.location.reload()} />
+      {/* Task Modal */}
+      <TaskCreateModal open={showTaskModal} onClose={() => setShowTaskModal(false)} onCreated={() => window.location.reload()} />
+      {/* Assign Checklist Modal */}
+      {showAssignModal && (
+        <ChecklistAssignModal
+          checklistId={showAssignModal.checklistId}
+          open={!!showAssignModal}
+          onClose={() => setShowAssignModal(null)}
+          onAssigned={() => window.location.reload()}
+        />
+      )}
         </div>
     </Layout>
   );
@@ -204,3 +336,213 @@ export default function ChecklistWorkspace() {
 
 // Signal to _app that this page already wraps itself with Layout
 (ChecklistWorkspace as any).getLayout = (page: React.ReactNode) => page;
+
+function ChecklistCreateModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [frequency, setFrequency] = useState<'DAILY'|'WEEKLY'|'MONTHLY'|'YEARLY'>('DAILY');
+  const [isRequired, setIsRequired] = useState(false);
+  const [items, setItems] = useState<Array<{ title: string; description?: string; isRequired?: boolean }>>([
+    { title: '' }
+  ]);
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/checklists', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ title, description, frequency, isRequired, items })
+      });
+      if (!res.ok) throw new Error('Failed to create checklist');
+      onClose();
+      onCreated();
+    } catch (e) {
+      alert('Could not create checklist');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="New Checklist" size="lg">
+      <div className="space-y-3">
+        <Input placeholder="Title" value={title} onChange={e => setTitle(e.target.value)} />
+        <Input placeholder="Description (optional)" value={description} onChange={e => setDescription(e.target.value)} />
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-sm">Frequency</label>
+            <select className="w-full border rounded px-2 py-2" value={frequency} onChange={e => setFrequency(e.target.value as any)}>
+              <option value="DAILY">Daily</option>
+              <option value="WEEKLY">Weekly</option>
+              <option value="MONTHLY">Monthly</option>
+              <option value="YEARLY">Yearly</option>
+            </select>
+          </div>
+          <label className="flex items-center gap-2 mt-6">
+            <input type="checkbox" checked={isRequired} onChange={e => setIsRequired(e.target.checked)} />
+            Required for completion
+          </label>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium">Items</span>
+            <Button size="sm" variant="outline" onClick={() => setItems(arr => [...arr, { title: '' }])}>Add Item</Button>
+          </div>
+          {items.map((it, idx) => (
+            <div key={idx} className="grid grid-cols-12 gap-2">
+              <div className="col-span-5"><Input placeholder="Item title" value={it.title} onChange={e => setItems(arr => arr.map((x, i) => i===idx ? { ...x, title: e.target.value } : x))} /></div>
+              <div className="col-span-5"><Input placeholder="Item description" value={it.description || ''} onChange={e => setItems(arr => arr.map((x, i) => i===idx ? { ...x, description: e.target.value } : x))} /></div>
+              <label className="col-span-2 flex items-center gap-2"><input type="checkbox" checked={!!it.isRequired} onChange={e => setItems(arr => arr.map((x, i) => i===idx ? { ...x, isRequired: e.target.checked } : x))} /> Required</label>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={saving || !title.trim()}>Create</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function TaskCreateModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [priority, setPriority] = useState<'LOW'|'MEDIUM'|'HIGH'|'URGENT'>('MEDIUM');
+  const [assignedToId, setAssignedToId] = useState<string>('');
+  const [dueDate, setDueDate] = useState('');
+  const [estimatedMinutes, setEstimatedMinutes] = useState<number>(60);
+  const [users, setUsers] = useState<any[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  React.useEffect(() => {
+    if (!open) return;
+    fetch('/api/public/users').then(r => r.json()).then(setUsers).catch(() => setUsers([]));
+  }, [open]);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ title, description, priority, assignedToId: Number(assignedToId), dueDate: dueDate || undefined, estimatedMinutes })
+      });
+      if (!res.ok) throw new Error('Failed to create task');
+      onClose();
+      onCreated();
+    } catch (e) {
+      alert('Could not create task');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="New Task" size="md">
+      <div className="space-y-3">
+        <Input placeholder="Title" value={title} onChange={e => setTitle(e.target.value)} />
+        <Input placeholder="Description (optional)" value={description} onChange={e => setDescription(e.target.value)} />
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-sm">Priority</label>
+            <select className="w-full border rounded px-2 py-2" value={priority} onChange={e => setPriority(e.target.value as any)}>
+              <option value="LOW">Low</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="HIGH">High</option>
+              <option value="URGENT">Urgent</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-sm">Assigned To</label>
+            <select className="w-full border rounded px-2 py-2" value={assignedToId} onChange={e => setAssignedToId(e.target.value)}>
+              <option value="">Select user…</option>
+              {users.map((u: any) => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-sm">Due Date</label>
+            <input type="date" className="w-full border rounded px-2 py-2" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-sm">Estimated Minutes</label>
+            <input type="number" min={1} max={480} className="w-full border rounded px-2 py-2" value={estimatedMinutes} onChange={e => setEstimatedMinutes(Number(e.target.value))} />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={saving || !title.trim() || !assignedToId}>Create</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function ChecklistAssignModal({ checklistId, open, onClose, onAssigned }: { checklistId: number; open: boolean; onClose: () => void; onAssigned: () => void }) {
+  const [users, setUsers] = useState<any[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [dueDate, setDueDate] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  React.useEffect(() => {
+    if (!open) return;
+    fetch('/api/public/users').then(r => r.json()).then(setUsers).catch(() => setUsers([]));
+  }, [open]);
+
+  async function handleAssign() {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/checklists/${checklistId}/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ userIds: selected.map(Number), dueDate: dueDate || undefined })
+      });
+      if (!res.ok) throw new Error('Failed to assign');
+      onClose();
+      onAssigned();
+    } catch (e) {
+      alert('Could not assign checklist');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Assign Checklist" size="md">
+      <div className="space-y-3">
+        <div>
+          <label className="text-sm">Select Users</label>
+          <div className="max-h-64 overflow-auto border rounded p-2">
+            {users.map((u: any) => (
+              <label key={u.id} className="flex items-center gap-2 py-1">
+                <input
+                  type="checkbox"
+                  checked={selected.includes(String(u.id))}
+                  onChange={(e) => setSelected(arr => e.target.checked ? [...arr, String(u.id)] : arr.filter(x => x !== String(u.id)))}
+                />
+                <span>{u.name} ({u.role})</span>
+              </label>
+            ))}
+          </div>
+        </div>
+        <div>
+          <label className="text-sm">Due Date (optional)</label>
+          <input type="date" className="w-full border rounded px-2 py-2" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleAssign} disabled={saving || selected.length === 0}>Assign</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}

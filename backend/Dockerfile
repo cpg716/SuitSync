@@ -42,6 +42,9 @@ RUN npm ci
 # Copy source code
 COPY . ./
 
+# Ensure entrypoint is executable
+RUN chmod +x entrypoint.sh || true
+
 # Generate tsoa routes + spec
 RUN npm run tsoa:routes && npm run tsoa:spec
 
@@ -53,4 +56,5 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:3000/api/health || exit 1
 
 EXPOSE 3000
-CMD ["node", "dist/index.js"]
+# Run migrations and seed before starting the server
+CMD ["sh", "/app/entrypoint.sh"]

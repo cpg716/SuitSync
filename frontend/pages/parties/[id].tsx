@@ -10,6 +10,7 @@ import { AlterationModal } from '../../components/ui/AlterationModal';
 import { useToast } from '../../components/ToastContext';
 import { Modal } from '../../components/ui/Modal';
 import { UserAvatar } from '../../components/ui/UserAvatar';
+import PartyTimelineRibbon from '../../components/PartyTimelineRibbon';
 
 const PHASES = [
   { name: 'Suit Selection', color: 'bg-blue-500', monthsFrom: 6, monthsTo: 3 },
@@ -101,6 +102,7 @@ export default function PartyDetail() {
   const [form, setForm] = useState({ role: '', measurements: '', status: 'awaiting_measurements', notes: '' });
   const [page, setPage] = useState(1);
   const [showAppt, setShowAppt] = useState(false);
+  const [apptInitial, setApptInitial] = useState<any | null>(null);
   const pageSize = 10;
   const paginated = members.slice((page-1)*pageSize, page*pageSize);
   const now = new Date();
@@ -287,6 +289,15 @@ export default function PartyDetail() {
         <div className="lg:w-2/3">
           <h1 className="text-3xl font-bold mb-2">{party.name}</h1>
           <p className="text-gray-600 dark:text-gray-400 mb-6">{party.notes}</p>
+          <div className="mb-4">
+            <PartyTimelineRibbon
+              eventDate={party?.eventDate}
+              firstFittingDate={party?.appointments?.find((a:any)=>a.type==='first_fitting')?.dateTime}
+              alterationsFittingDate={party?.appointments?.find((a:any)=>a.type==='alterations_fitting')?.dateTime}
+              pickupDate={party?.appointments?.find((a:any)=>a.type==='pickup')?.dateTime}
+              dueDate={party?.alterationJobs?.[0]?.dueDate}
+            />
+          </div>
           <Tabs value={tab} onValueChange={setTab} className="mb-4">
             <TabsList>
               <TabsTrigger value="members">Members</TabsTrigger>
@@ -319,7 +330,10 @@ export default function PartyDetail() {
                           {(memberAlterations[member.id] || []).map(job => (
                             <ExpandableAlterationCard key={job.id} job={job} />
                           ))}
-                          <Button className="text-xs px-2 py-1 bg-blue-500 text-white mt-2" onClick={() => { setAlterationMemberId(member.id); setEditAlteration(null); setShowAlterationModal(true); }}>+ Add Alteration</Button>
+                          <div className="flex gap-2 mt-2">
+                            <Button className="text-xs px-2 py-1 bg-blue-500 text-white" onClick={() => { setAlterationMemberId(member.id); setEditAlteration(null); setShowAlterationModal(true); }}>+ Add Alteration</Button>
+                            <Button className="text-xs px-2 py-1 bg-green-600 text-white" onClick={() => { setApptInitial({ partyId: Number(id), partyMemberId: member.id }); setShowAppt(true); }}>+ Add Appointment</Button>
+                          </div>
                         </div>
                       </td>
                       <td className="p-2">
@@ -523,6 +537,22 @@ export default function PartyDetail() {
           </Tabs>
         </div>
       </div>
+
+      {/* Appointment Modal (prefilled for member) */}
+      <AppointmentModal
+        open={showAppt}
+        onClose={() => { setShowAppt(false); setApptInitial(null); }}
+        onSubmit={async (data: any) => {
+          try {
+            await fetch('/api/appointments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(data) });
+            setShowAppt(false);
+          } catch (e) {
+            console.error('Failed to create appointment', e);
+          }
+        }}
+        appointment={apptInitial}
+        loading={false}
+      />
 
       {/* Status Update Modal */}
       <StatusUpdateModal

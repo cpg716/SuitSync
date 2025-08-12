@@ -62,7 +62,6 @@ interface AppointmentFormData {
   notes: string;
   staffId?: number;
   autoScheduleNext: boolean;
-  recurrenceRule?: string;
   assignedStaffId?: string;
 }
 
@@ -133,6 +132,8 @@ export const AppointmentForm: React.FC<AppointmentFormProps> = ({
   const [selectedMember, setSelectedMember] = useState<PartyMember | null>(null);
   const [activeTab, setActiveTab] = useState<'individual' | 'party'>('individual');
   const [staffMembers, setStaffMembers] = useState<Array<{ id: number; name: string; role: string }>>([]);
+  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
+  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<AppointmentFormData>({
     individualCustomerId: undefined,
@@ -145,21 +146,25 @@ export const AppointmentForm: React.FC<AppointmentFormProps> = ({
     notes: initialData.notes || '',
     staffId: initialData.staffId,
     autoScheduleNext: initialData.autoScheduleNext || false,
-    recurrenceRule: initialData.recurrenceRule,
     assignedStaffId: initialData.assignedStaffId
   });
 
-  // Load staff members when component mounts
+  // Load staff members when component mounts (Sales and Managers only)
   useEffect(() => {
     const loadStaffMembers = async () => {
       try {
-        const response = await fetch('/api/admin/settings/staff', {
-          credentials: 'include'
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setStaffMembers(Array.isArray(data) ? data : []);
-        }
+        // Use public staff endpoint filtered to sales; API returns associate and sales
+        const salesRes = await fetch('/api/public/staff?role=sales');
+        const sales = salesRes.ok ? await salesRes.json() : [];
+        // Also fetch managers if available
+        const mgrRes = await fetch('/api/public/staff?role=manager');
+        const managers = mgrRes.ok ? await mgrRes.json() : [];
+        const merged = [...(Array.isArray(sales) ? sales : []), ...(Array.isArray(managers) ? managers : [])];
+        // Filter to Sales and Managers only
+        const filtered = merged.filter((u: any) => ['sales', 'manager'].includes(String(u.role || '').toLowerCase()));
+        // De-duplicate by id
+        const unique = Array.from(new Map(filtered.map((u: any) => [u.id, u])).values());
+        setStaffMembers(unique);
       } catch (err) {
         console.error('Failed to load staff members:', err);
       }
@@ -167,6 +172,25 @@ export const AppointmentForm: React.FC<AppointmentFormProps> = ({
     
     loadStaffMembers();
   }, []);
+
+  // Fetch availability slots when staff/date/duration changes
+  useEffect(() => {
+    const staffId = formData.assignedStaffId ? Number(formData.assignedStaffId) : undefined;
+    const dateOnly = formData.dateTime ? String(formData.dateTime).slice(0, 10) : '';
+    if (!staffId || !dateOnly) { setAvailableSlots([]); setSelectedSlot(null); return; }
+    const duration = formData.durationMinutes || 60;
+    fetch(`/api/public/availability?userId=${staffId}&date=${dateOnly}&duration=${duration}`)
+      .then(r => r.json())
+      .then((slots: string[]) => {
+        const arr = Array.isArray(slots) ? slots : [];
+        setAvailableSlots(arr);
+        if (arr.length === 1) {
+          setSelectedSlot(arr[0]);
+          setFormData(prev => ({ ...prev, dateTime: arr[0].slice(0, 16) }));
+        }
+      })
+      .catch(() => { setAvailableSlots([]); setSelectedSlot(null); });
+  }, [formData.assignedStaffId, formData.dateTime, formData.durationMinutes]);
 
   // Load initial data when component mounts or initialData changes
   useEffect(() => {
@@ -427,6 +451,33 @@ export const AppointmentForm: React.FC<AppointmentFormProps> = ({
         )}
       </div>
 
+      {/* Staff Assignment (choose who the appointment is with) */}
+      <div className="space-y-2">
+        <Label htmlFor="assignedStaff">Assigned Staff (Sales / Manager)</Label>
+        <Select
+          value={formData.assignedStaffId || ''}
+          onValueChange={(value) => 
+            setFormData(prev => ({ ...prev, assignedStaffId: value || undefined }))
+          }
+        >
+          <SelectTrigger aria-label="Assigned Staff">
+            <SelectValue placeholder="Select staff member" />
+          </SelectTrigger>
+          <SelectContent>
+            {staffMembers.map((staff) => (
+              <SelectItem key={staff.id} value={staff.id.toString()}>
+                {staff.name} ({staff.role})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {formData.assignedStaffId && (
+          <div className="text-xs text-gray-500">
+            Pick a date and duration next to load available time slots.
+          </div>
+        )}
+      </div>
+
       {/* Date and Time */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
@@ -438,6 +489,41 @@ export const AppointmentForm: React.FC<AppointmentFormProps> = ({
             onChange={(e) => setFormData(prev => ({ ...prev, dateTime: e.target.value }))}
             required
           />
+          {/* Available slots when staff selected */}
+          {availableSlots.length > 0 && (
+            <div className="mt-2 space-y-2">
+              <div className="flex flex-wrap gap-2">
+                {availableSlots.slice(0, 12).map((iso) => {
+                  const label = new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                  const isActive = formData.dateTime && new Date(formData.dateTime).toISOString() === iso;
+                  return (
+                    <Button
+                      key={iso}
+                      type="button"
+                      variant={isActive ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => { setSelectedSlot(iso); setFormData(prev => ({ ...prev, dateTime: iso.slice(0, 16) })); }}
+                    >
+                      {label}
+                    </Button>
+                  );
+                })}
+              </div>
+              <div>
+                <Label className="text-xs text-gray-600">Or choose a slot</Label>
+                <select
+                  className="mt-1 w-full border rounded px-2 py-1 bg-white dark:bg-gray-800 text-black dark:text-white"
+                  value={selectedSlot || ''}
+                  onChange={(e) => { const iso = e.target.value; setSelectedSlot(iso || null); if (iso) setFormData(prev => ({ ...prev, dateTime: iso.slice(0, 16) })); }}
+                >
+                  <option value="">Select available time…</option>
+                  {availableSlots.map(iso => (
+                    <option key={iso} value={iso}>{new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
         </div>
         
         <div className="space-y-2">
@@ -471,8 +557,8 @@ export const AppointmentForm: React.FC<AppointmentFormProps> = ({
               setFormData(prev => ({ ...prev, status: value }))
             }
           >
-            <SelectTrigger>
-              <SelectValue />
+            <SelectTrigger aria-label="Status">
+              <SelectValue placeholder="Select status" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="scheduled">Scheduled</SelectItem>
@@ -492,8 +578,8 @@ export const AppointmentForm: React.FC<AppointmentFormProps> = ({
               setFormData(prev => ({ ...prev, type: value }))
             }
           >
-            <SelectTrigger>
-              <SelectValue />
+            <SelectTrigger aria-label="Appointment Type">
+              <SelectValue placeholder="Select type" />
             </SelectTrigger>
             <SelectContent>
               {APPOINTMENT_TYPES.map((type) => (
@@ -509,39 +595,12 @@ export const AppointmentForm: React.FC<AppointmentFormProps> = ({
         </div>
       </div>
 
-      {/* Staff Assignment */}
-      <div className="space-y-2">
-        <Label htmlFor="assignedStaff">Assigned Staff (Optional)</Label>
-        <Select
-          value={formData.assignedStaffId || ''}
-          onValueChange={(value) => 
-            setFormData(prev => ({ ...prev, assignedStaffId: value || undefined }))
-          }
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Select staff member..." />
-          </SelectTrigger>
-          <SelectContent>
-            {staffMembers.map((staff) => (
-              <SelectItem key={staff.id} value={staff.id.toString()}>
-                {staff.name} ({staff.role})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Recurrence Rule */}
-      <div className="space-y-2">
-        <Label htmlFor="recurrenceRule">Recurrence Rule (iCalendar RRULE)</Label>
-        <Input
-          id="recurrenceRule"
-          type="text"
-          placeholder="e.g. FREQ=WEEKLY;COUNT=4"
-          value={formData.recurrenceRule || ''}
-          onChange={(e) => setFormData(prev => ({ ...prev, recurrenceRule: e.target.value }))}
-        />
-      </div>
+      {/* Availability Hint */}
+      {formData.assignedStaffId && (
+        <div className="text-xs text-gray-500">
+          Availability is validated on save. For fastest booking, start from the Calendar tab and pick an open slot.
+        </div>
+      )}
 
       {/* Notes */}
       <div className="space-y-2">

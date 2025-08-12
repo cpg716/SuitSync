@@ -143,21 +143,21 @@ export default function AlterationsCalendarPage() {
     return alterationJobs.reduce((acc, job) => {
       try {
         // Use scheduled date as start
-        const startDate = new Date(job.scheduledDate);
+         const startDate = new Date(job.scheduledDate || job.scheduledDateTime || job.jobParts?.[0]?.scheduledFor || job.dueDate || job.createdAt);
         if (!isValid(startDate)) {
           console.warn('Invalid date for alteration job:', job);
           return acc;
         }
 
         // Calculate end time based on estimated duration
-        const endDate = addMinutes(startDate, job.estimatedMinutes || 60);
+         const endDate = addMinutes(startDate, job.estimatedMinutes || job.jobParts?.[0]?.estimatedTime || 60);
         if (!isValid(endDate)) {
           console.warn('Invalid end date for alteration job:', job);
           return acc;
         }
 
         // Format title with party name and garment type
-        const title = `${job.party?.name || 'Party'} - ${job.garmentType || 'Alteration'}`;
+         const title = `${job.party?.name || 'Party'} - ${job.garmentType || job.jobParts?.map((p:any)=>p.partName).join(', ') || 'Alteration'}`;
 
         acc.push({
           id: String(job.id),

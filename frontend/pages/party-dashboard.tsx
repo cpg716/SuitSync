@@ -10,6 +10,7 @@ import { useToast } from '../components/ToastContext';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import { Pagination } from '../components/ui/Pagination';
+import PartyTimelineRibbon from '../components/PartyTimelineRibbon';
 
 function CalendarErrorBoundary({ children }: { children: React.ReactNode }) {
   try {
@@ -135,6 +136,15 @@ export default function PartyDashboard() {
 
   return (
     <div className="flex flex-col space-y-4">
+      {Array.isArray(parties) && parties[0] && (
+        <PartyTimelineRibbon
+          eventDate={parties[0].eventDate}
+          firstFittingDate={parties[0].appointments?.find((a: any)=>a.type==='first_fitting')?.dateTime}
+          alterationsFittingDate={parties[0].appointments?.find((a: any)=>a.type==='alterations_fitting')?.dateTime}
+          pickupDate={parties[0].appointments?.find((a: any)=>a.type==='pickup')?.dateTime}
+          dueDate={parties[0].alterationJobs?.[0]?.dueDate}
+        />
+      )}
       {atRiskParties.length > 0 && (
         <div className="mb-6">
           <h2 className="text-xl font-bold text-red-700 mb-2">At-Risk / Overdue Parties</h2>

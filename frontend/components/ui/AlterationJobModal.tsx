@@ -12,7 +12,10 @@ import { Separator } from './separator';
 import { Plus, Trash2, User, Calendar, Clock, AlertTriangle } from 'lucide-react';
 import { useToast } from '../ToastContext';
 import { format } from 'date-fns';
+import { api } from '../../lib/apiClient';
 import type { Party } from '../../src/types/parties';
+// Touch-friendly unified search for customers and parties
+import { CustomerSearch } from './CustomerSearchSimple';
 
 interface Customer {
   id: number;
@@ -424,7 +427,7 @@ export function AlterationJobModal({
         customerId: formData.customerId ? parseInt(formData.customerId as string) : undefined,
         partyId: formData.partyId ? parseInt(formData.partyId as string) : undefined,
         partyMemberId: formData.partyMemberId ? parseInt(formData.partyMemberId as string) : undefined,
-        parts: (Array.isArray(jobParts) ? jobParts : []).map(part => ({
+        jobParts: (Array.isArray(jobParts) ? jobParts : []).map(part => ({
           ...part,
           partName: part.partName.trim(),
           estimatedTime: part.estimatedTime ? parseInt(part.estimatedTime.toString()) : undefined,
@@ -432,9 +435,17 @@ export function AlterationJobModal({
         }))
       };
 
-      await onSubmit(jobData);
+      // Submit to backend create endpoint that triggers auto-scheduling
+      const res = await api.post('/api/alterations', jobData);
+      const rd: any = res.data as any;
+      const newJobId = rd?.alterationJob?.id || rd?.id;
       toastSuccess('Alteration job created successfully');
       onClose();
+      if (typeof window !== 'undefined' && newJobId) {
+        // Redirect to open scheduling prompt
+        const url = `/alterations?newJob=${newJobId}&schedulePrompt=1`;
+        window.location.assign(url);
+      }
     } catch (error) {
       console.error('Error creating alteration job:', error);
       toastError('Failed to create alteration job');

@@ -34,7 +34,8 @@ export const SelectContent = React.forwardRef<
     <SelectPrimitive.Content
       ref={ref}
       className={cn(
-        'relative z-50 min-w-[8rem] max-h-96 overflow-hidden rounded-md border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-xl border-gray-200 dark:border-gray-700 animate-in fade-in-80 backdrop-blur-sm',
+        // Ensure select menu appears above modal overlay (modal uses z-[9999])
+        'relative z-[10050] min-w-[8rem] max-h-96 overflow-hidden rounded-md border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-xl border-gray-200 dark:border-gray-700 animate-in fade-in-80 backdrop-blur-sm',
         className
       )}
       {...props}

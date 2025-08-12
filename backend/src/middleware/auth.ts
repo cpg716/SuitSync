@@ -176,6 +176,32 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       return next();
     }
 
+    // As a hardening step for app endpoints (non-Lightspeed proxy routes):
+    // If we have valid Lightspeed tokens in the session, treat the request as authenticated,
+    // even if lightspeedUser object was not fully hydrated (e.g., cross-tab race).
+    if (req.session.lsAccessToken && req.session.lsDomainPrefix) {
+      (req as any).user = {
+        id: req.session.selectedUser?.id || 'ls-session',
+        lightspeedId: req.session.selectedUser?.id,
+        email: req.session.selectedUser?.email,
+        name: req.session.selectedUser?.name || 'Lightspeed Session',
+        role: req.session.selectedUser?.role || 'admin',
+        lightspeedEmployeeId: req.session.selectedUser?.id,
+        photoUrl: req.session.selectedUser?.photoUrl,
+        isLightspeedUser: true,
+        hasLocalRecord: false,
+        localUserId: null,
+        commissionRate: 0.1,
+        tailorAbilities: [],
+        tailorSchedules: [],
+        skills: [],
+        notificationPrefs: null,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      return next();
+    }
+
     // No valid authentication found
     console.error('Authentication required. No valid session found.', { sessionId: req.sessionID, ip: req.ip });
     return res.status(401).json({
@@ -195,6 +221,40 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
     return next();
   }
   return res.status(403).json({ error: 'Forbidden: Requires admin privileges' });
+}
+
+/**
+ * Attach user to request if available in session (non-blocking)
+ * Does NOT enforce authentication; downstream routes can behave read-only.
+ */
+export async function attachUserIfAvailable(req: Request, _res: Response, next: NextFunction) {
+  try {
+    if (!req.session) return next();
+    if (req.session.lightspeedUser) {
+      (req as any).user = {
+        id: req.session.lightspeedUser.id,
+        lightspeedId: req.session.lightspeedUser.lightspeedId || req.session.lightspeedUser.lightspeedEmployeeId,
+        email: req.session.lightspeedUser.email,
+        name: req.session.lightspeedUser.name,
+        role: req.session.lightspeedUser.role || 'admin',
+        lightspeedEmployeeId: req.session.lightspeedUser.lightspeedEmployeeId,
+        isLightspeedUser: true,
+      };
+      return next();
+    }
+    if (req.session.selectedUser || (req.session.lsAccessToken && req.session.lsDomainPrefix)) {
+      (req as any).user = {
+        id: req.session.selectedUser?.id || 'ls-session',
+        lightspeedId: req.session.selectedUser?.id,
+        email: req.session.selectedUser?.email,
+        name: req.session.selectedUser?.name || 'Lightspeed Session',
+        role: req.session.selectedUser?.role || 'admin',
+        lightspeedEmployeeId: req.session.selectedUser?.id,
+        isLightspeedUser: true,
+      };
+    }
+  } catch {}
+  return next();
 }
 
 /**

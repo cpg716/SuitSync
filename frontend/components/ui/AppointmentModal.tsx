@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { AppointmentStatus, AppointmentType } from '../../src/types/appointments';
-import { Button } from './Button';
 import { Modal } from '@/components/ui/Modal';
 import { AppointmentForm } from './AppointmentForm';
-import { api } from '../../lib/apiClient';
 import { format, parseISO } from 'date-fns';
 
 export default function AppointmentModal({ open, onClose, onSubmit, appointment, loading }: any) {
@@ -27,9 +24,8 @@ export default function AppointmentModal({ open, onClose, onSubmit, appointment,
         type: 'fitting',
         status: 'scheduled',
         durationMinutes: 60,
-        staffId: undefined,
-        notes: '',
-        recurrenceRule: ''
+        assignedStaffId: undefined,
+        notes: ''
       };
     }
 
@@ -41,9 +37,8 @@ export default function AppointmentModal({ open, onClose, onSubmit, appointment,
       type: appointment.type || 'fitting',
       status: appointment.status || 'scheduled',
       durationMinutes: appointment.durationMinutes || 60,
-      staffId: appointment.staffId,
-      notes: appointment.notes || '',
-      recurrenceRule: appointment.recurrenceRule || ''
+      assignedStaffId: appointment.assignedStaffId ? String(appointment.assignedStaffId) : (appointment.tailorId ? String(appointment.tailorId) : undefined),
+      notes: appointment.notes || ''
     };
   };
 
@@ -58,9 +53,8 @@ export default function AppointmentModal({ open, onClose, onSubmit, appointment,
       type: formData.type,
       status: formData.status,
       durationMinutes: formData.durationMinutes,
-      assignedStaffId: formData.assignedStaffId || undefined,
-      notes: formData.notes,
-      recurrenceRule: formData.recurrenceRule
+      assignedStaffId: formData.assignedStaffId ? Number(formData.assignedStaffId) : undefined,
+      notes: formData.notes
     };
   };
 
@@ -95,13 +89,27 @@ export default function AppointmentModal({ open, onClose, onSubmit, appointment,
           </div>
         )}
 
-        <AppointmentForm
-          initialData={convertAppointmentToFormData(appointment)}
-          onSubmit={handleSubmit}
-          onCancel={handleCancel}
-          loading={loading}
-          isEdit={!!appointment}
-        />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2">
+            <AppointmentForm
+              initialData={convertAppointmentToFormData(appointment)}
+              onSubmit={handleSubmit}
+              onCancel={handleCancel}
+              loading={loading}
+              isEdit={!!appointment}
+            />
+          </div>
+          <aside className="hidden lg:block lg:col-span-1">
+            <div className="p-4 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+              <h3 className="text-sm font-semibold mb-2">Tips</h3>
+              <ul className="text-xs text-gray-600 dark:text-gray-300 space-y-1 list-disc pl-4">
+                <li>Pick a staff member to load availability slots.</li>
+                <li>Quick-pick buttons auto-fill the date and time.</li>
+                <li>Party members auto-suggest the next appointment type.</li>
+              </ul>
+            </div>
+          </aside>
+        </div>
       </div>
     </Modal>
   );

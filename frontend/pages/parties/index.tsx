@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import CreatePartyModal from '../../components/ui/CreatePartyModal';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ToastContext';
 import { Modal } from '../../components/ui/Modal';
@@ -381,13 +382,7 @@ export default function PartiesList() {
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
           <ResourceSyncStatus resource="groups" />
-          <Button
-            className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-2 bg-primary text-white hover:bg-primary/90 min-h-[44px] sm:min-h-[40px] text-sm sm:text-base touch-manipulation"
-            onClick={() => router.push('/create-party')}
-          >
-            <span className="hidden xs:inline">+ Add Party</span>
-            <span className="xs:hidden">+ Add</span>
-          </Button>
+          <CreatePartyInlineButton />
         </div>
       </div>
 
@@ -608,3 +603,19 @@ export default function PartiesList() {
     </div>
   );
 } 
+
+function CreatePartyInlineButton() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button
+        className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-2 bg-primary text-white hover:bg-primary/90 min-h-[44px] sm:min-h-[40px] text-sm sm:text-base touch-manipulation"
+        onClick={() => setOpen(true)}
+      >
+        <span className="hidden xs:inline">+ Add Party</span>
+        <span className="xs:hidden">+ Add</span>
+      </Button>
+      <CreatePartyModal open={open} onClose={() => setOpen(false)} />
+    </>
+  );
+}

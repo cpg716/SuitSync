@@ -1,3 +1,29 @@
+## Automated Tailor Scheduling (Work Day Plans)
+
+This system mirrors the paper daily breakdown sheets. Each work day has fixed unit capacities and excludes Thursdays by policy.
+
+- Jackets-equivalents per day: 28 units (JACKET, VEST, SHIRT, OTHER default)
+- Pants-equivalents per day: 24 units (PANTS, SKIRT)
+- No scheduling on Thursdays. The service automatically skips them.
+
+### Data Model
+
+- `WorkDayPlan { date, jacketCapacity, pantsCapacity, assignedJackets, assignedPants, isClosed }`
+- `AlterationJobPart.scheduledFor` references the planned work day; `workDayId` links to `WorkDayPlan`.
+
+### API
+
+- `POST /api/alterations/jobs/:jobId/schedule` → schedules all unscheduled parts, returns assigned days and optional tailor assignment.
+- `POST /api/alterations/schedule/auto` → schedules all open jobs that are not yet planned.
+- `POST /api/alterations/schedule/rebalance { date }` → placeholder for future rebalancing.
+
+### Behavior
+
+1. When a new alterations job is created, the service auto-schedules parts into the next available work days, honoring capacities and the event-driven due date (default 7 days before `Party.eventDate`). If no due date is specified, a 14-day default is used.
+2. Each scheduled part is optionally assigned to the least-loaded active tailor for that day based on `UserSchedule` recurring blocks. If none defined, the part remains unassigned.
+3. Global closures and holidays (`GlobalHoliday`) are respected.
+4. Scheduling target is 2–3 days before due date. If job is created within 3 days of due date, target is the day before due date. Thursdays are skipped unless the job has `lastMinute = true`.
+
 # Alterations Workflow System Documentation
 
 ## Overview

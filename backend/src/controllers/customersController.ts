@@ -27,26 +27,41 @@ export const listLightspeedCustomers = async (req: Request, res: Response): Prom
   }
 };
 
+// listCustomers
+// Supports fuzzy search by first/last/email and normalized phone number (digits only),
+// including partial matches. Paginates results.
 export const listCustomers = async (req: Request, res: Response): Promise<void> => {
   try {
     const { search, page = 1, limit = 10 } = req.query as any;
     const skip = (page - 1) * limit;
     let customers, total;
     if (search) {
-      console.log('[Customer List SQL]', `SELECT *, CASE WHEN last_name IS NULL OR TRIM(last_name) = '' THEN 1 ELSE 0 END AS missing_last, CONCAT_WS(', ', NULLIF(TRIM(last_name), ''), NULLIF(TRIM(first_name), '')) AS display_name FROM "Customer" WHERE first_name ILIKE $1 OR last_name ILIKE $1 OR email ILIKE $1 OR phone ILIKE $1 ORDER BY missing_last ASC, LOWER(last_name) NULLS LAST, LOWER(first_name) NULLS LAST LIMIT $2 OFFSET $3;`, [`%${search}%`, Number(limit), Number(skip)]);
+      const norm = String(search).replace(/[^0-9a-zA-Z@\.\s]/g, '');
+      const phoneDigits = norm.replace(/\D/g, '');
+      const phoneLike = phoneDigits.length > 0 ? `%${phoneDigits}%` : null;
+      const textLike = `%${norm}%`;
       customers = await prisma.$queryRawUnsafe(
         `SELECT *,
           CASE WHEN last_name IS NULL OR TRIM(last_name) = '' THEN 1 ELSE 0 END AS missing_last,
           CONCAT_WS(', ', NULLIF(TRIM(last_name), ''), NULLIF(TRIM(first_name), '')) AS display_name
         FROM "Customer"
-        WHERE first_name ILIKE $1 OR last_name ILIKE $1 OR email ILIKE $1 OR phone ILIKE $1
+        WHERE first_name ILIKE $1
+           OR last_name ILIKE $1
+           OR email ILIKE $1
+           OR REPLACE(REPLACE(REPLACE(COALESCE(phone,''), '(', ''), ')', ''), '-', '') ILIKE COALESCE($4, '_____NO_PHONE____')
+           OR phone ILIKE $1
         ORDER BY missing_last ASC, LOWER(last_name) NULLS LAST, LOWER(first_name) NULLS LAST
         LIMIT $2 OFFSET $3;`,
-        `%${search}%`, Number(limit), Number(skip)
+        textLike, Number(limit), Number(skip), phoneLike
       );
       const countResult = await prisma.$queryRawUnsafe(
-        `SELECT COUNT(*) FROM "Customer" WHERE first_name ILIKE $1 OR last_name ILIKE $1 OR email ILIKE $1 OR phone ILIKE $1;`,
-        `%${search}%`
+        `SELECT COUNT(*) FROM "Customer"
+         WHERE first_name ILIKE $1
+            OR last_name ILIKE $1
+            OR email ILIKE $1
+            OR REPLACE(REPLACE(REPLACE(COALESCE(phone,''), '(', ''), ')', ''), '-', '') ILIKE COALESCE($2, '_____NO_PHONE____')
+            OR phone ILIKE $1;`,
+        textLike, phoneLike
       ) as Array<{ count: string }>;
       total = parseInt(countResult[0].count, 10);
     } else {
