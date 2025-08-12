@@ -849,6 +849,8 @@ function AlterationsCalendar({ alterations, selectedTailorId, onSelectJob }: { a
 function CreateAlterationInlineButton() {
   const [open, setOpen] = useState(false);
   const CreateAlterationModal = require('../components/ui/CreateAlterationModal').default;
+  // Lazy import CustomerAvatar for list tiles
+  const CustomerAvatar = require('../components/ui/CustomerAvatar').CustomerAvatar;
   return (
     <>
       <Button onClick={() => setOpen(true)}>

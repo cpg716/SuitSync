@@ -23,6 +23,7 @@ import {
   PieChart 
 } from 'lucide-react';
 import { UserAvatar } from '../../components/ui/UserAvatar';
+import { CustomerAvatar } from '@/components/ui/CustomerAvatar';
 
 interface Customer {
   id: number;
@@ -283,7 +284,13 @@ export default function CustomersPage() {
                       className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
                     >
                       <td className="px-6 py-4">
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex items-center gap-3">
+                          <CustomerAvatar
+                            name={`${customer.first_name || ''} ${customer.last_name || ''}`.trim()}
+                            phone={customer.phone}
+                            email={customer.email}
+                            size="md"
+                          />
                           <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                             {customer.display_name || `${customer.last_name || ''}${customer.last_name && customer.first_name ? ', ' : ''}${customer.first_name || ''}`.trim() || 'N/A'}
                           </div>
@@ -351,13 +358,21 @@ export default function CustomersPage() {
                 {(Array.isArray(customers) && customers.length > 0) ? customers.map((customer) => (
                   <div key={customer.id} className="p-4 sm:p-5 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors active:bg-gray-100 dark:active:bg-gray-800">
                     <div className="flex items-start justify-between mb-4">
-                      <div className="min-w-0 flex-1">
-                        <h3 className="text-base sm:text-lg font-medium text-gray-900 dark:text-gray-100 truncate">
-                          {customer.display_name || `${customer.last_name || ''}${customer.last_name && customer.first_name ? ', ' : ''}${customer.first_name || ''}`.trim() || 'N/A'}
-                        </h3>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                          {customer.email || '—'}
-                        </p>
+                      <div className="min-w-0 flex-1 flex items-start gap-3">
+                        <CustomerAvatar
+                          name={`${customer.first_name || ''} ${customer.last_name || ''}`.trim()}
+                          phone={customer.phone}
+                          email={customer.email}
+                          size="md"
+                        />
+                        <div className="min-w-0">
+                          <h3 className="text-base sm:text-lg font-medium text-gray-900 dark:text-gray-100 truncate">
+                            {customer.display_name || `${customer.last_name || ''}${customer.last_name && customer.first_name ? ', ' : ''}${customer.first_name || ''}`.trim() || 'N/A'}
+                          </h3>
+                          <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                            {customer.email || '—'}
+                          </p>
+                        </div>
                       </div>
                     </div>
 

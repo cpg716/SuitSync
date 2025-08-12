@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, User, Users, Calendar, CheckCircle, Clock, AlertCircle, Package, Plus } from 'lucide-react';
+import { CustomerAvatar } from './CustomerAvatar';
 import { Input } from './Input';
 import { Badge } from './Badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './Tabs';
@@ -231,7 +232,7 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
                         onClick={() => handleCustomerSelect(customer)}
                       >
                         <div className="flex items-center space-x-3">
-                          {progress ? getStatusIcon(progress.status) : <User className="h-4 w-4 text-gray-400" />}
+                          {progress ? getStatusIcon(progress.status) : <CustomerAvatar name={`${customer.first_name || ''} ${customer.last_name || ''}`} phone={customer.phone} email={customer.email} size="sm" />}
                           <div className="flex-1">
                             <div className="font-medium">{`${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'N/A'}</div>
                             <div className="text-sm text-gray-500 space-y-1">
@@ -284,7 +285,7 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
                             onClick={() => handlePartyMemberSelect(party, member)}
                           >
                             <div className="flex items-center space-x-3">
-                              {progress ? getStatusIcon(progress.status) : <User className="h-4 w-4 text-gray-400" />}
+                               {progress ? getStatusIcon(progress.status) : <CustomerAvatar name={member.role} size="sm" />}
                               <div className="flex-1">
                                 <div className="font-medium">{member.role}</div>
                                 <div className="text-sm text-gray-500 space-y-1">

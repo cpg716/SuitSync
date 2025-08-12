@@ -9,13 +9,14 @@ import { Checkbox } from './checkbox';
 import { Badge } from './Badge';
 import { Card, CardContent, CardHeader, CardTitle } from './Card';
 import { Separator } from './separator';
-import { Plus, Trash2, User, Calendar, Clock, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, User, Calendar, Clock, AlertTriangle, Users as UsersIcon } from 'lucide-react';
 import { useToast } from '../ToastContext';
 import { format } from 'date-fns';
 import { api } from '../../lib/apiClient';
 import type { Party } from '../../src/types/parties';
 // Touch-friendly unified search for customers and parties
 import { CustomerSearch } from './CustomerSearchSimple';
+import { CustomerAvatar } from './CustomerAvatar';
 
 interface Customer {
   id: number;
@@ -471,72 +472,38 @@ export function AlterationJobModal({
               <CardTitle className="text-lg">Customer & Party Information</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="customerId">Customer</Label>
-                  <Select
-                    value={formData.customerId.toString()}
-                    onValueChange={(value) => handleInputChange('customerId', value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select customer" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(Array.isArray(customers) ? customers : []).map(customer => (
-                        <SelectItem key={customer.id} value={customer.id.toString()}>
-                          {customer.name} {customer.phone && `(${customer.phone})`}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label htmlFor="partyId">Party (Optional)</Label>
-                  <Select
-                    value={formData.partyId.toString()}
-                    onValueChange={(value) => handleInputChange('partyId', value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select party" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(Array.isArray(parties) ? parties : []).map(party => (
-                        <SelectItem key={party.id} value={party.id.toString()}>
-                          {party.name} - {party.eventDate ? format(new Date(party.eventDate), 'MMM d, yyyy') : 'Date unknown'}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              {/* Unified search selector */}
+              <div className="p-3 border rounded-lg bg-gray-50">
+                <CustomerSearch
+                  onCustomerSelect={(c: any) => {
+                    handleInputChange('customerId', c?.id?.toString() || '');
+                    handleInputChange('partyId', '');
+                    handleInputChange('partyMemberId', '');
+                  }}
+                  onPartyMemberSelect={(p: any, m: any) => {
+                    handleInputChange('customerId', '');
+                    handleInputChange('partyId', p?.id?.toString() || '');
+                    handleInputChange('partyMemberId', m?.id?.toString() || '');
+                  }}
+                  placeholder="Search by name or phone (any format)…"
+                />
               </div>
 
               {selectedParty && Array.isArray(selectedParty.members) && selectedParty.members.length > 0 && (
-                <div>
-                  <Label htmlFor="partyMemberId">Party Member (Optional)</Label>
-                  <Select
-                    value={formData.partyMemberId.toString()}
-                    onValueChange={(value) => handleInputChange('partyMemberId', value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select party member" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {selectedParty.members.map(member => (
-                        <SelectItem key={member.id} value={member.id.toString()}>
-                          {member.role}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="text-sm text-gray-600 flex items-center gap-2">
+                  <UsersIcon className="w-4 h-4" />
+                  {selectedParty.members.length} party members available
                 </div>
               )}
 
               {selectedCustomer && (
-                <div className="p-3 bg-blue-50 rounded-lg">
-                  <p className="font-medium">{selectedCustomer.name}</p>
-                  {selectedCustomer.phone && <p className="text-sm text-gray-600">{selectedCustomer.phone}</p>}
-                  {selectedCustomer.email && <p className="text-sm text-gray-600">{selectedCustomer.email}</p>}
+                <div className="p-3 bg-blue-50 rounded-lg flex items-center gap-3">
+                  <CustomerAvatar name={selectedCustomer.name} phone={selectedCustomer.phone} email={selectedCustomer.email} />
+                  <div>
+                    <p className="font-medium">{selectedCustomer.name}</p>
+                    {selectedCustomer.phone && <p className="text-sm text-gray-600">{selectedCustomer.phone}</p>}
+                    {selectedCustomer.email && <p className="text-sm text-gray-600">{selectedCustomer.email}</p>}
+                  </div>
                 </div>
               )}
             </CardContent>

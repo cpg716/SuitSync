@@ -11,6 +11,7 @@ import { Tabs } from '../../components/ui/Tabs';
 import { TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { useToast } from '@/components/ToastContext';
 import { User, Calendar, Ruler, Scissors, Edit, PlusCircle } from 'lucide-react';
+import { CustomerAvatar } from '@/components/ui/CustomerAvatar';
 import { Skeleton } from '@/components/ui/Skeleton';
 import type { Party } from '../../src/types/parties';
 import type { MeasurementData } from '../../src/types/measurements';
@@ -52,7 +53,12 @@ function CustomerHeader({ customer, onEdit }) {
       <CardHeader>
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-4">
-            <User className="w-12 h-12 text-gray-400" />
+            <CustomerAvatar
+              name={`${customer.first_name || ''} ${customer.last_name || ''}`.trim()}
+              phone={customer.phone}
+              email={customer.email}
+              size="lg"
+            />
             <div>
               <CardTitle className="text-2xl">{`${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'N/A'}</CardTitle>
               <p className="text-sm text-gray-500">Lightspeed ID: {customer.lightspeedId || 'N/A'}</p>
