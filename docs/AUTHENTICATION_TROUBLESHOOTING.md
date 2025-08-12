@@ -83,6 +83,12 @@ For production use, authenticate with Lightspeed:
 - Frontend `UserAvatar` has `onError` fallback to initials/icon.
 - If email-only session occurs, frontend calls `GET /api/auth/user-photo?email=` as enrichment.
 
+### Admin Users shows 0 or "Failed to fetch users"
+- Hard refresh the browser to clear stale bundles (Cmd+Shift+R). The UI must use `apiFetch('/api/users')` and read `data.users`.
+- Ensure you are authenticated (check `/api/auth/session` in the browser devtools; `GET /api/users` returns 401 if there is no session).
+- Verify backend `/api/users` returns a `users` array (combined Lightspeed + augmented rows). If Lightspeed fails, backend will return only local rows; Admin should still render them.
+- After clicking "Sync Users", the UI must re-fetch `/api/users` and update the grid.
+
 ## Session Management
 
 ### Session Types

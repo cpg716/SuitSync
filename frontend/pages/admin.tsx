@@ -677,26 +677,17 @@ function UsersAdminCard() {
   const [page, setPage] = useState(1);
   const USERS_PER_PAGE = 20; // Increased for better grid layout
   useEffect(() => {
-    apiFetch('/api/users').then(async r => {
-      if (!r.ok) {
-        if (r.status === 401) {
-          toast.error('You must be logged in to view users.');
-          window.location.href = '/login';
-          return { users: [] } as any;
-        } else if (r.status === 404) {
-          toast.error('User list is unavailable.');
-          return { users: [] } as any;
-        } else {
-          toast.error('Failed to fetch users.');
-          return { users: [] } as any;
-        }
+    (async () => {
+      try {
+        const data = await apiFetch('/api/users');
+        const allUsers = (data as any).users || [];
+        setUsers(allUsers);
+      } catch (e) {
+        toast.error('Failed to fetch users.');
+      } finally {
+        setLoading(false);
       }
-      return r.json();
-    }).then(data => {
-      const allUsers = data.users || [];
-      setUsers(allUsers);
-      setLoading(false);
-    });
+    })();
   }, []);
   const getUserId = (u: any) => (u && typeof u.id !== 'undefined') ? String(u.id) : null;
   const getPhone = (u: any) => u?.phone || '-';
@@ -705,20 +696,15 @@ function UsersAdminCard() {
   const handleSyncUsers = async () => {
     try {
       toast.success('Starting user sync...');
-      const response = await apiFetch('/api/users/sync', { method: 'POST' });
-      if (response) {
-        toast.success('Sync completed');
-        // Refresh the users list by re-fetching data
-        setLoading(true);
-        const data = await apiFetch('/api/users');
-        const allUsers = data.users || [];
-        setUsers(allUsers);
-        setLoading(false);
-      } else {
-        toast.error('Failed to sync users');
-      }
+      await apiFetch('/api/users/sync', { method: 'POST' });
+      setLoading(true);
+      const data = await apiFetch('/api/users');
+      const allUsers = (data as any).users || [];
+      setUsers(allUsers);
     } catch (error) {
       toast.error('Failed to sync users');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -848,7 +834,7 @@ function UsersAdminCard() {
         </>
       )}
       <Modal open={!!profileUserId} onClose={() => setProfileUserId(null)}>
-        {profileUserId && <UserSettings userId={profileUserId} adminView />}
+        {profileUserId && <UserSettings userId={typeof profileUserId === 'string' ? Number(profileUserId) : profileUserId} adminView />}
       </Modal>
     </Card>
   );

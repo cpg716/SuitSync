@@ -103,6 +103,12 @@ CREATE TABLE "TailorSelectionSession" (
 - `PUT /api/users/:id` - Update user
 - `POST /api/users` - Create user (Admin only)
 
+### Admin Users section (Staff Directory)
+- Data source: uses the same combined list as the Switch User modal via `GET /api/users` and reads `data.users`.
+- Identity model: every user is a Lightspeed identity; local DB augments fields only (availability, commission, skills, audit).
+- Opening a profile: the UI passes the Lightspeed `id` when a local row does not exist. The backend accepts the LS id and creates the augmentation record transparently, then returns the profile.
+- Avatars: `photoUrl` is resolved from Lightspeed fields (`image_source → photo_url → avatar`) and rendered with a safe fallback.
+
 ## Frontend Components
 
 ### 1. Login Page (`/pages/login.tsx`)

@@ -73,6 +73,11 @@ All notable changes to SuitSync will be documented in this file.
 - Avatar pipeline fixed: resolve Lightspeed image fields (`image_source` → `photo_url` → `avatar`) in session and users API; frontend falls back to initials/icon.
 - Identity model clarified: all users are Lightspeed identities; local DB augments with availability, commission, skills, and audit only (no standalone local accounts).
 
+### Admin Users section
+- Fixed Admin Users to use the same combined `users` list as Switch User via `GET /api/users`.
+- Unified fetch with `apiFetch('/api/users')` and consistent handling of `data.users`.
+- Profile modal accepts Lightspeed IDs; backend creates augmentation record transparently if missing.
+
 ### Fixed
 - Customer list now sorts by last name (with missing last names at end), displays as `Last Name, First Name`.
 - Search by last name, first name, email, or phone now works as expected.
