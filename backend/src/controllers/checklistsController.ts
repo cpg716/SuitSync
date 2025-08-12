@@ -445,3 +445,18 @@ export const deleteChecklist = async (req: Request, res: Response): Promise<void
     res.status(status).json({ error: message });
   }
 };
+
+// Unassign checklist assignment (admin)
+export const deleteChecklistAssignment = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = Number(req.params.assignmentId);
+    await prisma.checklistAssignment.delete({ where: { id } });
+    res.status(204).send();
+    try {
+      await AuditLogService.logAction((req as any).user?.id || null, 'delete', 'ChecklistAssignment', id, {});
+    } catch {}
+  } catch (error) {
+    const { status, message } = handlePrismaError(error);
+    res.status(status).json({ error: message });
+  }
+};

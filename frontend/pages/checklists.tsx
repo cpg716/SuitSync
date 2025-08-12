@@ -284,6 +284,7 @@ export default function ChecklistWorkspace() {
                     <div key={cl.id} className="relative">
                       <ChecklistCard
                         {...cl}
+                        assignments={cl.assignments}
                         onDelete={async () => {
                           if (!confirm('Delete this checklist?')) return;
                           await fetch(`/api/checklists/${cl.id}`, { method: 'DELETE', credentials: 'include' });
@@ -311,6 +312,7 @@ export default function ChecklistWorkspace() {
                           <div key={cl.id} className="relative">
                             <ChecklistCard
                               {...cl}
+                              assignments={cl.assignments}
                               onDelete={async () => {
                                 if (!confirm('Delete this checklist?')) return;
                                 await fetch(`/api/checklists/${cl.id}`, { method: 'DELETE', credentials: 'include' });

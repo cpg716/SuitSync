@@ -14,7 +14,8 @@ import {
   listChecklistTemplates,
   upsertChecklistTemplate,
   assignTemplate,
-  deleteChecklist
+  deleteChecklist,
+  deleteChecklistAssignment
 } from '../controllers/checklistsController';
 
 const router = express.Router();
@@ -116,5 +117,6 @@ router.post('/templates/assign', authMiddleware, requirePermission('admin', 'wri
 
 // Delete checklist
 router.delete('/:id', authMiddleware, requirePermission('admin', 'write'), asyncHandler(deleteChecklist));
+router.delete('/assignments/:assignmentId', authMiddleware, requirePermission('admin', 'write'), asyncHandler(deleteChecklistAssignment));
 
 export default router;

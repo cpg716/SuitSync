@@ -31,6 +31,7 @@ interface ChecklistCardProps {
     name: string;
     photoUrl?: string;
   };
+  assignments?: Array<{ id:number; dueDate?: string|null; assignedTo?: { id:number; name:string; photoUrl?:string } }>;
   onStart?: () => void;
   onUpdateItem?: (itemId: number, isCompleted: boolean, notes?: string) => void;
   onComplete?: () => void;
@@ -72,6 +73,7 @@ export const ChecklistCard: React.FC<ChecklistCardProps> = ({
   estimatedMinutes,
   items,
   assignedBy,
+  assignments,
   onStart,
   onUpdateItem,
   onComplete,
@@ -123,25 +125,37 @@ export const ChecklistCard: React.FC<ChecklistCardProps> = ({
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
             <div className={`p-2 rounded-full ${statusConfig.bgColor}`}>
               <StatusIcon className={`h-4 w-4 ${statusConfig.color}`} />
             </div>
             {onEdit && (
-              <Button variant="outline" size="sm" onClick={onEdit}><Edit className="w-3 h-3 mr-1"/>Edit</Button>
+              <Button variant="outline" size="sm" onClick={onEdit} className="order-2"><Edit className="w-3 h-3 mr-1"/>Edit</Button>
             )}
             {onDelete && (
-              <Button variant="outline" size="sm" className="text-red-600" onClick={onDelete}><Trash2 className="w-3 h-3 mr-1"/>Delete</Button>
+              <Button variant="outline" size="sm" className="text-red-600 order-3" onClick={onDelete}><Trash2 className="w-3 h-3 mr-1"/>Delete</Button>
             )}
           </div>
         </div>
 
-        {assignedBy && (
-          <div className="flex items-center gap-2 pt-2 border-t">
-            <span className="text-sm text-gray-500">Assigned by:</span>
-            <UserAvatar user={assignedBy} size="sm" showName />
-          </div>
-        )}
+        <div className="flex items-center gap-3 pt-2 border-t flex-wrap">
+          {assignedBy && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-500">Assigned by:</span>
+              <UserAvatar user={assignedBy} size="sm" showName />
+            </div>
+          )}
+          {Array.isArray(assignments) && assignments.length>0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-500">To:</span>
+              <div className="flex -space-x-2">
+                {assignments.slice(0,5).map(a => (
+                  <UserAvatar key={a.id} user={a.assignedTo || { id:'', name:'User' }} size="sm" showName={false} />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </CardHeader>
 
       <CardContent className="pt-0">
