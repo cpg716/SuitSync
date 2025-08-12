@@ -15,12 +15,16 @@ import {
 const router = express.Router();
 
 // Validation schemas
+const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const dateTime = z.string().datetime();
+const dateOrDateTime = z.union([dateOnly, dateTime]);
+
 const createTaskSchema = z.object({
   title: z.string().min(1).max(255),
   description: z.string().max(1000).optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
   assignedToId: z.number().int().positive(),
-  dueDate: z.string().datetime().optional(),
+  dueDate: dateOrDateTime.optional(),
   estimatedMinutes: z.number().int().min(1).max(480).optional()
 });
 
@@ -29,7 +33,7 @@ const updateTaskSchema = z.object({
   description: z.string().max(1000).optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
   status: z.enum(['PENDING', 'IN_PROGRESS', 'COMPLETED', 'OVERDUE']).optional(),
-  dueDate: z.string().datetime().optional(),
+  dueDate: dateOrDateTime.optional(),
   estimatedMinutes: z.number().int().min(1).max(480).optional(),
   notes: z.string().max(1000).optional()
 });

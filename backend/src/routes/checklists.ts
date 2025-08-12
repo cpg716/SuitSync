@@ -29,9 +29,22 @@ const createChecklistSchema = z.object({
   })).min(1)
 });
 
+const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const dateTime = z.string().datetime();
+const dateOrDateTime = z.union([dateOnly, dateTime]);
+
 const assignChecklistSchema = z.object({
   userIds: z.array(z.number().int().positive()).min(1),
-  dueDate: z.string().datetime().optional()
+  dueDate: dateOrDateTime.optional()
+});
+
+const updateChecklistSchema = z.object({
+  title: z.string().min(1).max(255).optional(),
+  description: z.string().max(1000).optional(),
+  frequency: z.enum(['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY']).optional(),
+  isRequired: z.boolean().optional(),
+  estimatedMinutes: z.number().int().min(1).max(480).optional(),
+  isActive: z.boolean().optional(),
 });
 
 const updateItemSchema = z.object({
@@ -51,6 +64,16 @@ router.post('/',
   requirePermission('admin', 'write'),
   validateBody(createChecklistSchema),
   asyncHandler(createChecklist)
+);
+
+// Update/cancel checklist
+router.put('/:id',
+  authMiddleware,
+  requirePermission('admin', 'write'),
+  validateBody(updateChecklistSchema),
+  asyncHandler(async (req, res) => {
+    const prisma = (await import('@prisma/client')).PrismaClient;
+  })
 );
 
 router.post('/:checklistId/assign', 

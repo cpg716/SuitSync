@@ -153,16 +153,22 @@ async function syncResource<T>(req: any, resourceName: string, endpoint: string,
     const upsertResults = await Promise.all(
       allItems.map(item => limit(async () => {
         try {
-          const idRaw = (item as { id: string | number }).id;
-          const id = typeof idRaw === 'string' ? parseInt(idRaw, 10) : idRaw;
-          if (!id) {
-            logger.warn(`[SyncService] Skipping item in ${resourceName} with missing ID.`, { item });
+          const idRaw = (item as { id?: string | number }).id;
+          const hasId = idRaw !== undefined && idRaw !== null && String(idRaw).trim() !== '';
+          if (!hasId) {
+            logger.warn(`[SyncService] Skipping item in ${resourceName} with missing ID.`, { itemPreview: JSON.stringify(item).slice(0, 200) });
             failedCount++;
             failedItems.push({ item, error: 'Missing ID' });
             return null;
           }
           const versionRaw = (item as { id: string | number; version?: string | number }).version;
-          const version = versionRaw ? BigInt(versionRaw.toString()) : BigInt(0);
+          let version = BigInt(0);
+          if (versionRaw !== undefined && versionRaw !== null) {
+            const vStr = versionRaw.toString();
+            if (/^\d+$/.test(vStr)) {
+              version = BigInt(vStr);
+            }
+          }
           if (version > maxVersion) {
             maxVersion = version;
           }
@@ -195,7 +201,7 @@ async function syncResource<T>(req: any, resourceName: string, endpoint: string,
       return;
     }
     const finalErrorMessage = failedCount > 0
-      ? `Sync completed with ${failedCount} error(s). First error on item ID ${(failedItems[0]?.item as { id: string | number; version?: string | number }).id}: ${failedItems[0]?.error}`
+      ? `Sync completed with ${failedCount} error(s). First error on item ID ${String((failedItems[0]?.item as { id?: string | number })?.id ?? 'unknown')}: ${failedItems[0]?.error}`
       : null;
     await prisma.syncStatus.update({
       where: { resource: resourceName },

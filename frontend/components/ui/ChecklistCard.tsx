@@ -21,8 +21,8 @@ interface ChecklistCardProps {
   title: string;
   description?: string;
   frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
-  status: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'OVERDUE';
-  scheduledFor: string;
+  status?: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'OVERDUE';
+  scheduledFor?: string;
   estimatedMinutes?: number;
   items: ChecklistItem[];
   assignedBy?: {
@@ -64,7 +64,7 @@ export const ChecklistCard: React.FC<ChecklistCardProps> = ({
   title,
   description,
   frequency,
-  status,
+  status = 'NOT_STARTED',
   scheduledFor,
   estimatedMinutes,
   items,
@@ -104,10 +104,12 @@ export const ChecklistCard: React.FC<ChecklistCardProps> = ({
               <p className="text-sm text-gray-600 mb-2">{description}</p>
             )}
             <div className="flex items-center gap-4 text-sm text-gray-500">
-              <div className="flex items-center gap-1">
-                <Calendar className="h-4 w-4" />
-                {new Date(scheduledFor).toLocaleDateString()}
-              </div>
+              {scheduledFor && (
+                <div className="flex items-center gap-1">
+                  <Calendar className="h-4 w-4" />
+                  {new Date(scheduledFor).toLocaleDateString()}
+                </div>
+              )}
               {estimatedMinutes && (
                 <div className="flex items-center gap-1">
                   <Clock className="h-4 w-4" />
