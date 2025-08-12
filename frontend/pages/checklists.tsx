@@ -44,6 +44,8 @@ export default function ChecklistWorkspace() {
   const [calView, setCalView] = useState<View>('month');
   const [calDate, setCalDate] = useState<Date>(new Date());
   const [templates, setTemplates] = useState<any[]>([]);
+  const [checklistView, setChecklistView] = useState<'list'|'board'>('list');
+  const [taskView, setTaskView] = useState<'list'|'board'>('list');
 
   const locales = { 'en-US': undefined as any };
   const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
@@ -242,7 +244,7 @@ export default function ChecklistWorkspace() {
             <TabsTrigger value="tasks">Tasks</TabsTrigger>
             <TabsTrigger value="calendar">Calendar</TabsTrigger>
           </TabsList>
-          <div className="flex gap-2 my-4">
+          <div className="flex gap-2 my-4 items-center flex-wrap">
           <Button onClick={() => setShowChecklistModal(true)} variant="outline">New Checklist</Button>
           <Button onClick={() => setShowTaskModal(true)} variant="outline">New Task</Button>
           <Button onClick={() => setShowAssignTemplateModal(true)} variant="outline">Assign From Template</Button>
@@ -260,45 +262,109 @@ export default function ChecklistWorkspace() {
             </select>
           </div>
         <TabsContent value="checklists">
+          <div className="flex items-center justify-end mb-3 gap-2">
+            <span className="text-xs text-gray-500">View:</span>
+            <Button size="sm" variant={checklistView==='list'?'default':'outline'} onClick={()=>setChecklistView('list')}>List</Button>
+            <Button size="sm" variant={checklistView==='board'?'default':'outline'} onClick={()=>setChecklistView('board')}>Board</Button>
+          </div>
           {loading ? (
             <Skeleton className="h-32 w-full" />
           ) : filteredChecklists.length === 0 ? (
-            <div className="text-center text-gray-500 py-8">No checklists found.</div>
+            <div className="text-center text-gray-500 py-12">
+              <div className="text-6xl mb-3">✅</div>
+              <div className="font-medium">No checklists found</div>
+              <div className="text-sm">Create one or assign from a template.</div>
+            </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredChecklists.map((execOrCl: any) => {
-                // Support either checklist objects or execution objects
-                const cl = execOrCl.assignment ? execOrCl.assignment.checklist : execOrCl;
-                return (
-                  <div key={cl.id} className="relative">
-                    <ChecklistCard {...cl} />
-                    <div className="absolute top-2 right-2 flex gap-2">
-                      <Button size="sm" variant="outline" onClick={() => setShowAssignModal({ checklistId: cl.id })}>Assign</Button>
+            checklistView === 'list' ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredChecklists.map((execOrCl: any) => {
+                  const cl = execOrCl.assignment ? execOrCl.assignment.checklist : execOrCl;
+                  return (
+                    <div key={cl.id} className="relative">
+                      <ChecklistCard {...cl} />
+                      <div className="absolute top-2 right-2 flex gap-2">
+                        <Button size="sm" variant="outline" onClick={() => setShowAssignModal({ checklistId: cl.id })}>Assign</Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              // Board: group by status
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {['NOT_STARTED','IN_PROGRESS','COMPLETED','OVERDUE'].map(status => (
+                  <div key={status} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border p-3">
+                    <div className="font-semibold text-sm mb-2">{status.replace('_',' ')}</div>
+                    <div className="space-y-3">
+                      {filteredChecklists.filter((c:any)=> (c.status||'NOT_STARTED')===status).map((execOrCl:any)=>{
+                        const cl = execOrCl.assignment ? execOrCl.assignment.checklist : execOrCl;
+                        return (
+                          <div key={cl.id} className="relative">
+                            <ChecklistCard {...cl} />
+                            <div className="absolute top-2 right-2 flex gap-2">
+                              <Button size="sm" variant="outline" onClick={() => setShowAssignModal({ checklistId: cl.id })}>Assign</Button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-                );
-              })}
-            </div>
+                ))}
+              </div>
+            )
           )}
         </TabsContent>
         <TabsContent value="tasks">
+          <div className="flex items-center justify-end mb-3 gap-2">
+            <span className="text-xs text-gray-500">View:</span>
+            <Button size="sm" variant={taskView==='list'?'default':'outline'} onClick={()=>setTaskView('list')}>List</Button>
+            <Button size="sm" variant={taskView==='board'?'default':'outline'} onClick={()=>setTaskView('board')}>Board</Button>
+          </div>
           {loading ? (
             <Skeleton className="h-32 w-full" />
           ) : filteredTasks.length === 0 ? (
-            <div className="text-center text-gray-500 py-8">No tasks found.</div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredTasks.map((tk: any) => (
-                <TaskCard
-                  key={tk.id}
-                  {...tk}
-                  canEdit={true}
-                  onUpdateStatus={(s) => updateTaskStatus(tk.id, s)}
-                  onUpdateNotes={(n) => updateTaskNotes(tk.id, n)}
-                  onDelete={() => deleteTask(tk.id)}
-                />
-              ))}
+            <div className="text-center text-gray-500 py-12">
+              <div className="text-6xl mb-3">📝</div>
+              <div className="font-medium">No tasks found</div>
+              <div className="text-sm">Create a task to get started.</div>
             </div>
+          ) : (
+            taskView === 'list' ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredTasks.map((tk: any) => (
+                  <TaskCard
+                    key={tk.id}
+                    {...tk}
+                    canEdit={true}
+                    onUpdateStatus={(s) => updateTaskStatus(tk.id, s)}
+                    onUpdateNotes={(n) => updateTaskNotes(tk.id, n)}
+                    onDelete={() => deleteTask(tk.id)}
+                  />
+                ))}
+              </div>
+            ) : (
+              // Board grouped by status columns
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {['PENDING','IN_PROGRESS','COMPLETED','OVERDUE'].map(status => (
+                  <div key={status} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border p-3">
+                    <div className="font-semibold text-sm mb-2">{status.replace('_',' ')}</div>
+                    <div className="space-y-3">
+                      {filteredTasks.filter((t:any)=> t.status===status).map((tk:any)=> (
+                        <TaskCard
+                          key={tk.id}
+                          {...tk}
+                          canEdit={true}
+                          onUpdateStatus={(s) => updateTaskStatus(tk.id, s)}
+                          onUpdateNotes={(n) => updateTaskNotes(tk.id, n)}
+                          onDelete={() => deleteTask(tk.id)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
           )}
         </TabsContent>
         <TabsContent value="calendar">
