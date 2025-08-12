@@ -34,6 +34,8 @@ export default function ChecklistWorkspace() {
   const [showChecklistModal, setShowChecklistModal] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState<{ checklistId: number }|null>(null);
+  const [showTemplatesModal, setShowTemplatesModal] = useState(false);
+  const [showAssignTemplateModal, setShowAssignTemplateModal] = useState(false);
   const [filter, setFilter] = useState('all');
   const { user } = useAuth();
   const [myView, setMyView] = useState(false);
@@ -41,6 +43,7 @@ export default function ChecklistWorkspace() {
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [calView, setCalView] = useState<View>('month');
   const [calDate, setCalDate] = useState<Date>(new Date());
+  const [templates, setTemplates] = useState<any[]>([]);
 
   const locales = { 'en-US': undefined as any };
   const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
@@ -67,6 +70,13 @@ export default function ChecklistWorkspace() {
 
   useEffect(() => {
     fetch('/api/public/users').then(r => r.json()).then(setUsers).catch(() => setUsers([]));
+  }, []);
+
+  useEffect(() => {
+    // Load checklist templates for quick-assign and management
+    fetch('/api/checklists/templates', { credentials: 'include' })
+      .then(r => r.json()).then(data => setTemplates(Array.isArray(data) ? data : []))
+      .catch(() => setTemplates([]));
   }, []);
 
   // Filtering logic (stub, can be expanded)
@@ -235,6 +245,8 @@ export default function ChecklistWorkspace() {
           <div className="flex gap-2 my-4">
           <Button onClick={() => setShowChecklistModal(true)} variant="outline">New Checklist</Button>
           <Button onClick={() => setShowTaskModal(true)} variant="outline">New Task</Button>
+          <Button onClick={() => setShowAssignTemplateModal(true)} variant="outline">Assign From Template</Button>
+          <Button onClick={() => setShowTemplatesModal(true)} variant="outline">Templates</Button>
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={myView} onChange={e => setMyView(e.target.checked)} />
               <span className="text-sm">My items only</span>
@@ -329,6 +341,26 @@ export default function ChecklistWorkspace() {
           onAssigned={() => window.location.reload()}
         />
       )}
+
+      {/* Templates Manager */}
+      <TemplatesManagerModal
+        open={showTemplatesModal}
+        onClose={() => setShowTemplatesModal(false)}
+        templates={templates}
+        onChanged={async () => {
+          const data = await fetch('/api/checklists/templates', { credentials: 'include' }).then(r => r.json()).catch(() => []);
+          setTemplates(Array.isArray(data) ? data : []);
+        }}
+      />
+
+      {/* Assign from Template */}
+      <AssignTemplateModal
+        open={showAssignTemplateModal}
+        onClose={() => setShowAssignTemplateModal(false)}
+        templates={templates}
+        users={users}
+        onAssigned={() => window.location.reload()}
+      />
         </div>
     </Layout>
   );
@@ -337,6 +369,126 @@ export default function ChecklistWorkspace() {
 // Signal to _app that this page already wraps itself with Layout
 (ChecklistWorkspace as any).getLayout = (page: React.ReactNode) => page;
 
+function TemplatesManagerModal({ open, onClose, templates, onChanged }: { open: boolean; onClose: () => void; templates: any[]; onChanged: () => void }) {
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [frequency, setFrequency] = useState<'DAILY'|'WEEKLY'|'MONTHLY'|'YEARLY'>('DAILY');
+  const [isRequired, setIsRequired] = useState(false);
+  const [items, setItems] = useState<Array<{ title: string; description?: string; isRequired?: boolean }>>([{ title: '' }]);
+  const [saving, setSaving] = useState(false);
+
+  async function saveTemplate() {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/checklists/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ title, description, frequency, isRequired, items })
+      });
+      if (!res.ok) throw new Error('Failed');
+      setTitle(''); setDescription(''); setItems([{ title: '' }]);
+      onChanged();
+    } finally { setSaving(false); }
+  }
+
+  if (!open) return null;
+  return (
+    <Modal open={open} onClose={onClose} title="Checklist Templates" size="lg">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <h3 className="font-semibold">Create Template</h3>
+          <Input placeholder="Title" value={title} onChange={e => setTitle(e.target.value)} />
+          <Input placeholder="Description (optional)" value={description} onChange={e => setDescription(e.target.value)} />
+          <div className="grid grid-cols-2 gap-2">
+            <select className="border rounded px-2 py-2" value={frequency} onChange={e => setFrequency(e.target.value as any)}>
+              <option value="DAILY">Daily</option>
+              <option value="WEEKLY">Weekly</option>
+              <option value="MONTHLY">Monthly</option>
+              <option value="YEARLY">Yearly</option>
+            </select>
+            <label className="flex items-center gap-2"><input type="checkbox" checked={isRequired} onChange={e => setIsRequired(e.target.checked)} /> Required</label>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Items</span>
+              <Button size="sm" variant="outline" onClick={() => setItems(arr => [...arr, { title: '' }])}>Add Item</Button>
+            </div>
+            {items.map((it, idx) => (
+              <div key={idx} className="grid grid-cols-12 gap-2">
+                <div className="col-span-5"><Input placeholder="Item title" value={it.title} onChange={e => setItems(arr => arr.map((x,i)=> i===idx ? { ...x, title: e.target.value } : x))} /></div>
+                <div className="col-span-5"><Input placeholder="Item description" value={it.description || ''} onChange={e => setItems(arr => arr.map((x,i)=> i===idx ? { ...x, description: e.target.value } : x))} /></div>
+                <label className="col-span-2 flex items-center gap-2"><input type="checkbox" checked={!!it.isRequired} onChange={e => setItems(arr => arr.map((x,i)=> i===idx ? { ...x, isRequired: e.target.checked } : x))} /> Required</label>
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end"><Button onClick={saveTemplate} disabled={saving || !title.trim()}>Save Template</Button></div>
+        </div>
+        <div className="space-y-2">
+          <h3 className="font-semibold">Existing Templates</h3>
+          <div className="max-h-80 overflow-auto border rounded">
+            {(Array.isArray(templates)? templates: []).map((t:any) => (
+              <div key={t.id} className="p-3 border-b">
+                <div className="font-medium">{t.title}</div>
+                <div className="text-xs text-gray-500">{t.frequency}</div>
+                <div className="text-sm text-gray-600">{t.description}</div>
+                <div className="text-xs text-gray-500 mt-1">{Array.isArray(t.items)? t.items.length: 0} items</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function AssignTemplateModal({ open, onClose, templates, users, onAssigned }:{ open:boolean; onClose:()=>void; templates:any[]; users:any[]; onAssigned:()=>void }) {
+  const [templateId, setTemplateId] = useState<string>('');
+  const [selected, setSelected] = useState<string[]>([]);
+  const [dueDate, setDueDate] = useState('');
+  const [saving, setSaving] = useState(false);
+  if (!open) return null;
+  async function handleAssign(){
+    setSaving(true);
+    try{
+      const res = await fetch('/api/checklists/templates/assign', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify({ templateId: Number(templateId), userIds: selected.map(Number), dueDate: dueDate || undefined })});
+      if (!res.ok) throw new Error('Failed');
+      onClose(); onAssigned();
+    } finally { setSaving(false); }
+  }
+  return (
+    <Modal open={open} onClose={onClose} title="Assign From Template" size="md">
+      <div className="space-y-3">
+        <div>
+          <label className="text-sm">Template</label>
+          <select className="w-full border rounded px-2 py-2" value={templateId} onChange={e => setTemplateId(e.target.value)}>
+            <option value="">Select template…</option>
+            {templates.map((t:any)=> <option key={t.id} value={t.id}>{t.title}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-sm">Assign Users</label>
+          <div className="max-h-48 overflow-auto border rounded p-2">
+            {users.map((u:any)=> (
+              <label key={u.id} className="flex items-center gap-2 py-1">
+                <input type="checkbox" checked={selected.includes(String(u.id))} onChange={e=> setSelected(arr => e.target.checked ? [...arr, String(u.id)] : arr.filter(x=> x!== String(u.id)))} />
+                <span>{u.name} ({u.role})</span>
+              </label>
+            ))}
+          </div>
+        </div>
+        <div>
+          <label className="text-sm">Due Date (optional)</label>
+          <input type="date" className="w-full border rounded px-2 py-2" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleAssign} disabled={saving || !templateId || selected.length===0}>Assign</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
 function ChecklistCreateModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');

@@ -34,6 +34,7 @@ model Customer {
   customFields      CustomerCustomField[]
   groups            CustomerGroup[]   @relation("CustomerGroups")
   notifications     NotificationHistory[] @relation("CustomerNotifications")
+  tasks             Task[]
 
   @@index([lightspeedId])
   @@index([email])
@@ -104,6 +105,7 @@ model User {
   parties              Party[]             @relation("PartySalesPerson")
   notifications        NotificationHistory[] @relation("UserNotifications")
   createdTemplates     NotificationTemplate[] @relation("TemplateCreator")
+  checklistTemplates   ChecklistTemplate[]     @relation("ChecklistTemplateCreator")
   
   // Checklists & Tasks relations
   createdChecklists    Checklist[]         @relation("ChecklistCreator")
@@ -1031,6 +1033,8 @@ model Task {
   assignedTo       User         @relation("TaskAssignee", fields: [assignedToId], references: [id], onDelete: Cascade)
   assignedById     Int
   assignedBy       User         @relation("TaskAssigner", fields: [assignedById], references: [id])
+  customerId       Int?
+  customer         Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
   dueDate          DateTime?
   estimatedMinutes Int?
   completedAt      DateTime?
@@ -1040,9 +1044,42 @@ model Task {
 
   @@index([assignedToId, status])
   @@index([assignedById])
+  @@index([customerId])
   @@index([status])
   @@index([priority])
   @@index([dueDate])
+}
+
+// Checklist Templates for quick assignment
+model ChecklistTemplate {
+  id               Int                   @id @default(autoincrement())
+  title            String
+  description      String?
+  frequency        ChecklistFrequency
+  isRequired       Boolean               @default(false)
+  estimatedMinutes Int?
+  createdById      Int
+  createdBy        User                  @relation("ChecklistTemplateCreator", fields: [createdById], references: [id])
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  items            ChecklistTemplateItem[]
+
+  @@index([createdById])
+}
+
+model ChecklistTemplateItem {
+  id           Int                @id @default(autoincrement())
+  templateId   Int
+  template     ChecklistTemplate  @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  title        String
+  description  String?
+  isRequired   Boolean            @default(false)
+  order        Int
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([templateId])
+  @@index([order])
 }
 
 enum ChecklistFrequency {

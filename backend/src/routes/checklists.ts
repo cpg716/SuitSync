@@ -10,7 +10,10 @@ import {
   getUserChecklists,
   startChecklistExecution,
   updateChecklistItem,
-  getChecklistAnalytics
+  getChecklistAnalytics,
+  listChecklistTemplates,
+  upsertChecklistTemplate,
+  assignTemplate
 } from '../controllers/checklistsController';
 
 const router = express.Router();
@@ -104,5 +107,10 @@ router.get('/analytics',
   requirePermission('admin', 'read'),
   asyncHandler(getChecklistAnalytics)
 );
+
+// Templates
+router.get('/templates', authMiddleware, requirePermission('admin', 'read'), asyncHandler(listChecklistTemplates));
+router.post('/templates', authMiddleware, requirePermission('admin', 'write'), asyncHandler(upsertChecklistTemplate));
+router.post('/templates/assign', authMiddleware, requirePermission('admin', 'write'), asyncHandler(assignTemplate));
 
 export default router;

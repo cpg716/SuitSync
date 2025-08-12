@@ -61,7 +61,7 @@ async function resolveLocalUserId(req: Request): Promise<number | null> {
 // Create new task
 export const createTask = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { title, description, priority, assignedToId, dueDate, estimatedMinutes } = req.body;
+    const { title, description, priority, assignedToId, dueDate, estimatedMinutes, customerId } = req.body;
     const assignedById = await resolveLocalUserId(req);
     if (!assignedById) {
       res.status(400).json({ error: 'Unable to resolve assigning user. Ensure your account is linked to a local user.' });
@@ -76,7 +76,8 @@ export const createTask = async (req: Request, res: Response): Promise<void> => 
         assignedToId,
         assignedById,
         dueDate: dueDate ? new Date(dueDate) : null,
-        estimatedMinutes
+        estimatedMinutes,
+        customerId: customerId ? Number(customerId) : null
       },
       include: {
         assignedTo: { select: { id: true, name: true, photoUrl: true, role: true } },

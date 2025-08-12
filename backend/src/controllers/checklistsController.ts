@@ -40,6 +40,71 @@ export const getChecklists = async (req: Request, res: Response): Promise<void> 
   }
 };
 
+// Templates: list
+export const listChecklistTemplates = async (_req: Request, res: Response): Promise<void> => {
+  const templates = await prisma.checklistTemplate.findMany({
+    include: { items: { orderBy: { order: 'asc' } } },
+    orderBy: { updatedAt: 'desc' }
+  });
+  res.json(templates);
+};
+
+// Templates: create/update simple
+export const upsertChecklistTemplate = async (req: Request, res: Response): Promise<void> => {
+  const userId = await resolveLocalUserId(req);
+  if (!userId) { res.status(400).json({ error: 'Unable to resolve user' }); return; }
+  const { id, title, description, frequency, isRequired, estimatedMinutes, items } = req.body as any;
+  if (id) {
+    const updated = await prisma.checklistTemplate.update({
+      where: { id: Number(id) },
+      data: {
+        title, description, frequency, isRequired: !!isRequired, estimatedMinutes: estimatedMinutes ?? null,
+        items: {
+          deleteMany: {},
+          create: (items || []).map((it: any, idx: number) => ({ title: it.title, description: it.description, isRequired: !!it.isRequired, order: idx }))
+        }
+      },
+      include: { items: true }
+    });
+    res.json(updated); return;
+  }
+  const created = await prisma.checklistTemplate.create({
+    data: {
+      title, description, frequency, isRequired: !!isRequired, estimatedMinutes: estimatedMinutes ?? null, createdById: userId,
+      items: { create: (items || []).map((it: any, idx: number) => ({ title: it.title, description: it.description, isRequired: !!it.isRequired, order: idx })) }
+    },
+    include: { items: true }
+  });
+  res.status(201).json(created);
+};
+
+// Templates: instantiate to assignment
+export const assignTemplate = async (req: Request, res: Response): Promise<void> => {
+  const userId = await resolveLocalUserId(req);
+  if (!userId) { res.status(400).json({ error: 'Unable to resolve user' }); return; }
+  const { templateId, userIds, dueDate } = req.body as any;
+  const tpl = await prisma.checklistTemplate.findUnique({ where: { id: Number(templateId) }, include: { items: { orderBy: { order: 'asc' } } } }) as any;
+  if (!tpl) { res.status(404).json({ error: 'Template not found' }); return; }
+  // Create checklist from template then assign
+  const checklist = await prisma.checklist.create({
+    data: {
+      title: tpl.title,
+      description: tpl.description,
+      frequency: tpl.frequency,
+      isRequired: tpl.isRequired,
+      estimatedMinutes: tpl.estimatedMinutes,
+      createdById: userId,
+      items: { create: tpl.items.map((it, idx) => ({ title: it.title, description: it.description, isRequired: it.isRequired, order: idx })) }
+    },
+    include: { items: true }
+  });
+  if (Array.isArray(userIds) && userIds.length) {
+    const due = dueDate ? new Date(dueDate) : null;
+    await Promise.all(userIds.map((uid: number) => prisma.checklistAssignment.create({ data: { checklistId: checklist.id, assignedToId: Number(uid), assignedById: userId, dueDate: due } })));
+  }
+  res.status(201).json(checklist);
+};
+
 // Create new checklist
 async function resolveLocalUserId(req: Request): Promise<number | null> {
   const u: any = (req as any).user || {};
