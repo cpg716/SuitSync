@@ -672,9 +672,8 @@ function AvailabilityEditor() {
 function UsersAdminCard() {
   const toast = useToast();
   const [users, setUsers] = useState([]);
-  const [localUsers, setLocalUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [profileUserId, setProfileUserId] = useState<number|null>(null);
+  const [profileUserId, setProfileUserId] = useState<string | number | null>(null);
   const [page, setPage] = useState(1);
   const USERS_PER_PAGE = 20; // Increased for better grid layout
   useEffect(() => {
@@ -683,54 +682,37 @@ function UsersAdminCard() {
         if (r.status === 401) {
           toast.error('You must be logged in to view users.');
           window.location.href = '/login';
-          return { lightspeedUsers: [], localUsers: [] };
+          return { users: [] } as any;
         } else if (r.status === 404) {
           toast.error('User list is unavailable.');
-          return { lightspeedUsers: [], localUsers: [] };
+          return { users: [] } as any;
         } else {
           toast.error('Failed to fetch users.');
-          return { lightspeedUsers: [], localUsers: [] };
+          return { users: [] } as any;
         }
       }
       return r.json();
     }).then(data => {
-      // Use the combined users array that includes both local and Lightspeed-only users
-      const allUsers = data.users || [...(data.localUsers || []), ...(data.lightspeedUsers || [])];
+      const allUsers = data.users || [];
       setUsers(allUsers);
-      setLocalUsers(Array.isArray(data.localUsers) ? data.localUsers : []);
       setLoading(false);
     });
   }, []);
-  const getLocalUser = (lsUser) => localUsers.find(u => u.lightspeedEmployeeId && String(u.lightspeedEmployeeId) === String(lsUser.id));
-  const getUserId = (u) => {
-    const local = getLocalUser(u);
-    if (local) return local.id;
-    if (u.id) return parseInt(u.id, 10);
-    return null;
-  };
-  const getPhone = (u) => {
-    const local = getLocalUser(u);
-    return local?.phone || u.phone || '-';
-  };
+  const getUserId = (u: any) => (u && typeof u.id !== 'undefined') ? String(u.id) : null;
+  const getPhone = (u: any) => u?.phone || '-';
   const pagedUsers = users.slice((page-1)*USERS_PER_PAGE, page*USERS_PER_PAGE);
   const totalPages = Math.ceil(users.length / USERS_PER_PAGE);
   const handleSyncUsers = async () => {
     try {
       toast.success('Starting user sync...');
       const response = await apiFetch('/api/users/sync', { method: 'POST' });
-      if (response.ok) {
-        const result = await response.json();
-        toast.success(`Sync completed: ${result.created} created, ${result.updated} updated`);
-
+      if (response) {
+        toast.success('Sync completed');
         // Refresh the users list by re-fetching data
         setLoading(true);
-        const usersResponse = await apiFetch('/api/users');
-        if (usersResponse.ok) {
-          const data = await usersResponse.json();
-          const allUsers = data.users || [...(data.localUsers || []), ...(data.lightspeedUsers || [])];
-          setUsers(allUsers);
-          setLocalUsers(Array.isArray(data.localUsers) ? data.localUsers : []);
-        }
+        const data = await apiFetch('/api/users');
+        const allUsers = data.users || [];
+        setUsers(allUsers);
         setLoading(false);
       } else {
         toast.error('Failed to sync users');
@@ -746,9 +728,7 @@ function UsersAdminCard() {
         <>
           {/* Header with sync button */}
           <div className="flex justify-between items-center mb-6">
-            <div className="text-sm text-gray-600 dark:text-gray-400">
-              {users.length} total users ({localUsers.length} with local profiles)
-            </div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">{users.length} total users</div>
             <Button
               onClick={handleSyncUsers}
               variant="outline"
@@ -760,9 +740,7 @@ function UsersAdminCard() {
             </Button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6 w-full">
-            {pagedUsers.map(u => {
-              const local = getLocalUser(u) || {};
-              const hasLocalProfile = !!getUserId(u);
+            {pagedUsers.map((u: any) => {
               return (
                 <div
                   key={u.id}
@@ -771,12 +749,11 @@ function UsersAdminCard() {
                     transition-all duration-200 ease-in-out transform hover:scale-105
                     flex flex-col items-center border border-gray-200 dark:border-gray-600
                     w-full min-w-0 p-4 sm:p-6 relative overflow-hidden
-                    ${hasLocalProfile ? 'ring-2 ring-blue-500/20' : ''}
                   `}
                   style={{ minHeight: '280px' }}
                 >
-                  {/* Status indicator */}
-                  <div className={`absolute top-2 right-2 w-3 h-3 rounded-full ${hasLocalProfile ? 'bg-green-500' : 'bg-gray-300'}`} />
+                  {/* Status indicator (visual accent) */}
+                  <div className={`absolute top-2 right-2 w-3 h-3 rounded-full bg-green-500`} />
 
                   {/* Profile photo */}
                   <div className="relative mb-3">
@@ -819,19 +796,18 @@ function UsersAdminCard() {
                         : 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300'
                       }
                     `}>
-                      {u.role || local.role || 'User'}
+                      {u.role || 'User'}
                     </div>
                   </div>
 
                   {/* Action button */}
                   <Button
-                    variant={hasLocalProfile ? "default" : "outline"}
+                    variant="default"
                     size="sm"
                     className="w-full text-xs sm:text-sm"
                     onClick={() => setProfileUserId(getUserId(u))}
-                    disabled={!hasLocalProfile}
                   >
-                    {hasLocalProfile ? 'View Profile' : 'No Local Profile'}
+                    View Profile
                   </Button>
                 </div>
               );

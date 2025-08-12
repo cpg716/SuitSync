@@ -200,20 +200,91 @@ export const getUsers = async (req: Request, res: Response) => {
 
 export const getUser = async (req: Request, res: Response) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: Number(req.params.id) },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        photoUrl: true,
-        lightspeedEmployeeId: true,
-        createdAt: true,
-        updatedAt: true
+    const param = String(req.params.id);
+    const numericId = Number(param);
+    let user = !isNaN(numericId)
+      ? await prisma.user.findUnique({
+          where: { id: numericId },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            photoUrl: true,
+            lightspeedEmployeeId: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        })
+      : null;
+
+    // If not found by local ID, try lookup by Lightspeed employee ID
+    if (!user) {
+      user = await prisma.user.findFirst({
+        where: { lightspeedEmployeeId: param },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          photoUrl: true,
+          lightspeedEmployeeId: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+    }
+
+    // If still not found, create a local augmentation record from Lightspeed
+    if (!user) {
+      try {
+        const client = createLightspeedClient(req);
+        // Try to fetch the specific Lightspeed user; fallback to list
+        let lsUser: any | null = null;
+        try {
+          const resp = await client.get(`/users/${param}`);
+          lsUser = resp?.data?.data || resp?.data || null;
+        } catch {
+          // Fallback to fetching all and filtering
+          const all = await client.fetchAllWithPagination('/users');
+          lsUser = (all || []).find((u: any) => String(u.id) === param) || null;
+        }
+
+        if (!lsUser) {
+          return res.status(404).json({ error: 'User not found' });
+        }
+
+        const resolvedName = lsUser.display_name || lsUser.name || `User ${lsUser.id}`;
+        const resolvedEmail = lsUser.email || `${lsUser.username || lsUser.id}@lightspeed.local`;
+        const resolvedRole = lsUser.account_type === 'admin' ? 'admin' : 'user';
+        const resolvedPhoto = lsUser.image_source || lsUser.photo_url || lsUser.avatar || undefined;
+
+        const created = await prisma.user.create({
+          data: {
+            name: resolvedName,
+            email: resolvedEmail,
+            role: resolvedRole,
+            photoUrl: resolvedPhoto,
+            lightspeedEmployeeId: String(lsUser.id),
+          },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            photoUrl: true,
+            lightspeedEmployeeId: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        });
+        user = created;
+      } catch (e) {
+        logger.error('[UsersController] Failed to create local user from Lightspeed:', e);
+        return res.status(404).json({ error: 'User not found' });
       }
-    });
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    }
+
     res.json(user);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch user' });
