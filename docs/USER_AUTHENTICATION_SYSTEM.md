@@ -128,10 +128,26 @@ CREATE TABLE "TailorSelectionSession" (
 - **Tailor Selection**: ✅ Avatars in tailor selection modal
 - **QR Code Workflow**: ✅ Tailor avatars in scanning interface
 
-### Avatar Sources
-- **Lightspeed Users**: Photo URL from Lightspeed API
-- **Local Users**: Default avatar with initials
-- **Fallback**: Generic user icon for missing photos
+### How it works (fixed)
+- **Single source of truth**: All users are Lightspeed identities. Local DB holds augmentation fields (e.g., `commissionRate`, availability, skills), not separate account types.
+- **Photo resolution order** (any available): `image_source` → `photo_url` → `avatar` → fallback.
+  - Applied at login in `backend/src/controllers/lightspeedAuthController.ts` when building `req.session.lightspeedUser`.
+  - Enforced in session response in `backend/src/controllers/authController.ts#getSession`.
+  - Enforced when listing users in `backend/src/controllers/usersController.ts#getUsers` (hybrid list merges Lightspeed data + local augmentation).
+- **Frontend rendering**: `frontend/components/ui/UserAvatar.tsx` uses the `photoUrl` and falls back to initials or icon if the image fails to load (`onError` handler toggles fallback state).
+
+### Endpoints involved
+- `GET /api/auth/session`: returns the current Lightspeed user with resolved `photoUrl`.
+- `GET /api/users`: returns merged users with resolved `photoUrl` for each entry.
+- `GET /api/auth/user-photo?email=`: optional enrichment endpoint if a session lacks a `photoUrl` (used defensively by `AuthContext`).
+
+### Test checklist
+1. Login via Lightspeed → header avatar displays (Appbar).
+2. Open Users modal/list → each user shows resolved avatar if Lightspeed provides one.
+3. Break an image URL (network devtools) → Avatar component falls back to initials icon automatically.
+4. Verify API responses include `photoUrl`:
+   - `curl -b cookies.txt http://localhost:3000/api/auth/session`
+   - `curl -b cookies.txt http://localhost:3000/api/users`
 
 ## Commission Tracking
 

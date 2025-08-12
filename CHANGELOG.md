@@ -69,6 +69,10 @@ All notable changes to SuitSync will be documented in this file.
 - API health and error info now included in sync status response.
 - Windows migration instructions and Docker compatibility notes.
 
+### Avatar & Identity Model
+- Avatar pipeline fixed: resolve Lightspeed image fields (`image_source` → `photo_url` → `avatar`) in session and users API; frontend falls back to initials/icon.
+- Identity model clarified: all users are Lightspeed identities; local DB augments with availability, commission, skills, and audit only (no standalone local accounts).
+
 ### Fixed
 - Customer list now sorts by last name (with missing last names at end), displays as `Last Name, First Name`.
 - Search by last name, first name, email, or phone now works as expected.

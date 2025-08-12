@@ -16,6 +16,11 @@ SuitSync is now **fully compliant** with Lightspeed X-Series API 2.0 specificati
 - **State Parameter**: 13-character CSRF protection ✅
 - **Token Refresh**: Automatic on 401 errors ✅
 
+### 1a. User Identity Model - COMPLIANT ✅
+- **Single identity**: All users originate from Lightspeed (`/api/2.0/users`).
+- **Local augmentation only**: Local DB adds fields such as availability, commission, skills, and audit, without creating separate account types.
+- **Avatar fields**: We resolve `image_source` → `photo_url` → `avatar` to populate `photoUrl` consistently across session and listing endpoints.
+
 ### 2. API 2.0 Endpoints - COMPLIANT ✅
 - **Base URL**: `https://{domain}.retail.lightspeed.app/api/2.0` ✅
 - **Customers**: `/api/2.0/customers` ✅

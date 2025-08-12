@@ -77,6 +77,12 @@ For production use, authenticate with Lightspeed:
 4. Session has lightspeedUser + tokens → API endpoints accessible
 ```
 
+### Avatar issues checklist (fixed)
+- Ensure `photoUrl` present on `GET /api/auth/session` and `GET /api/users`.
+- Backend resolves `photoUrl` using: `image_source` → `photo_url` → `avatar`.
+- Frontend `UserAvatar` has `onError` fallback to initials/icon.
+- If email-only session occurs, frontend calls `GET /api/auth/user-photo?email=` as enrichment.
+
 ## Session Management
 
 ### Session Types
