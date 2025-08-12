@@ -5,6 +5,7 @@ import { Badge } from './Badge';
 import { Button } from './Button';
 import { UserAvatar } from './UserAvatar';
 import { Checkbox } from './checkbox';
+import { Trash2, Edit } from 'lucide-react';
 
 interface ChecklistItem {
   id: number;
@@ -33,6 +34,8 @@ interface ChecklistCardProps {
   onStart?: () => void;
   onUpdateItem?: (itemId: number, isCompleted: boolean, notes?: string) => void;
   onComplete?: () => void;
+  onDelete?: () => void;
+  onEdit?: () => void;
   isExecuting?: boolean;
 }
 
@@ -72,6 +75,8 @@ export const ChecklistCard: React.FC<ChecklistCardProps> = ({
   onStart,
   onUpdateItem,
   onComplete,
+  onDelete,
+  onEdit,
   isExecuting = false
 }) => {
   const [expandedItems, setExpandedItems] = useState(false);
@@ -122,6 +127,12 @@ export const ChecklistCard: React.FC<ChecklistCardProps> = ({
             <div className={`p-2 rounded-full ${statusConfig.bgColor}`}>
               <StatusIcon className={`h-4 w-4 ${statusConfig.color}`} />
             </div>
+            {onEdit && (
+              <Button variant="outline" size="sm" onClick={onEdit}><Edit className="w-3 h-3 mr-1"/>Edit</Button>
+            )}
+            {onDelete && (
+              <Button variant="outline" size="sm" className="text-red-600" onClick={onDelete}><Trash2 className="w-3 h-3 mr-1"/>Delete</Button>
+            )}
           </div>
         </div>
 

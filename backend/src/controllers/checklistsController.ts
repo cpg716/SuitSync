@@ -430,3 +430,18 @@ export const getChecklistAnalytics = async (req: Request, res: Response): Promis
     res.status(status).json({ error: message });
   }
 };
+
+// Delete checklist (admin)
+export const deleteChecklist = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = Number(req.params.id);
+    await prisma.checklist.delete({ where: { id } });
+    res.status(204).send();
+    try {
+      await AuditLogService.logAction((req as any).user?.id || null, 'delete', 'Checklist', id, {});
+    } catch {}
+  } catch (error) {
+    const { status, message } = handlePrismaError(error);
+    res.status(status).json({ error: message });
+  }
+};

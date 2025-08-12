@@ -282,7 +282,15 @@ export default function ChecklistWorkspace() {
                   const cl = execOrCl.assignment ? execOrCl.assignment.checklist : execOrCl;
                   return (
                     <div key={cl.id} className="relative">
-                      <ChecklistCard {...cl} />
+                      <ChecklistCard
+                        {...cl}
+                        onDelete={async () => {
+                          if (!confirm('Delete this checklist?')) return;
+                          await fetch(`/api/checklists/${cl.id}`, { method: 'DELETE', credentials: 'include' });
+                          window.location.reload();
+                        }}
+                        onEdit={() => setShowAssignModal({ checklistId: cl.id })}
+                      />
                       <div className="absolute top-2 right-2 flex gap-2">
                         <Button size="sm" variant="outline" onClick={() => setShowAssignModal({ checklistId: cl.id })}>Assign</Button>
                       </div>
@@ -301,7 +309,15 @@ export default function ChecklistWorkspace() {
                         const cl = execOrCl.assignment ? execOrCl.assignment.checklist : execOrCl;
                         return (
                           <div key={cl.id} className="relative">
-                            <ChecklistCard {...cl} />
+                            <ChecklistCard
+                              {...cl}
+                              onDelete={async () => {
+                                if (!confirm('Delete this checklist?')) return;
+                                await fetch(`/api/checklists/${cl.id}`, { method: 'DELETE', credentials: 'include' });
+                                window.location.reload();
+                              }}
+                              onEdit={() => setShowAssignModal({ checklistId: cl.id })}
+                            />
                             <div className="absolute top-2 right-2 flex gap-2">
                               <Button size="sm" variant="outline" onClick={() => setShowAssignModal({ checklistId: cl.id })}>Assign</Button>
                             </div>

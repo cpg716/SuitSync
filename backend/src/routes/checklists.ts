@@ -3,7 +3,7 @@ import { authMiddleware, requirePermission } from '../middleware/auth';
 import { validateBody } from '../middleware/validation';
 import { asyncHandler } from '../utils/asyncHandler';
 import { z } from 'zod';
-import {
+import { 
   getChecklists,
   createChecklist,
   assignChecklist,
@@ -13,7 +13,8 @@ import {
   getChecklistAnalytics,
   listChecklistTemplates,
   upsertChecklistTemplate,
-  assignTemplate
+  assignTemplate,
+  deleteChecklist
 } from '../controllers/checklistsController';
 
 const router = express.Router();
@@ -112,5 +113,8 @@ router.get('/analytics',
 router.get('/templates', authMiddleware, requirePermission('admin', 'read'), asyncHandler(listChecklistTemplates));
 router.post('/templates', authMiddleware, requirePermission('admin', 'write'), asyncHandler(upsertChecklistTemplate));
 router.post('/templates/assign', authMiddleware, requirePermission('admin', 'write'), asyncHandler(assignTemplate));
+
+// Delete checklist
+router.delete('/:id', authMiddleware, requirePermission('admin', 'write'), asyncHandler(deleteChecklist));
 
 export default router;
