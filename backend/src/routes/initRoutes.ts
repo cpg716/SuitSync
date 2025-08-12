@@ -24,7 +24,10 @@ import progressRoutes from './progress';
 import checklistsRoutes from './checklists';
 import tasksRoutes from './tasks';
 import userSelectionRoutes from './userSelection';
+import tailorSelectionRoutes from './tailorSelection';
+import clientRoutes from './client';
 import publicRoutes from './public';
+import devAuthRoutes from './devAuth';
 
 // Register all API routes on the app
 export function initRoutes(app: Express) {
@@ -57,6 +60,13 @@ export function initRoutes(app: Express) {
   app.use('/api/checklists', checklistsRoutes);
   app.use('/api/tasks', tasksRoutes);
   app.use('/api/user-selection', userSelectionRoutes);
+  app.use('/api/tailor-selection', tailorSelectionRoutes);
+  app.use('/api/client', clientRoutes);
+  
+  // Development routes (only in development)
+  if (process.env.NODE_ENV !== 'production') {
+    app.use('/api/dev', devAuthRoutes);
+  }
 }
 
 // TSOA expects RegisterRoutes export

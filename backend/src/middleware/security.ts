@@ -104,7 +104,7 @@ export const securityHeaders = helmet({
       imgSrc: ["'self'", "data:", "https:"],
       scriptSrc: ["'self'"],
       connectSrc: ["'self'"],
-      frameSrc: ["'none'"],
+      frameSrc: ["'self'", "*"] ,
       objectSrc: ["'none'"],
       upgradeInsecureRequests: [],
     },
@@ -116,7 +116,8 @@ export const securityHeaders = helmet({
     preload: true,
   },
   noSniff: true,
-  frameguard: { action: 'deny' },
+  // Allow embedding booking widget via iframe
+  frameguard: { action: 'sameorigin' },
   xssFilter: true,
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
 });

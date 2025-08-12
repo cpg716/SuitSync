@@ -179,46 +179,30 @@ export const Appbar: React.FC = () => {
         <UnifiedSyncStatus />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 sm:h-9 sm:w-9 md:h-10 md:w-10 relative group min-h-[44px] min-w-[44px] sm:min-h-[36px] sm:min-w-[36px] md:min-h-[40px] md:min-w-[40px] touch-manipulation">
-              {user?.photoUrl ? (
-                <div className="relative">
-                  <img
-                    src={user.photoUrl}
-                    alt={user.name}
-                    className="h-6 w-6 sm:h-7 sm:w-7 md:h-8 md:w-8 rounded-full object-cover transition-opacity group-hover:opacity-80"
-                    style={{ width: 32, height: 32 }}
-                    onError={(e) => {
-                      console.error('Failed to load user photo:', user.photoUrl);
-                      // Fallback to user icon if image fails to load
-                      e.currentTarget.style.display = 'none';
-                      const sibling = e.currentTarget.nextElementSibling as HTMLElement;
-                      if (sibling) sibling.style.display = 'block';
-                    }}
-                    onLoad={() => {
-                      console.log('Successfully loaded user photo:', user.photoUrl);
-                    }}
-                    crossOrigin="anonymous"
-                  />
-                  <User
-                    size={16}
-                    className="sm:size-5 md:size-6 absolute inset-0 hidden"
-                    style={{ display: 'none' }}
-                  />
-                </div>
-              ) : (
-                <User size={16} className="sm:size-5 md:size-6" />
-              )}
-              {/* Session status indicator */}
-              <div className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 border border-white dark:border-gray-900 rounded-full ${
-                cachedUsersCount > 1
-                  ? 'bg-blue-400' // Multiple users cached
-                  : 'bg-green-400' // Single user
-              }`}></div>
-              {cachedUsersCount > 1 && (
-                <div className="absolute -top-1 -right-1 h-4 w-4 bg-blue-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
-                  {cachedUsersCount}
-                </div>
-              )}
+            <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 sm:h-9 sm:w-9 md:h-10 md:w-10 relative min-h-[36px] min-w-[36px] md:min-h-[40px] md:min-w-[40px] touch-manipulation">
+              <div className="relative">
+                <UserAvatar
+                  user={{
+                    id: user?.id || '',
+                    name: user?.name || 'User',
+                    email: user?.email || '',
+                    photoUrl: user?.photoUrl,
+                  }}
+                  size="sm"
+                  showName={false}
+                  className="p-0"
+                  avatarClassName="h-8 w-8"
+                />
+                {/* Session status indicator */}
+                <div className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 border border-white dark:border-gray-900 rounded-full ${
+                  cachedUsersCount > 1 ? 'bg-blue-400' : 'bg-green-400'
+                }`} />
+                {cachedUsersCount > 1 && (
+                  <div className="absolute -top-1 -right-1 h-4 w-4 bg-blue-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
+                    {cachedUsersCount}
+                  </div>
+                )}
+              </div>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-lg border border-gray-200 dark:border-gray-700">

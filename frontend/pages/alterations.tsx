@@ -17,7 +17,9 @@ import {
   CheckCircle,
   AlertCircle,
   Circle,
-  ChevronRight
+  ChevronRight,
+  TrendingUp,
+  PieChart
 } from 'lucide-react';
 import { useRouter } from 'next/router';
 import { useToast } from '@/components/ToastContext';
@@ -25,6 +27,7 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { simpleFetcher } from '@/lib/simpleApiClient';
 import { format, isAfter, isBefore, addDays } from 'date-fns';
 import { useAuth } from '../src/AuthContext';
+import { UserAvatar } from '../components/ui/UserAvatar';
 
 interface AlterationJob {
   id: number;
@@ -116,6 +119,16 @@ export default function AlterationsPage() {
     return matchesSearch && matchesStatus;
   });
 
+  // Summary data for hero section
+  const heroSummary = {
+    totalJobs: summary?.total || 0,
+    overdueJobs: summary?.overdue || 0,
+    inProgressJobs: summary?.inProgress || 0,
+    completedJobs: summary?.complete || 0,
+  };
+
+
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'COMPLETE':
@@ -203,9 +216,12 @@ export default function AlterationsPage() {
 
   if (authLoading) {
     return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-32 w-full" />
+      <div className="w-full space-y-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => (
+            <Skeleton key={i} className="h-32 w-full" />
+          ))}
+        </div>
         <div className="space-y-4">
           {[...Array(5)].map((_, i) => (
             <Skeleton key={i} className="h-24 w-full" />
@@ -231,9 +247,12 @@ export default function AlterationsPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-32 w-full" />
+      <div className="w-full space-y-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => (
+            <Skeleton key={i} className="h-32 w-full" />
+          ))}
+        </div>
         <div className="space-y-4">
           {[...Array(5)].map((_, i) => (
             <Skeleton key={i} className="h-24 w-full" />
@@ -258,13 +277,74 @@ export default function AlterationsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="w-full space-y-8">
+      {/* Hero Header */}
+      <div className="relative bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-600 rounded-xl shadow-lg p-8 flex flex-col md:flex-row items-center gap-6 animate-fade-in">
+        <div className="flex-1">
+          <h1 className="text-4xl font-extrabold text-white mb-2 drop-shadow-lg">Alteration Management</h1>
+          <p className="text-lg text-blue-100 mb-4">Track and manage all your alteration jobs and progress.</p>
+          <div className="flex items-center gap-3">
+            <UserAvatar user={user} size="lg" showName />
+          </div>
+        </div>
+        <div className="flex flex-col items-center gap-2">
+          <div className="w-24 h-24 bg-white/20 rounded-full flex items-center justify-center">
+            <PieChart className="w-12 h-12 text-white" />
+          </div>
+          <span className="text-white text-sm font-semibold">{heroSummary.completedJobs} / {heroSummary.totalJobs} Completed</span>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="bg-blue-50 dark:bg-blue-900/30 shadow-md hover:scale-105 transition-transform">
+          <CardHeader className="flex flex-row items-center gap-2">
+            <Scissors className="w-6 h-6 text-blue-600" />
+            <CardTitle>Total Jobs</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-blue-700 dark:text-blue-200 animate-countup">{heroSummary.totalJobs}</div>
+            <div className="text-sm text-blue-500">alteration jobs</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-red-50 dark:bg-red-900/30 shadow-md hover:scale-105 transition-transform">
+          <CardHeader className="flex flex-row items-center gap-2">
+            <AlertCircle className="w-6 h-6 text-red-600" />
+            <CardTitle>Overdue</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-red-700 dark:text-red-200 animate-countup">{heroSummary.overdueJobs}</div>
+            <div className="text-sm text-red-500">need attention</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-purple-50 dark:bg-purple-900/30 shadow-md hover:scale-105 transition-transform">
+          <CardHeader className="flex flex-row items-center gap-2">
+            <TrendingUp className="w-6 h-6 text-purple-600" />
+            <CardTitle>In Progress</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-purple-700 dark:text-purple-200 animate-countup">{heroSummary.inProgressJobs}</div>
+            <div className="text-sm text-purple-500">being worked on</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-green-50 dark:bg-green-900/30 shadow-md hover:scale-105 transition-transform">
+          <CardHeader className="flex flex-row items-center gap-2">
+            <CheckCircle className="w-6 h-6 text-green-600" />
+            <CardTitle>Completed</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-green-700 dark:text-green-200 animate-countup">{heroSummary.completedJobs}</div>
+            <div className="text-sm text-green-500">finished</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Header and Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-            Alterations
-          </h1>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+            Alteration Jobs
+          </h2>
           <p className="text-gray-600 dark:text-gray-400">
             Manage all alteration jobs and track progress
           </p>
@@ -274,71 +354,6 @@ export default function AlterationsPage() {
           New Alteration Job
         </Button>
       </div>
-
-      {/* Summary Cards */}
-      {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center">
-                <Scissors className="w-8 h-8 text-blue-500 mr-3" />
-                <div>
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{summary.total}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center">
-                <AlertCircle className="w-8 h-8 text-red-500 mr-3" />
-                <div>
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Overdue</p>
-                  <p className="text-2xl font-bold text-red-600">{summary.overdue}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center">
-                <Clock className="w-8 h-8 text-blue-500 mr-3" />
-                <div>
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">In Progress</p>
-                  <p className="text-2xl font-bold text-blue-600">{summary.inProgress}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center">
-                <Circle className="w-8 h-8 text-yellow-500 mr-3" />
-                <div>
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Not Started</p>
-                  <p className="text-2xl font-bold text-yellow-600">{summary.notStarted}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center">
-                <CheckCircle className="w-8 h-8 text-green-500 mr-3" />
-                <div>
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Complete</p>
-                  <p className="text-2xl font-bold text-green-600">{summary.complete}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
 
       {/* Filters */}
       <Card>
@@ -488,26 +503,26 @@ export default function AlterationsPage() {
                       View Details
                     </Button>
                     
-                                         <div className="flex flex-col gap-1">
-                       <Button
-                         variant="outline"
-                         size="sm"
-                         onClick={() => handlePrintTicket(alteration.id, 'all')}
-                         className="flex items-center gap-2"
-                       >
-                         <Printer className="w-4 h-4" />
-                         Print All
-                       </Button>
-                       <Button
-                         variant="outline"
-                         size="sm"
-                         onClick={() => handlePrintTicket(alteration.id, 'sections')}
-                         className="flex items-center gap-2"
-                       >
-                         <Printer className="w-4 h-4" />
-                         Print Sections
-                       </Button>
-                     </div>
+                    <div className="flex flex-col gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePrintTicket(alteration.id, 'all')}
+                        className="flex items-center gap-2"
+                      >
+                        <Printer className="w-4 h-4" />
+                        Print All
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePrintTicket(alteration.id, 'sections')}
+                        className="flex items-center gap-2"
+                      >
+                        <Printer className="w-4 h-4" />
+                        Print Sections
+                      </Button>
+                    </div>
                     
                     <Button
                       variant="outline"
@@ -627,30 +642,30 @@ export default function AlterationsPage() {
                 )}
               </div>
               
-                             <div className="flex justify-end gap-2 mt-6">
-                 <div className="flex gap-2">
-                   <Button
-                     variant="outline"
-                     onClick={() => handlePrintTicket(selectedJob.id, 'all')}
-                   >
-                     <Printer className="w-4 h-4 mr-2" />
-                     Print All
-                   </Button>
-                   <Button
-                     variant="outline"
-                     onClick={() => handlePrintTicket(selectedJob.id, 'sections')}
-                   >
-                     <Printer className="w-4 h-4 mr-2" />
-                     Print Sections
-                   </Button>
-                 </div>
-                 <Button
-                   onClick={() => router.push(`/alterations/${selectedJob.id}`)}
-                 >
-                   <QrCode className="w-4 h-4 mr-2" />
-                   Manage Job
-                 </Button>
-               </div>
+              <div className="flex justify-end gap-2 mt-6">
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => handlePrintTicket(selectedJob.id, 'all')}
+                  >
+                    <Printer className="w-4 h-4 mr-2" />
+                    Print All
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => handlePrintTicket(selectedJob.id, 'sections')}
+                  >
+                    <Printer className="w-4 h-4 mr-2" />
+                    Print Sections
+                  </Button>
+                </div>
+                <Button
+                  onClick={() => router.push(`/alterations/${selectedJob.id}`)}
+                >
+                  <QrCode className="w-4 h-4 mr-2" />
+                  Manage Job
+                </Button>
+              </div>
             </div>
           </div>
         </div>

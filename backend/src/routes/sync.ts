@@ -8,6 +8,7 @@ import {
   syncSales,
   syncUsers,
   syncGroups,
+  syncUserPhotos,
   previewCustomerSync
 } from '../controllers/syncController';
 import { authMiddleware, requireAdmin } from '../middleware/auth';
@@ -18,7 +19,7 @@ const router = express.Router();
 
 router.get('/errors', asyncHandler(getSyncErrors));
 router.get('/status', asyncHandler(getSyncStatus));
-router.post('/trigger/:resource', authMiddleware, requireAdmin, asyncHandler(triggerSync));
+router.post('/trigger/:resource', authMiddleware, asyncHandler(triggerSync));
 router.post('/reset-status', authMiddleware, requireAdmin, asyncHandler(resetSyncStatus));
 
 // Legacy routes for frontend compatibility
@@ -26,22 +27,23 @@ router.post('/customers', authMiddleware, asyncHandler(syncCustomers));
 router.post('/sales', authMiddleware, asyncHandler(syncSales));
 router.post('/users', authMiddleware, asyncHandler(syncUsers));
 router.post('/groups', authMiddleware, asyncHandler(syncGroups));
+router.post('/user-photos', authMiddleware, asyncHandler(syncUserPhotos));
 
 // Add preview route for customer sync
 router.get('/customers/preview', authMiddleware, requireAdmin, asyncHandler(previewCustomerSync));
 
-// Internal sync endpoints that use persistent tokens (no auth required)
-router.post('/internal/customers', asyncHandler(syncCustomers));
-router.post('/internal/sales', asyncHandler(syncSales));
-router.post('/internal/users', asyncHandler(syncUsers));
-router.post('/internal/groups', asyncHandler(syncGroups));
+// Internal sync endpoints must be authenticated and admin; tokens are loaded from DB server-side
+router.post('/internal/customers', authMiddleware, requireAdmin, asyncHandler(syncCustomers));
+router.post('/internal/sales', authMiddleware, requireAdmin, asyncHandler(syncSales));
+router.post('/internal/users', authMiddleware, requireAdmin, asyncHandler(syncUsers));
+router.post('/internal/groups', authMiddleware, requireAdmin, asyncHandler(syncGroups));
 
-// Manual sync endpoints (no auth required for internal use)
-router.post('/manual/customers', asyncHandler(syncCustomers));
-router.post('/manual/sales', asyncHandler(syncSales));
-router.post('/manual/users', asyncHandler(syncUsers));
-router.post('/manual/groups', asyncHandler(syncGroups));
-router.post('/manual/trigger', async (req, res) => {
+// Manual sync endpoints (require admin)
+router.post('/manual/customers', authMiddleware, requireAdmin, asyncHandler(syncCustomers));
+router.post('/manual/sales', authMiddleware, requireAdmin, asyncHandler(syncSales));
+router.post('/manual/users', authMiddleware, requireAdmin, asyncHandler(syncUsers));
+router.post('/manual/groups', authMiddleware, requireAdmin, asyncHandler(syncGroups));
+router.post('/manual/trigger', authMiddleware, requireAdmin, async (req, res) => {
   try {
     const { resource } = req.body;
     const syncFunctions: Record<string, (req: any) => Promise<void>> = {

@@ -9,6 +9,7 @@ import TagPreview from '../../components/ui/TagPreview';
 import { AlterationModal } from '../../components/ui/AlterationModal';
 import { useToast } from '../../components/ToastContext';
 import { Modal } from '../../components/ui/Modal';
+import { UserAvatar } from '../../components/ui/UserAvatar';
 
 const PHASES = [
   { name: 'Suit Selection', color: 'bg-blue-500', monthsFrom: 6, monthsTo: 3 },
@@ -685,7 +686,7 @@ function ExpandableAlterationCard({ job }) {
           )}
           {job.notes && <div><span className="font-bold">Notes:</span> {job.notes}</div>}
           <div className="flex gap-4 mt-2">
-            <span><b>Tailor:</b> {job.tailor?.name || '—'}</span>
+            <span><b>Tailor:</b> {job.tailor ? <span className="inline-flex items-center gap-2"><UserAvatar user={{ id: job.tailor.id, name: job.tailor.name }} size="xs" showName /></span> : '—'}</span>
             <span><b>Status:</b> {job.status}</span>
             <span><b>Time Spent:</b> {job.timeSpentMinutes ? `${job.timeSpentMinutes} min` : '—'}</span>
           </div>

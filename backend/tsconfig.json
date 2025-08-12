@@ -16,8 +16,10 @@
     "forceConsistentCasingInFileNames": false,
     "resolveJsonModule": true,
     "experimentalDecorators": true,
-    "emitDecoratorMetadata": true
+    "emitDecoratorMetadata": true,
+    "isolatedModules": true,
+    "noEmitOnError": false
   },
   "include": ["src"],
   "exclude": ["node_modules", "dist"]
-} 
+}

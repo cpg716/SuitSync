@@ -6,6 +6,7 @@ import { createLightspeedClient } from '../lightspeedClient';
 import { UserSyncService } from '../services/userSyncService';
 import { PinService } from '../services/pinService';
 import logger from '../utils/logger';
+import AuditLogService from '../services/AuditLogService';
 
 const prisma = new PrismaClient().$extends(withAccelerate());
 
@@ -26,25 +27,20 @@ export const getUsers = async (req: Request, res: Response) => {
   try {
     logger.info('[UsersController] Starting getUsers request - hybrid system (Lightspeed + local users)');
 
-    // Check if user is authenticated with Lightspeed (lightspeedUser is sufficient - tokens will be refreshed automatically if needed)
-    if (!req.session?.lightspeedUser) {
-      logger.warn('[UsersController] No Lightspeed user in session - authentication required');
-      res.status(401).json({
-        error: 'Lightspeed authentication required',
-        redirectTo: '/auth/start-lightspeed'
-      });
-      return;
-    }
-
     try {
+      const hasLsSession = !!req.session?.lightspeedUser;
       // Fetch both Lightspeed users and local users
       // The Lightspeed client will automatically refresh tokens if needed
-      const client = createLightspeedClient(req);
-      logger.info('[UsersController] Fetching users from both Lightspeed API and local database...');
-
-      // Fetch all users from Lightspeed using pagination
-      const lightspeedUsers = await client.fetchAllWithPagination('/users');
-      logger.info(`[UsersController] Found ${lightspeedUsers.length} users from Lightspeed`);
+      let lightspeedUsers: any[] = [];
+      if (hasLsSession) {
+        const client = createLightspeedClient(req);
+        logger.info('[UsersController] Fetching users from both Lightspeed API and local database...');
+        // Fetch all users from Lightspeed using pagination
+        lightspeedUsers = await client.fetchAllWithPagination('/users');
+        logger.info(`[UsersController] Found ${lightspeedUsers.length} users from Lightspeed`);
+      } else {
+        logger.warn('[UsersController] No Lightspeed session; returning local users only');
+      }
 
       // Fetch all local users
       const localUsers = await prisma.user.findMany({
@@ -89,14 +85,14 @@ export const getUsers = async (req: Request, res: Response) => {
       });
 
       // Format Lightspeed-only users (those without local records)
-      const lightspeedOnlyUsers = lightspeedUsers
+      const lightspeedOnlyUsers = (lightspeedUsers || [])
         .filter(lsUser => !localUsers.some(localUser => localUser.lightspeedEmployeeId === lsUser.id.toString()))
         .map((user: any) => ({
           id: user.id,
           name: user.display_name || user.name || `User ${user.id}`,
           email: user.email || `${user.username || user.id}@lightspeed.local`,
           role: user.account_type === 'admin' ? 'admin' : 'user',
-          photoUrl: user.image_source || user.avatar || undefined,
+          photoUrl: user.image_source || user.photo_url || user.avatar || undefined,
           lightspeedEmployeeId: user.id,
           source: 'lightspeed',
           isLightspeedUser: true,
@@ -113,8 +109,10 @@ export const getUsers = async (req: Request, res: Response) => {
         localUsers: formattedLocalUsers,
         users: allUsers, // Combined list for backward compatibility
         total: allUsers.length,
-        source: 'hybrid',
-        message: `Found ${allUsers.length} total users (${formattedLocalUsers.length} with local records, ${lightspeedOnlyUsers.length} Lightspeed-only)`
+        source: hasLsSession ? 'hybrid' : 'local',
+        message: hasLsSession
+          ? `Found ${allUsers.length} total users (${formattedLocalUsers.length} with local records, ${lightspeedOnlyUsers.length} Lightspeed-only)`
+          : `No Lightspeed session; showing ${formattedLocalUsers.length} local users`
       });
 
     } catch (lightspeedError: any) {
@@ -224,10 +222,32 @@ export const getUser = async (req: Request, res: Response) => {
 
 export const updateUser = async (req: Request, res: Response) => {
   try {
-    const { name, email, role, photoUrl } = req.body;
+    const { name, email, role, photoUrl, commissionRate, notificationPrefs, skills, canLoginToSuitSync, isActive } = req.body;
+    const id = Number(req.params.id);
+    const before = await prisma.user.findUnique({ where: { id } });
+    const data: any = { name, email, role, photoUrl };
+    if (typeof commissionRate !== 'undefined') data.commissionRate = Number(commissionRate);
+    if (typeof notificationPrefs !== 'undefined') data.notificationPrefs = notificationPrefs as any;
+    if (typeof canLoginToSuitSync !== 'undefined') data.canLoginToSuitSync = !!canLoginToSuitSync;
+    if (typeof isActive !== 'undefined') data.isActive = !!isActive;
+
+    // For skills we accept string[] and store as relation via Skill model names
+    if (Array.isArray(skills)) {
+      // Ensure skills exist
+      for (const skillName of skills) {
+        await prisma.skill.upsert({ where: { name: skillName }, update: {}, create: { name: skillName } });
+      }
+      // Connect: set user.skills to provided list exactly
+      const existing = await prisma.skill.findMany({ where: { name: { in: skills } } });
+      data.skills = {
+        set: [],
+        connect: existing.map(s => ({ id: s.id }))
+      };
+    }
+
     const user = await prisma.user.update({
-      where: { id: Number(req.params.id) },
-      data: { name, email, role, photoUrl },
+      where: { id },
+      data,
       select: {
         id: true,
         name: true,
@@ -235,10 +255,31 @@ export const updateUser = async (req: Request, res: Response) => {
         role: true,
         photoUrl: true,
         lightspeedEmployeeId: true,
+        commissionRate: true,
+        notificationPrefs: true,
+        canLoginToSuitSync: true,
+        isActive: true,
         createdAt: true,
         updatedAt: true
       }
     });
+    // Audit the change
+    try {
+      const changes: Record<string, { from: any; to: any }> = {};
+      if (before) {
+        if (before.name !== user.name) changes.name = { from: before.name, to: user.name };
+        if (before.email !== user.email) changes.email = { from: before.email, to: user.email };
+        if (before.role !== user.role) changes.role = { from: before.role, to: user.role };
+        if (before.photoUrl !== user.photoUrl) changes.photoUrl = { from: before.photoUrl, to: user.photoUrl };
+        if (before.commissionRate !== user.commissionRate) changes.commissionRate = { from: before.commissionRate, to: user.commissionRate };
+        if (JSON.stringify(before.notificationPrefs) !== JSON.stringify(user.notificationPrefs)) changes.notificationPrefs = { from: before.notificationPrefs, to: user.notificationPrefs };
+        if (before.canLoginToSuitSync !== user.canLoginToSuitSync) changes.canLoginToSuitSync = { from: before.canLoginToSuitSync, to: user.canLoginToSuitSync };
+        if (before.isActive !== user.isActive) changes.isActive = { from: before.isActive, to: user.isActive };
+      }
+      await AuditLogService.logAction((req as any).user?.localUserId || null, 'update', 'User', id, { changes });
+    } catch (e) {
+      logger.warn('[UsersController] Failed to write audit log for updateUser', e);
+    }
     res.json(user);
   } catch (err) {
     res.status(500).json({ error: 'Failed to update user' });
@@ -247,7 +288,13 @@ export const updateUser = async (req: Request, res: Response) => {
 
 export const deleteUser = async (req: Request, res: Response) => {
   try {
-    await prisma.user.delete({ where: { id: Number(req.params.id) } });
+    const id = Number(req.params.id);
+    await prisma.user.delete({ where: { id } });
+    try {
+      await AuditLogService.logAction((req as any).user?.localUserId || null, 'delete', 'User', id, {});
+    } catch (e) {
+      logger.warn('[UsersController] Failed to write audit log for deleteUser', e);
+    }
     res.status(204).send();
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete user' });
@@ -294,6 +341,11 @@ export const createUser = async (req: Request, res: Response) => {
         updatedAt: true
       }
     });
+    try {
+      await AuditLogService.logAction((req as any).user?.localUserId || null, 'create', 'User', user.id, { name, email, role });
+    } catch (e) {
+      logger.warn('[UsersController] Failed to write audit log for createUser', e);
+    }
     res.status(201).json(user);
   } catch (err) {
     res.status(500).json({ error: 'Failed to create user' });
@@ -321,15 +373,21 @@ export const getUserActivity = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Get user's audit log entries (activity)
+    // Get audit entries about this user profile entity and actions by this user
     const activity = await prisma.auditLog.findMany({
-      where: { userId: userId },
+      where: {
+        OR: [
+          { userId: userId },
+          { entity: 'User', entityId: userId }
+        ]
+      },
       orderBy: { createdAt: 'desc' },
       take: 50, // Limit to last 50 activities
       select: {
         id: true,
         action: true,
         entity: true,
+        entityId: true,
         createdAt: true,
         details: true
       }

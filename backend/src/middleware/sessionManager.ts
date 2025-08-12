@@ -17,6 +17,7 @@ export const sessionSizeManager = () => {
           lsDomainPrefix: req.session.lsDomainPrefix,
           lsAccountID: req.session.lsAccountID,
           activeUserId: req.session.activeUserId,
+          lsAuthState: req.session.lsAuthState, // Preserve OAuth state
         };
         
         // Clear and restore

@@ -10,7 +10,6 @@ import { Skeleton } from '../components/ui/Skeleton';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { UserAvatar } from '../components/ui/UserAvatar';
 import { Users, CheckCircle, ListChecks, ListTodo, PieChart } from 'lucide-react';
-import { PieChart as RePieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { useAuth } from '../src/AuthContext';
 
 /**
@@ -22,7 +21,7 @@ import { useAuth } from '../src/AuthContext';
  * - Visually stunning: avatars, charts, summary cards, modern palette
  */
 
-const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
+
 
 export default function ChecklistWorkspace() {
   const [loading, setLoading] = useState(true);
@@ -61,39 +60,30 @@ export default function ChecklistWorkspace() {
     completedTasks: tasks.filter(t => t.status === 'COMPLETED').length,
   };
 
-  // Pie chart data
-  const pieData = [
-    { name: 'Completed', value: summary.completedChecklists + summary.completedTasks },
-    { name: 'Open', value: (summary.totalChecklists + summary.totalTasks) - (summary.completedChecklists + summary.completedTasks) },
-  ];
+
 
   return (
     <Layout title="Checklist & Task Workspace">
-      {/* Hero Header */}
-      <div className="relative bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-600 rounded-xl shadow-lg mb-8 p-8 flex flex-col md:flex-row items-center gap-6 animate-fade-in">
+      <div className="w-full space-y-8">
+        {/* Hero Header */}
+        <div className="relative bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-600 rounded-xl shadow-lg p-6 sm:p-8 flex flex-col md:flex-row items-center gap-6 animate-fade-in">
         <div className="flex-1">
           <h1 className="text-4xl font-extrabold text-white mb-2 drop-shadow-lg">Checklist & Task Workspace</h1>
           <p className="text-lg text-blue-100 mb-4">Track, manage, and complete all your work in one place.</p>
           <div className="flex items-center gap-3">
             <UserAvatar user={user} size="lg" showName />
-            <span className="text-white font-medium">{user?.name}</span>
           </div>
         </div>
         <div className="flex flex-col items-center gap-2">
-          <RePieChart width={120} height={120}>
-            <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={50} innerRadius={30} label>
-              {pieData.map((entry, idx) => (
-                <Cell key={`cell-${idx}`} fill={COLORS[idx % COLORS.length]} />
-              ))}
-            </Pie>
-            <Tooltip />
-          </RePieChart>
+          <div className="w-24 h-24 bg-white/20 rounded-full flex items-center justify-center">
+            <PieChart className="w-12 h-12 text-white" />
+          </div>
           <span className="text-white text-sm font-semibold">{summary.completedChecklists + summary.completedTasks} / {summary.totalChecklists + summary.totalTasks} Completed</span>
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {/* Summary Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="bg-blue-50 dark:bg-blue-900/30 shadow-md hover:scale-105 transition-transform">
           <CardHeader className="flex flex-row items-center gap-2">
             <ListChecks className="w-6 h-6 text-blue-600" />
@@ -147,30 +137,30 @@ export default function ChecklistWorkspace() {
         </Card>
       </div>
 
-      {/* Tabs and Main Content */}
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          <TabsTrigger value="checklists">Checklists</TabsTrigger>
-          <TabsTrigger value="tasks">Tasks</TabsTrigger>
-        </TabsList>
-        <div className="flex gap-2 my-4">
-          <Button onClick={() => setShowChecklistModal(true)} variant="outline">New Checklist</Button>
-          <Button onClick={() => setShowTaskModal(true)} variant="outline">New Task</Button>
-          <select value={filter} onChange={e => setFilter(e.target.value)} className="ml-auto border rounded px-2 py-1">
-            <option value="all">All</option>
-            <option value="NOT_STARTED">Not Started</option>
-            <option value="IN_PROGRESS">In Progress</option>
-            <option value="COMPLETED">Completed</option>
-            <option value="OVERDUE">Overdue</option>
-          </select>
-        </div>
+        {/* Tabs and Main Content */}
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList>
+            <TabsTrigger value="checklists">Checklists</TabsTrigger>
+            <TabsTrigger value="tasks">Tasks</TabsTrigger>
+          </TabsList>
+          <div className="flex gap-2 my-4">
+            <Button onClick={() => setShowChecklistModal(true)} variant="outline">New Checklist</Button>
+            <Button onClick={() => setShowTaskModal(true)} variant="outline">New Task</Button>
+            <select value={filter} onChange={e => setFilter(e.target.value)} className="ml-auto border rounded px-2 py-1">
+              <option value="all">All</option>
+              <option value="NOT_STARTED">Not Started</option>
+              <option value="IN_PROGRESS">In Progress</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="OVERDUE">Overdue</option>
+            </select>
+          </div>
         <TabsContent value="checklists">
           {loading ? (
             <Skeleton className="h-32 w-full" />
           ) : filteredChecklists.length === 0 ? (
             <div className="text-center text-gray-500 py-8">No checklists found.</div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredChecklists.map(cl => (
                 <ChecklistCard key={cl.id} {...cl} />
               ))}
@@ -183,7 +173,7 @@ export default function ChecklistWorkspace() {
           ) : filteredTasks.length === 0 ? (
             <div className="text-center text-gray-500 py-8">No tasks found.</div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredTasks.map(tk => (
                 <TaskCard key={tk.id} {...tk} />
               ))}
@@ -207,6 +197,10 @@ export default function ChecklistWorkspace() {
           <Button className="w-full">Create</Button>
         </div>
       </Modal>
+        </div>
     </Layout>
   );
 } 
+
+// Signal to _app that this page already wraps itself with Layout
+(ChecklistWorkspace as any).getLayout = (page: React.ReactNode) => page;

@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { Card } from '@/components/ui/Card';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '../components/ToastContext';
@@ -11,12 +11,13 @@ import { Pagination } from '../components/ui/Pagination';
 import useSWR from 'swr';
 import { simpleFetcher } from '../lib/simpleApiClient';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
-import { Calendar, dateFnsLocalizer, View } from 'react-big-calendar';
+import { Calendar, dateFnsLocalizer, View, SlotInfo } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay, addMinutes, isValid } from 'date-fns';
 import enUS from 'date-fns/locale/en-US/index.js';
 import { useAuth } from '@/src/AuthContext';
-import { ListIcon, CalendarIcon, Plus } from 'lucide-react';
+import { ListIcon, CalendarIcon, Plus, Users, Clock, CheckCircle, TrendingUp, PieChart } from 'lucide-react';
 import { api } from '@/lib/apiClient';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 
 const locales = { 'en-US': enUS };
 
@@ -68,10 +69,14 @@ const EventComponent = React.memo(({ event, title }: { event: any; title: string
   
   return (
     <div className="truncate px-1 text-sm font-medium">
-      <div className="font-semibold">{String(title || '')}</div>
-      <div className="text-xs opacity-75">
-        {startTime} - {endTime}
+      <div className="font-semibold flex items-center gap-1">
+        {event?.resource?.tailor ? (
+          <UserAvatar user={{ id: event.resource.tailor.id, name: event.resource.tailor.name }} size="xs" showName />
+        ) : (
+          String(title || '')
+        )}
       </div>
+      <div className="text-xs opacity-75">{startTime} - {endTime}</div>
     </div>
   );
 });
@@ -125,12 +130,56 @@ export default function AppointmentsPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [view, setView] = useState<CalendarView>('week');
   const [date, setDate] = useState(new Date());
+  const [selectedStaffId, setSelectedStaffId] = useState<string>('');
+  const [staff, setStaff] = useState<any[]>([]);
+  const [openSlots, setOpenSlots] = useState<{ start: Date; end: Date }[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
   const { user } = useAuth();
+  const [embeddedReschedule, setEmbeddedReschedule] = useState<{ token: string; appointmentId: string } | null>(null);
+  const [newDateTime, setNewDateTime] = useState('');
 
-  const { data: appointments = [], error: swrError, isLoading, mutate } = useSWR(
-    '/api/customers', 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    const reschedule = url.searchParams.get('reschedule');
+    const token = url.searchParams.get('token');
+    const appointmentId = url.searchParams.get('appointmentId');
+    if (reschedule && token && appointmentId) {
+      setEmbeddedReschedule({ token, appointmentId });
+    }
+  }, []);
+
+  // Load sales staff for availability filter
+  useEffect(() => {
+    fetch('/api/public/staff?role=sales')
+      .then(r => r.json())
+      .then(arr => setStaff(Array.isArray(arr) ? arr : []))
+      .catch(() => setStaff([]));
+  }, []);
+
+  // Fetch open availability slots for selected staff and visible date
+  useEffect(() => {
+    const duration = 60; // default slot duration
+    if (!selectedStaffId) { setOpenSlots([]); return; }
+    const d = new Date(date);
+    const ymd = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    fetch(`/api/public/availability?userId=${encodeURIComponent(selectedStaffId)}&date=${ymd}&duration=${duration}`)
+      .then(r => r.json())
+      .then((slots: string[]) => {
+        const parsed = (slots || []).map((t: string) => {
+          const [hh, mm] = t.split(':').map(Number);
+          const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), hh, mm || 0, 0, 0);
+          const end = new Date(start.getTime() + duration*60000);
+          return { start, end };
+        });
+        setOpenSlots(parsed);
+      })
+      .catch(() => setOpenSlots([]));
+  }, [selectedStaffId, date]);
+
+  const { data: appointments = [], error: swrError, isLoading, mutate } = useSWR<any[]>(
+    '/api/appointments', 
     simpleFetcher,
     {
       revalidateOnFocus: true,
@@ -195,6 +244,24 @@ export default function AppointmentsPage() {
     }, []);
   }, [appointments]);
 
+  // Summary data for hero section
+  const summary = {
+    totalAppointments: appointments.length,
+    todayAppointments: appointments.filter((a: any) => {
+      if (!a.dateTime) return false;
+      const today = new Date();
+      const apptDate = new Date(a.dateTime);
+      return apptDate.toDateString() === today.toDateString();
+    }).length,
+    completedAppointments: appointments.filter((a: any) => a.status === 'completed').length,
+    upcomingAppointments: appointments.filter((a: any) => {
+      if (!a.dateTime) return false;
+      return new Date(a.dateTime) > new Date();
+    }).length,
+  };
+
+
+
   function handleSelectEvent(event: any) {
     if (event?.resource) {
       setEditAppt(event.resource);
@@ -202,9 +269,15 @@ export default function AppointmentsPage() {
     }
   }
 
-  function handleSelectSlot(slotInfo: any) {
-    // Prevent opening modal when clicking on calendar slots
-    // This prevents interference with the appointment modal
+  function handleSelectSlot(slotInfo: SlotInfo) {
+    if (!selectedStaffId) return;
+    // If the clicked slot aligns with an available slot, open create modal prefilled
+    const clicked = new Date(slotInfo.start);
+    const match = openSlots.find(s => Math.abs(s.start.getTime() - clicked.getTime()) < 60_000);
+    if (match) {
+      setEditAppt({ dateTime: match.start.toISOString(), durationMinutes: 60, tailorId: Number(selectedStaffId) });
+      setModalOpen(true);
+    }
   }
 
   function handleNavigate(newDate: Date) {
@@ -256,11 +329,100 @@ export default function AppointmentsPage() {
     );
   }
 
+  if (embeddedReschedule) {
+    return (
+      <div className="max-w-md mx-auto p-6">
+        <h2 className="text-xl font-semibold mb-4">Reschedule Appointment</h2>
+        <input type="datetime-local" className="border rounded px-3 py-2 w-full mb-4" value={newDateTime} onChange={e => setNewDateTime(e.target.value)} />
+        <button
+          onClick={async () => {
+            const res = await fetch('/api/appointments/reschedule', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ appointmentId: embeddedReschedule.appointmentId, token: embeddedReschedule.token, newDateTime }),
+            });
+            if (res.ok) {
+              alert('Appointment rescheduled.');
+              setEmbeddedReschedule(null);
+            } else {
+              const err = await res.json().catch(() => ({}));
+              alert(err.error || 'Failed to reschedule');
+            }
+          }}
+          className="bg-primary text-white px-4 py-2 rounded"
+        >
+          Submit
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="w-full space-y-6">
+    <div className="w-full space-y-8">
+      {/* Hero Header */}
+      <div className="relative bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-600 rounded-xl shadow-lg p-8 flex flex-col md:flex-row items-center gap-6 animate-fade-in">
+        <div className="flex-1">
+          <h1 className="text-4xl font-extrabold text-white mb-2 drop-shadow-lg">Appointment Management</h1>
+          <p className="text-lg text-blue-100 mb-4">Schedule and track all your fittings and consultations.</p>
+          <div className="flex items-center gap-3">
+            <UserAvatar user={user} size="lg" showName />
+          </div>
+        </div>
+        <div className="flex flex-col items-center gap-2">
+          <div className="w-24 h-24 bg-white/20 rounded-full flex items-center justify-center">
+            <PieChart className="w-12 h-12 text-white" />
+          </div>
+          <span className="text-white text-sm font-semibold">{summary.todayAppointments} / {summary.totalAppointments} Today</span>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="bg-blue-50 dark:bg-blue-900/30 shadow-md hover:scale-105 transition-transform">
+          <CardHeader className="flex flex-row items-center gap-2">
+            <CalendarIcon className="w-6 h-6 text-blue-600" />
+            <CardTitle>Total Appointments</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-blue-700 dark:text-blue-200 animate-countup">{summary.totalAppointments}</div>
+            <div className="text-sm text-blue-500">scheduled</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-green-50 dark:bg-green-900/30 shadow-md hover:scale-105 transition-transform">
+          <CardHeader className="flex flex-row items-center gap-2">
+            <Clock className="w-6 h-6 text-green-600" />
+            <CardTitle>Today's Appointments</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-green-700 dark:text-green-200 animate-countup">{summary.todayAppointments}</div>
+            <div className="text-sm text-green-500">scheduled today</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-purple-50 dark:bg-purple-900/30 shadow-md hover:scale-105 transition-transform">
+          <CardHeader className="flex flex-row items-center gap-2">
+            <TrendingUp className="w-6 h-6 text-purple-600" />
+            <CardTitle>Upcoming</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-purple-700 dark:text-purple-200 animate-countup">{summary.upcomingAppointments}</div>
+            <div className="text-sm text-purple-500">future appointments</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-indigo-50 dark:bg-indigo-900/30 shadow-md hover:scale-105 transition-transform">
+          <CardHeader className="flex flex-row items-center gap-2">
+            <CheckCircle className="w-6 h-6 text-indigo-600" />
+            <CardTitle>Completed</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-indigo-700 dark:text-indigo-200 animate-countup">{summary.completedAppointments}</div>
+            <div className="text-sm text-indigo-500">finished</div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Header and Controls - Responsive */}
       <div className="flex flex-col space-y-4">
-        {/* Tab Navigation */}
+        {/* Tab Navigation and Staff Selector */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div role="tablist" className="flex rounded-lg bg-gray-100 dark:bg-gray-800 p-1 w-full sm:w-auto">
             <button 
@@ -288,7 +450,13 @@ export default function AppointmentsPage() {
               Calendar
             </button>
           </div>
-          
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-600 dark:text-gray-300">Salesperson</label>
+            <select value={selectedStaffId} onChange={e => setSelectedStaffId(e.target.value)} className="border rounded px-2 py-1 bg-white dark:bg-gray-800 text-black dark:text-white">
+              <option value="">All</option>
+              {staff.map(s => <option key={s.id} value={s.id}>{s.name || `User ${s.id}`}</option>)}
+            </select>
+          </div>
           <Button 
             onClick={() => setModalOpen(true)}
             className="w-full sm:w-auto bg-primary text-white hover:bg-primary/90"
@@ -409,7 +577,11 @@ export default function AppointmentsPage() {
                               </span>
                             </td>
                             <td className="px-6 py-4 text-gray-900 dark:text-gray-100">
-                              {appt.tailor?.name || 'Unassigned'}
+                              {appt.tailor ? (
+                                <div className="flex items-center gap-2">
+                                  <UserAvatar user={{ id: appt.tailor.id, name: appt.tailor.name }} size="xs" showName />
+                                </div>
+                              ) : 'Unassigned'}
                             </td>
                             <td className="px-6 py-4">
                               <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
@@ -496,9 +668,13 @@ export default function AppointmentsPage() {
                             </div>
                             <div>
                               <p className="text-gray-500 dark:text-gray-400">Tailor</p>
-                              <p className="text-gray-900 dark:text-gray-100">
-                                {appt.tailor?.name || 'Unassigned'}
-                              </p>
+                              <div className="text-gray-900 dark:text-gray-100">
+                                {appt.tailor ? (
+                                  <div className="flex items-center gap-2">
+                                    <UserAvatar user={{ id: appt.tailor.id, name: appt.tailor.name }} size="xs" showName />
+                                  </div>
+                                ) : 'Unassigned'}
+                              </div>
                             </div>
                           </div>
                           
@@ -564,6 +740,7 @@ export default function AppointmentsPage() {
                     toolbar: CustomToolbar,
                     event: EventComponent,
                   }}
+                  selectable
                   className="rbc-calendar-responsive"
                 />
               </div>

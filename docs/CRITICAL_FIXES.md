@@ -3,7 +3,7 @@
 ## Session/Cookie/CORS Issues
 - If you experience session persistence or authentication failures:
   - Ensure session cookies are `secure: false` in development (Docker/local), and `secure: true` in production (HTTPS).
-  - CORS must allow credentials and use `CORS_ORIGIN` (default: `http://localhost:3001`).
+  - CORS must allow credentials and use `FRONTEND_URL` as the allowed origin (default: `http://localhost:3001`).
   - The frontend API client must send `credentials: 'include'` on all requests.
 - See the backend dashboard at `/` or `/api/admin/dashboard` for live session and Redis health.
 

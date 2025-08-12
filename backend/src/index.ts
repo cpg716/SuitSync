@@ -14,6 +14,7 @@ import { createClient } from 'redis';
 import RedisStore from 'connect-redis';
 import { initRoutes } from './routes/initRoutes';
 import { adminDashboard } from './controllers/adminController';
+import { lightspeedErrorHandler } from './middleware/lightspeedErrorHandler';
 
 // Load environment variables and validate
 // (dotenv/config is loaded in config.ts)
@@ -36,13 +37,13 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
-// CORS
-const isProd = process.env.NODE_ENV === 'production';
+// CORS aligned with Lightspeed integration rules
+const corsOrigin = process.env.FRONTEND_URL || 'http://localhost:3001';
 const corsOptions = {
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3001',
+  origin: corsOrigin,
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
   optionsSuccessStatus: 200,
 };
 app.use(cors(corsOptions));
@@ -87,6 +88,7 @@ async function bootstrap() {
         httpOnly: true,
         sameSite: 'lax',
         maxAge: 7 * 24 * 60 * 60 * 1000,
+        path: '/',
       },
     })
   );
@@ -103,8 +105,25 @@ async function bootstrap() {
   app.use(sessionSizeLimit());
   app.use(sessionSizeManager());
 
+  // Debug middleware before public routes to see if callback is being handled there
+  app.use((req, res, next) => {
+    if (req.url.includes('/api/auth/callback')) {
+      console.log('=== DEBUG BEFORE PUBLIC ROUTES ===');
+      console.log('URL:', req.url);
+      console.log('Method:', req.method);
+      console.log('Path:', req.path);
+      console.log('Original URL:', req.originalUrl);
+    }
+    next();
+  });
+
   // Public data endpoints (no authentication required) - must be before route registration
   app.get('/api/parties', async (req, res) => {
+    console.log('=== PUBLIC PARTIES ROUTE HIT ===');
+    console.log('URL:', req.url);
+    console.log('Method:', req.method);
+    console.log('Path:', req.path);
+    console.log('Original URL:', req.originalUrl);
     try {
       const parties = await prisma.party.findMany({
         include: {
@@ -134,6 +153,29 @@ async function bootstrap() {
   
 
 
+  // Add debug middleware to see if requests reach here
+  app.use((req, res, next) => {
+    if (req.url.includes('/api/auth/callback')) {
+      console.log('=== REQUEST REACHES BEFORE ROUTES ===');
+      console.log('URL:', req.url);
+      console.log('Method:', req.method);
+      console.log('Path:', req.path);
+      console.log('Original URL:', req.originalUrl);
+    }
+    next();
+  });
+
+  // Add catch-all debug middleware to see what happens to all requests
+  app.use((req, res, next) => {
+    if (req.url.includes('/api/auth/callback')) {
+      console.log('=== CATCH-ALL MIDDLEWARE FOR CALLBACK ===');
+      console.log('URL:', req.url);
+      console.log('Method:', req.method);
+      console.log('This should show if the request is being handled by any middleware');
+    }
+    next();
+  });
+
   // Register all API routes
   initRoutes(app);
 
@@ -144,6 +186,17 @@ async function bootstrap() {
   app.use('/uploads', express.static(path.join(__dirname, '../../public/uploads')));
   // Serve static frontend (after API routes and dashboard)
   app.use(express.static(path.join(__dirname, '../../frontend/out')));
+  
+  // Debug middleware after static files to see if callback is being handled as static
+  app.use((req, res, next) => {
+    if (req.url.includes('/api/auth/callback')) {
+      console.log('=== REQUEST REACHES AFTER STATIC FILES ===');
+      console.log('URL:', req.url);
+      console.log('Method:', req.method);
+      console.log('This should NOT happen for API routes!');
+    }
+    next();
+  });
 
   // Healthcheck
   app.get('/api/health', (_req, res) => {
@@ -157,9 +210,15 @@ async function bootstrap() {
     });
   });
 
+  // Lightspeed-specific error handler
+  app.use(lightspeedErrorHandler);
+
   // Global error handler
   app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    // Error already logged by errorLogger middleware
+    // Log error for diagnostics
+    try {
+      console.error('Unhandled error for', req.method, req.url, '\n', err?.stack || err);
+    } catch {}
     const statusCode = err.statusCode || 500;
     const message = process.env.NODE_ENV === 'production'
       ? 'Internal Server Error'
@@ -176,12 +235,14 @@ async function bootstrap() {
     console.log(`Server listening on port ${PORT}`);
 
     // Initialize scheduled jobs after server starts
-    try {
-      initializeScheduledJobs();
-      console.log('Scheduled jobs initialized successfully');
-    } catch (error) {
-      console.error('Error initializing scheduled jobs:', error);
-    }
+    // TEMPORARILY DISABLED to resolve rate limiting issues during authentication
+    // try {
+    //   initializeScheduledJobs();
+    //   console.log('Scheduled jobs initialized successfully');
+    // } catch (error) {
+    //   console.error('Error initializing scheduled jobs:', error);
+    // }
+    console.log('Scheduled jobs temporarily disabled to resolve authentication rate limiting');
   });
 
   const shutdown = async (signal: string) => {
@@ -221,21 +282,26 @@ async function bootstrap() {
 }
 
 async function ensureSettingsRow() {
-  await prisma.settings.upsert({
-    where: { id: 1 },
-    update: {},
-    create: {
-      id: 1,
-      reminderIntervals: '24,3',
-      earlyMorningCutoff: '09:30',
-      emailSubject: 'Reminder: Your appointment at {shopName}',
-      emailBody: 'Hi {customerName},\n\nThis is a reminder for your appointment with {partyName} on {dateTime}.\n\nThank you!',
-      smsBody: 'Reminder: {partyName} appointment on {dateTime} at {shopName}.',
-      pickupReadySubject: 'Your garment is ready for pickup!',
-      pickupReadyEmail: 'Hi {customerName},\n\nYour garment for {partyName} is ready for pickup!\n\nPlease visit us at your earliest convenience.',
-      pickupReadySms: 'Your garment for {partyName} is ready for pickup at {shopName}!'
-    },
-  });
+  // Defensive upsert without referencing columns that might not yet exist
+  try {
+    await prisma.settings.upsert({
+      where: { id: 1 },
+      update: {},
+      create: {
+        id: 1,
+        reminderIntervals: '24,3',
+        earlyMorningCutoff: '09:30',
+        emailSubject: 'Reminder: Your appointment at {shopName}',
+        emailBody: 'Hi {customerName},\n\nThis is a reminder for your appointment with {partyName} on {dateTime}.\n\nThank you!',
+        smsBody: 'Reminder: {partyName} appointment on {dateTime} at {shopName}.',
+        pickupReadySubject: 'Your garment is ready for pickup!',
+        pickupReadyEmail: 'Hi {customerName},\n\nYour garment for {partyName} is ready for pickup!\n\nPlease visit us at your earliest convenience.',
+        pickupReadySms: 'Your garment for {partyName} is ready for pickup at {shopName}!'
+      },
+    });
+  } catch (e) {
+    console.warn('ensureSettingsRow skipped due to schema mismatch:', e && (e as any).code);
+  }
 }
 
 (async () => {

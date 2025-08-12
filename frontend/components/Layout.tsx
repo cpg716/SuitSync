@@ -6,13 +6,15 @@ import { Home, Users, Calendar, Scissors, Printer, BarChart, Settings, Sun, Moon
 import { useState, useEffect, ReactNode } from 'react';
 import { Appbar } from './ui/Appbar';
 import ThemeToggle from './ThemeToggle';
+import { useAuth } from '../src/AuthContext';
 
 interface LayoutProps {
   children: ReactNode;
   title?: string;
 }
 
-const nav = [
+// Base nav; Settings destination is determined per-user below
+const baseNav = [
   { href: '/', label: 'Dashboard', icon: Home },
   { href: '/customers', label: 'Customers', icon: Users },
   { href: '/parties', label: 'Parties', icon: Users },
@@ -20,7 +22,6 @@ const nav = [
   { href: '/alterations', label: 'Alterations', icon: Scissors },
   { href: '/sales', label: 'Sales', icon: BarChart },
   { href: '/checklists', label: 'Checklists', icon: ListChecks },
-  { href: '/admin', label: 'Settings', icon: Settings },
 ];
 
 export default function Layout({ children, title }: LayoutProps) {
@@ -28,6 +29,13 @@ export default function Layout({ children, title }: LayoutProps) {
   const router = isClient ? useRouter() : null;
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const { user } = useAuth();
+
+  // Build nav dynamically so non-admins only see personal settings
+  const nav = [
+    ...baseNav,
+    { href: user?.role === 'admin' ? '/admin' : '/profile', label: 'Settings', icon: Settings },
+  ];
 
   // Close sidebar when route changes on mobile
   useEffect(() => {
@@ -129,9 +137,10 @@ export default function Layout({ children, title }: LayoutProps) {
         
         {/* Mobile overlay */}
         {sidebarOpen && (
-          <div 
-            className="fixed inset-0 bg-black/50 lg:hidden z-30 transition-opacity duration-300" 
-            onClick={() => setSidebarOpen(false)} 
+          <div
+            className="fixed inset-0 bg-black/50 lg:hidden z-30 transition-opacity duration-300"
+            onClick={() => setSidebarOpen(false)}
+            aria-hidden="true"
           />
         )}
         

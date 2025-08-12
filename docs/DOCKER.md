@@ -314,7 +314,7 @@ docker stats
 
 ## Session, Cookie, and CORS
 - Session cookies are `secure: false` in dev, `secure: true` in production.
-- CORS allows credentials and uses `CORS_ORIGIN` (default: `http://localhost:3001`).
+- CORS allows credentials and uses `FRONTEND_URL` (default: `http://localhost:3001`).
 - Frontend API client must send `credentials: 'include'` on all requests.
 
 ## Prisma Migrations

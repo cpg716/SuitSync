@@ -1,9 +1,11 @@
 import axios from 'axios';
 
-// Simple API client without authentication
+// Simple API client for public or app data (always through Next proxy on client)
+const getBaseURL = () => (typeof window === 'undefined' ? (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3000') : '');
+
 const simpleApi = axios.create({
-  baseURL: 'http://localhost:3000',
-  withCredentials: false, // No credentials needed
+  baseURL: getBaseURL(),
+  withCredentials: true,
 });
 
 // Simple fetcher for SWR

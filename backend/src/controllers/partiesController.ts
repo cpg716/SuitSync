@@ -7,7 +7,7 @@ import { getOrCreateSuitSyncPartyField, verifyAndGetCustomField, createOrUpdateC
 import { processWebhook } from '../services/webhookService';
 import { sendPartyMemberInvitations } from '../services/partyNotificationService';
 import { Route, Get, Path, Tags } from 'tsoa';
-import { logChange } from '../services/AuditLogService';
+import AuditLogService from '../services/AuditLogService';
 
 const prisma = new PrismaClient().$extends(withAccelerate());
 

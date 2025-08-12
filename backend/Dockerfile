@@ -1,24 +1,56 @@
-FROM node:20-alpine
+# Stage 1: Development
+FROM node:20-alpine AS development
 WORKDIR /app
 
-# 1. Copy package files and Prisma schema
+# Install curl for health checks
+RUN apk add --no-cache curl
+
+# Copy package files and Prisma schema
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
 
-# 2. Install dependencies
+# Install dependencies
 RUN npm ci
 
-# 3. Copy the rest of your source
+# Copy source code
 COPY . ./
 
-# 4. Generate tsoa routes + spec
-RUN npm run tsoa:routes \
- && npm run tsoa:spec
+# Generate tsoa routes + spec
+RUN npm run tsoa:routes && npm run tsoa:spec
 
-# 5. Build TypeScript
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:3000/api/health || exit 1
+
+EXPOSE 3000
+CMD ["npm", "run", "dev"]
+
+# Stage 2: Production
+FROM node:20-alpine AS production
+WORKDIR /app
+
+# Install curl for health checks
+RUN apk add --no-cache curl
+
+# Copy package files and Prisma schema
+COPY package.json package-lock.json ./
+COPY prisma ./prisma
+
+# Install dependencies
+RUN npm ci
+
+# Copy source code
+COPY . ./
+
+# Generate tsoa routes + spec
+RUN npm run tsoa:routes && npm run tsoa:spec
+
+# Build TypeScript
 RUN npm run build
 
-RUN apk add --no-cache curl
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:3000/api/health || exit 1
 
 EXPOSE 3000
 CMD ["node", "dist/index.js"]

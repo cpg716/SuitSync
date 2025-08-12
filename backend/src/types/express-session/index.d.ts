@@ -11,13 +11,24 @@ interface UserSessionData {
 
 declare module 'express-session' {
   interface SessionData {
+    // Local user authentication
+    userId?: number;
+    user?: {
+      id: number;
+      email: string;
+      name: string;
+      role: string;
+      photoUrl?: string;
+      lightspeedEmployeeId?: string;
+      isLocalUser: boolean;
+    };
+    
     // Lightspeed authentication
     lsAccessToken?: string;
     lsRefreshToken?: string;
     lsDomainPrefix?: string;
     lsTokenExpiresAt?: Date;
     lsAuthState?: string;
-    userId?: string;
     
     // Lightspeed user data
     lightspeedUser?: {
@@ -45,14 +56,7 @@ declare module 'express-session' {
     // Multi-user session support (legacy)
     activeUserId?: string | number;
     userSessions?: {
-      [key: string]: {
-        lsAccessToken: string;
-        lsRefreshToken: string;
-        lsDomainPrefix: string;
-        expiresAt: Date;
-        lastActive: Date;
-        loginTime: Date;
-      };
+      [key: string]: UserSessionData;
     };
 
     // Legacy properties for backward compatibility

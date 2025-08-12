@@ -1,33 +1,41 @@
+# version: '3.8'
 services:
   db:
     image: postgres:15-alpine
     container_name: suitsync-db
     restart: always
     environment:
-      POSTGRES_DB: suitsync
-      POSTGRES_USER: suitsync_user
-      POSTGRES_PASSWORD: supersecret
+      POSTGRES_DB: suitsync_prod
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     ports:
       - '5432:5432'
     volumes:
       - suitsync_db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U suitsync_user"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      target: production
     container_name: suitsync-backend
     restart: always
     depends_on:
       db:
         condition: service_healthy
-      redis:
-        condition: service_started
     env_file:
-      - ./.env
+      - ./backend/.env.docker
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/suitsync_prod
+      SESSION_SECRET: super_secret_session_key_1234567890
+      FRONTEND_URL: http://localhost:3001
+      # OAuth callback handled by backend
+      LS_REDIRECT_URI: http://localhost:3000/api/auth/callback
+      NODE_ENV: production
     ports:
       - '3000:3000'
     volumes:
@@ -41,18 +49,16 @@ services:
   frontend:
     build:
       context: ./frontend
-      target: development
+      target: production
     container_name: suitsync-frontend
     restart: always
+    env_file:
+      - ./frontend/.env.docker
     environment:
       NEXT_PUBLIC_BACKEND_URL: http://backend:3000
-      NODE_ENV: development
+      NODE_ENV: production
     ports:
       - '3001:3000'
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
     depends_on:
       - backend
 
@@ -63,6 +69,8 @@ services:
       - "6379:6379"
     volumes:
       - redis-data:/data
+
+
 
 volumes:
   suitsync_db_data:

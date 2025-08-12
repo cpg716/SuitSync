@@ -6,19 +6,13 @@ const prisma = new PrismaClient().$extends(withAccelerate());
 
 export interface PersistentUserSession {
   id: string;
-  lightspeedUserId: string;
-  lightspeedEmployeeId: string;
-  email: string;
-  name: string;
-  role: string;
-  photoUrl?: string;
-  lastActiveAt: Date;
-  isActive: boolean;
-  deviceInfo?: {
-    userAgent: string;
-    ipAddress: string;
-    deviceType: 'mobile' | 'desktop' | 'tablet';
-  };
+  userId: number;
+  browserSessionId: string;
+  lsAccessToken: string;
+  lsRefreshToken: string;
+  lsDomainPrefix: string;
+  expiresAt: Date;
+  lastActive: Date;
 }
 
 export interface UserSessionData {
@@ -66,47 +60,93 @@ export class PersistentUserSessionService {
         }
       });
 
-      // Then, create or update the UserSession
-      const session = await prisma.userSession.upsert({
+      // First, ensure we have a local User record
+      let user = await prisma.user.findFirst({
         where: {
-          lightspeedUserId: userData.lightspeedUserId
-        },
-        update: {
-          lightspeedEmployeeId: userData.lightspeedEmployeeId,
-          email: userData.email,
-          name: userData.name,
-          role: userData.role,
-          photoUrl: userData.photoUrl,
-          lastActiveAt: new Date(),
-          isActive: true,
-          deviceInfo: deviceInfo ? JSON.stringify(deviceInfo) : undefined,
-        },
-        create: {
-          lightspeedUserId: userData.lightspeedUserId,
-          lightspeedEmployeeId: userData.lightspeedEmployeeId,
-          email: userData.email,
-          name: userData.name,
-          role: userData.role,
-          photoUrl: userData.photoUrl,
-          lastActiveAt: new Date(),
-          isActive: true,
-          deviceInfo: deviceInfo ? JSON.stringify(deviceInfo) : undefined,
+          lightspeedEmployeeId: userData.lightspeedEmployeeId
         }
       });
 
+      if (!user) {
+        // Create a new user record
+        user = await prisma.user.create({
+          data: {
+            email: userData.email,
+            name: userData.name,
+            role: userData.role,
+            lightspeedEmployeeId: userData.lightspeedEmployeeId,
+            photoUrl: userData.photoUrl,
+            // No password hash for Lightspeed-only users
+            passwordHash: null
+          }
+        });
+        logger.info(`Created new user record for Lightspeed user: ${userData.name} (${userData.lightspeedEmployeeId})`);
+      } else {
+        // Update existing user record
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            email: userData.email,
+            name: userData.name,
+            role: userData.role,
+            photoUrl: userData.photoUrl,
+          }
+        });
+        logger.info(`Updated existing user record for: ${userData.name} (${userData.lightspeedEmployeeId})`);
+      }
+
+      // Check if there's an existing session for this user
+      let session = await prisma.userSession.findFirst({
+        where: {
+          userId: user.id,
+          expiresAt: {
+            gt: new Date()
+          }
+        },
+        orderBy: {
+          lastActive: 'desc'
+        }
+      });
+
+      if (session) {
+        // Update existing session
+        session = await prisma.userSession.update({
+          where: { id: session.id },
+          data: {
+            lsAccessToken: userData.accessToken,
+            lsRefreshToken: userData.refreshToken,
+            lsDomainPrefix: userData.domainPrefix,
+            expiresAt: userData.expiresAt,
+            lastActive: new Date()
+          }
+        });
+      } else {
+        // Create new session
+        const browserSessionId = `${userData.lightspeedUserId}_${Date.now()}`;
+        session = await prisma.userSession.create({
+          data: {
+            userId: user.id,
+            browserSessionId: browserSessionId,
+            lsAccessToken: userData.accessToken,
+            lsRefreshToken: userData.refreshToken,
+            lsDomainPrefix: userData.domainPrefix,
+            expiresAt: userData.expiresAt,
+            lastActive: new Date()
+          }
+        });
+      }
+
       logger.info(`Created/updated persistent session for user: ${userData.name} (${userData.lightspeedUserId})`);
-      
+
       return {
         id: session.id,
-        lightspeedUserId: session.lightspeedUserId,
-        lightspeedEmployeeId: session.lightspeedEmployeeId,
-        email: session.email,
-        name: session.name,
-        role: session.role,
-        photoUrl: session.photoUrl || undefined,
-        lastActiveAt: session.lastActiveAt,
-        isActive: session.isActive,
-        deviceInfo: session.deviceInfo ? JSON.parse(session.deviceInfo) : undefined
+        userId: session.userId,
+        browserSessionId: session.browserSessionId,
+        lsAccessToken: session.lsAccessToken,
+        lsRefreshToken: session.lsRefreshToken,
+        lsDomainPrefix: session.lsDomainPrefix,
+        expiresAt: session.expiresAt,
+        lastActive: session.lastActive
       };
     } catch (error) {
       logger.error('Failed to create/update persistent session:', error);
@@ -115,14 +155,19 @@ export class PersistentUserSessionService {
   }
 
   /**
-   * Get active user session by Lightspeed user ID
+   * Get active user session by user ID
    */
-  static async getActiveSession(lightspeedUserId: string): Promise<PersistentUserSession | null> {
+  static async getActiveSession(userId: number): Promise<PersistentUserSession | null> {
     try {
       const session = await prisma.userSession.findFirst({
         where: {
-          lightspeedUserId,
-          isActive: true
+          userId,
+          expiresAt: {
+            gt: new Date()
+          }
+        },
+        orderBy: {
+          lastActive: 'desc'
         }
       });
 
@@ -130,15 +175,13 @@ export class PersistentUserSessionService {
 
       return {
         id: session.id,
-        lightspeedUserId: session.lightspeedUserId,
-        lightspeedEmployeeId: session.lightspeedEmployeeId,
-        email: session.email,
-        name: session.name,
-        role: session.role,
-        photoUrl: session.photoUrl || undefined,
-        lastActiveAt: session.lastActiveAt,
-        isActive: session.isActive,
-        deviceInfo: session.deviceInfo ? JSON.parse(session.deviceInfo) : undefined
+        userId: session.userId,
+        browserSessionId: session.browserSessionId,
+        lsAccessToken: session.lsAccessToken,
+        lsRefreshToken: session.lsRefreshToken,
+        lsDomainPrefix: session.lsDomainPrefix,
+        expiresAt: session.expiresAt,
+        lastActive: session.lastActive
       };
     } catch (error) {
       logger.error('Failed to get active session:', error);
@@ -153,24 +196,24 @@ export class PersistentUserSessionService {
     try {
       const sessions = await prisma.userSession.findMany({
         where: {
-          isActive: true
+          expiresAt: {
+            gt: new Date()
+          }
         },
         orderBy: {
-          lastActiveAt: 'desc'
+          lastActive: 'desc'
         }
       });
 
       return sessions.map(session => ({
         id: session.id,
-        lightspeedUserId: session.lightspeedUserId,
-        lightspeedEmployeeId: session.lightspeedEmployeeId,
-        email: session.email,
-        name: session.name,
-        role: session.role,
-        photoUrl: session.photoUrl || undefined,
-        lastActiveAt: session.lastActiveAt,
-        isActive: session.isActive,
-        deviceInfo: session.deviceInfo ? JSON.parse(session.deviceInfo) : undefined
+        userId: session.userId,
+        browserSessionId: session.browserSessionId,
+        lsAccessToken: session.lsAccessToken,
+        lsRefreshToken: session.lsRefreshToken,
+        lsDomainPrefix: session.lsDomainPrefix,
+        expiresAt: session.expiresAt,
+        lastActive: session.lastActive
       }));
     } catch (error) {
       logger.error('Failed to get active sessions:', error);
@@ -181,15 +224,17 @@ export class PersistentUserSessionService {
   /**
    * Update session activity timestamp
    */
-  static async updateActivity(lightspeedUserId: string): Promise<void> {
+  static async updateActivity(userId: number): Promise<void> {
     try {
       await prisma.userSession.updateMany({
         where: {
-          lightspeedUserId,
-          isActive: true
+          userId,
+          expiresAt: {
+            gt: new Date()
+          }
         },
         data: {
-          lastActiveAt: new Date()
+          lastActive: new Date()
         }
       });
     } catch (error) {
@@ -200,17 +245,17 @@ export class PersistentUserSessionService {
   /**
    * Deactivate a user session
    */
-  static async deactivateSession(lightspeedUserId: string): Promise<void> {
+  static async deactivateSession(userId: number): Promise<void> {
     try {
       await prisma.userSession.updateMany({
         where: {
-          lightspeedUserId
+          userId
         },
         data: {
-          isActive: false
+          expiresAt: new Date() // Set to past to expire immediately
         }
       });
-      logger.info(`Deactivated session for user: ${lightspeedUserId}`);
+      logger.info(`Deactivated session for user: ${userId}`);
     } catch (error) {
       logger.error('Failed to deactivate session:', error);
     }
@@ -224,15 +269,11 @@ export class PersistentUserSessionService {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      await prisma.userSession.updateMany({
+      await prisma.userSession.deleteMany({
         where: {
-          lastActiveAt: {
+          lastActive: {
             lt: thirtyDaysAgo
-          },
-          isActive: true
-        },
-        data: {
-          isActive: false
+          }
         }
       });
 

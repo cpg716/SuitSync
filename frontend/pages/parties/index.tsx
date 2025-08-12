@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Card } from '../../components/ui/Card';
+import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ToastContext';
@@ -14,6 +14,8 @@ import { useRouter } from 'next/router';
 import { useAuth } from '../../src/AuthContext';
 import { ResourceSyncStatus } from '../../components/ResourceSyncStatus';
 import { api } from '@/lib/apiClient';
+import { UserAvatar } from '../../components/ui/UserAvatar';
+import { Users, Calendar, TrendingUp, CheckCircle, PieChart } from 'lucide-react';
 
 const PHASES = [
   { name: 'Suit Selection', color: 'bg-blue-500', monthsFrom: 6, monthsTo: 3 },
@@ -265,6 +267,16 @@ export default function PartiesList() {
 
   const paginated = filtered.slice((page-1)*pageSize, page*pageSize);
 
+  // Summary data for hero section
+  const summary = {
+    totalParties: parties.length,
+    upcomingParties: parties.filter(p => p.eventDate && new Date(p.eventDate) > new Date()).length,
+    totalMembers: parties.reduce((sum, p) => sum + (p.totalMembers || 0), 0),
+    completedParties: parties.filter(p => p.eventDate && new Date(p.eventDate) < new Date()).length,
+  };
+
+
+
   const handleFormSubmit = async (formData) => {
     try {
       if (editParty) {
@@ -294,7 +306,68 @@ export default function PartiesList() {
   };
 
   return (
-    <div className="w-full space-y-6">
+    <div className="w-full space-y-8">
+      {/* Hero Header */}
+      <div className="relative bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-600 rounded-xl shadow-lg p-8 flex flex-col md:flex-row items-center gap-6 animate-fade-in">
+        <div className="flex-1">
+          <h1 className="text-4xl font-extrabold text-white mb-2 drop-shadow-lg">Party Management</h1>
+          <p className="text-lg text-blue-100 mb-4">Track and manage all your wedding parties and events.</p>
+          <div className="flex items-center gap-3">
+            <UserAvatar user={user} size="lg" showName />
+          </div>
+        </div>
+        <div className="flex flex-col items-center gap-2">
+          <div className="w-24 h-24 bg-white/20 rounded-full flex items-center justify-center">
+            <PieChart className="w-12 h-12 text-white" />
+          </div>
+          <span className="text-white text-sm font-semibold">{summary.upcomingParties} / {summary.totalParties} Active</span>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="bg-blue-50 dark:bg-blue-900/30 shadow-md hover:scale-105 transition-transform">
+          <CardHeader className="flex flex-row items-center gap-2">
+            <Users className="w-6 h-6 text-blue-600" />
+            <CardTitle>Total Parties</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-blue-700 dark:text-blue-200 animate-countup">{summary.totalParties}</div>
+            <div className="text-sm text-blue-500">{summary.upcomingParties} upcoming</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-green-50 dark:bg-green-900/30 shadow-md hover:scale-105 transition-transform">
+          <CardHeader className="flex flex-row items-center gap-2">
+            <Calendar className="w-6 h-6 text-green-600" />
+            <CardTitle>Total Members</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-green-700 dark:text-green-200 animate-countup">{summary.totalMembers}</div>
+            <div className="text-sm text-green-500">across all parties</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-purple-50 dark:bg-purple-900/30 shadow-md hover:scale-105 transition-transform">
+          <CardHeader className="flex flex-row items-center gap-2">
+            <TrendingUp className="w-6 h-6 text-purple-600" />
+            <CardTitle>Upcoming Events</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-purple-700 dark:text-purple-200 animate-countup">{summary.upcomingParties}</div>
+            <div className="text-sm text-purple-500">scheduled</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-indigo-50 dark:bg-indigo-900/30 shadow-md hover:scale-105 transition-transform">
+          <CardHeader className="flex flex-row items-center gap-2">
+            <CheckCircle className="w-6 h-6 text-indigo-600" />
+            <CardTitle>Completed</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-indigo-700 dark:text-indigo-200 animate-countup">{summary.completedParties}</div>
+            <div className="text-sm text-indigo-500">past events</div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Header and Search Section - Responsive */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div className="flex-1">

@@ -13,12 +13,13 @@ import {
   YAxis,
 } from 'recharts';
 import Link from 'next/link';
-import { RefreshCw, Users, Calendar, Scissors, DollarSign, QrCode } from 'lucide-react';
+import { RefreshCw, Users, Calendar, Scissors, DollarSign, QrCode, CheckCircle, TrendingUp } from 'lucide-react';
 
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import useSWR from 'swr';
 import { simpleFetcher } from '@/lib/simpleApiClient';
 import { useAuth } from '../src/AuthContext';
@@ -34,24 +35,48 @@ interface StatCardProps {
   value: any;
   link?: string;
   icon?: React.ComponentType<any>;
+  color?: string;
+  subtitle?: string;
 }
 
 // Memoized StatCard component to prevent unnecessary re-renders
-const StatCard = memo(({ title, value, link, icon: Icon }: StatCardProps) => {
+const StatCard = memo(({ title, value, link, icon: Icon, color = 'blue', subtitle }: StatCardProps) => {
+  const colorClasses = {
+    blue: 'bg-blue-50 dark:bg-blue-900/30 text-blue-600',
+    green: 'bg-green-50 dark:bg-green-900/30 text-green-600',
+    purple: 'bg-purple-50 dark:bg-purple-900/30 text-purple-600',
+    indigo: 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600',
+  };
+
+  const textClasses = {
+    blue: 'text-blue-700 dark:text-blue-200',
+    green: 'text-green-700 dark:text-green-200',
+    purple: 'text-purple-700 dark:text-purple-200',
+    indigo: 'text-indigo-700 dark:text-indigo-200',
+  };
+
+  const subtitleClasses = {
+    blue: 'text-blue-500',
+    green: 'text-green-500',
+    purple: 'text-purple-500',
+    indigo: 'text-indigo-500',
+  };
+
   const cardContent = useMemo(() => (
-    <Card className={link ? "cursor-pointer hover:shadow-md transition-all duration-200 active:scale-95 touch-manipulation" : ""}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 sm:pb-3">
-        <CardTitle className="text-xs sm:text-sm font-medium truncate pr-2">{title}</CardTitle>
-        {Icon && <Icon className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground flex-shrink-0" />}
+    <Card className={`${colorClasses[color]} shadow-md hover:scale-105 transition-transform ${link ? "cursor-pointer" : ""}`}>
+      <CardHeader className="flex flex-row items-center gap-2">
+        {Icon && <Icon className={`w-6 h-6 ${colorClasses[color]}`} />}
+        <CardTitle className="text-sm font-medium">{title}</CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
-        <div className="text-xl sm:text-2xl font-bold">
-          {value === null || value === undefined ? <Skeleton className="h-6 sm:h-8 w-1/2" /> : value}
+        <div className={`text-3xl font-bold ${textClasses[color]} animate-countup`}>
+          {value === null || value === undefined ? <Skeleton className="h-8 w-1/2" /> : value}
         </div>
+        {subtitle && <div className={`text-sm ${subtitleClasses[color]}`}>{subtitle}</div>}
         {link && <span className="text-xs text-muted-foreground hover:text-primary transition-colors">View all</span>}
       </CardContent>
     </Card>
-  ), [title, value, link, Icon]);
+  ), [title, value, link, Icon, color, subtitle, colorClasses, textClasses, subtitleClasses]);
 
   if (link) {
     return <Link href={link} className="block">{cardContent}</Link>;
@@ -160,15 +185,31 @@ function Dashboard() {
     }
   });
 
+  // Summary data for hero section
+  const summary = {
+    totalParties: partiesArr.length,
+    totalAppointments: apptsArr.length,
+    pendingAlterations: alterationsArr.filter(a => a.status === 'pending').length,
+    topCommission: Math.max(0, ...salesBar.map(c => c.sales || 0)),
+  };
+
+  // Pie chart data for hero section
+  const pieData = [
+    { name: 'Active', value: summary.totalParties + summary.totalAppointments },
+    { name: 'Pending', value: summary.pendingAlterations },
+  ];
+
+  const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
+
   if (authLoading) {
     return (
-      <div className="w-full space-y-4 sm:space-y-6">
-        <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="w-full space-y-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[...Array(4)].map((_, i) => (
-            <Skeleton key={i} className="h-24 w-full" />
+            <Skeleton key={i} className="h-32 w-full" />
           ))}
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-12 gap-4 sm:gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-12 gap-6">
           <Skeleton className="lg:col-span-1 xl:col-span-7 h-64 w-full" />
           <Skeleton className="xl:col-span-5 h-64 w-full" />
         </div>
@@ -193,17 +234,67 @@ function Dashboard() {
   }
 
   return (
-    <div className="w-full space-y-4 sm:space-y-6">
-      {/* Stats Cards Grid - Responsive */}
-      <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          <StatCard title="Total Parties" value={metrics ? metrics.parties.length : null} link="/parties" icon={Users} />
-          <StatCard title="Upcoming Appointments" value={metrics ? metrics.appts.length : null} link="/appointments" icon={Calendar} />
-          <StatCard title="Pending Alterations" value={metrics ? alterationsArr.filter(a => a.status === 'pending').length : null} link="/alterations" icon={Scissors} />
-          <StatCard title="Top Commission" value={metrics ? `$${Math.max(0, ...salesBar.map(c => c.sales || 0)).toFixed(2)}` : null} link="/sales" icon={DollarSign} />
+    <div className="w-full space-y-8">
+      {/* Hero Header */}
+      <div className="relative bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-600 rounded-xl shadow-lg p-8 flex flex-col md:flex-row items-center gap-6 animate-fade-in">
+        <div className="flex-1">
+          <h1 className="text-4xl font-extrabold text-white mb-2 drop-shadow-lg">SuitSync Dashboard</h1>
+          <p className="text-lg text-blue-100 mb-4">Manage your suit business operations efficiently.</p>
+          <div className="flex items-center gap-3">
+            <UserAvatar user={user} size="lg" showName />
+          </div>
+        </div>
+        <div className="flex flex-col items-center gap-2">
+          <PieChart width={120} height={120}>
+            <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={50} innerRadius={30} label>
+              {pieData.map((entry, idx) => (
+                <Cell key={`cell-${idx}`} fill={COLORS[idx % COLORS.length]} />
+              ))}
+            </Pie>
+            <Tooltip />
+          </PieChart>
+          <span className="text-white text-sm font-semibold">{summary.totalParties + summary.totalAppointments} / {summary.totalParties + summary.totalAppointments + summary.pendingAlterations} Active</span>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard 
+          title="Total Parties" 
+          value={summary.totalParties} 
+          link="/parties" 
+          icon={Users} 
+          color="blue"
+          subtitle={`${partiesArr.filter(p => p.eventDate && new Date(p.eventDate) > today).length} upcoming`}
+        />
+        <StatCard 
+          title="Appointments" 
+          value={summary.totalAppointments} 
+          link="/appointments" 
+          icon={Calendar} 
+          color="green"
+          subtitle={`${todaysAppts.length} today`}
+        />
+        <StatCard 
+          title="Pending Alterations" 
+          value={summary.pendingAlterations} 
+          link="/alterations" 
+          icon={Scissors} 
+          color="purple"
+          subtitle={`${todaysAlts.length} today`}
+        />
+        <StatCard 
+          title="Top Commission" 
+          value={`$${summary.topCommission.toFixed(2)}`} 
+          link="/sales" 
+          icon={DollarSign} 
+          color="indigo"
+          subtitle="Best performer"
+        />
       </div>
 
       {/* Today's Activities Grid - Responsive */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-12 gap-4 sm:gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-12 gap-6">
         <Card className="lg:col-span-1 xl:col-span-7">
            <CardHeader className="pb-3 sm:pb-6">
             <CardTitle className="text-base sm:text-lg">Today's Appointments</CardTitle>
@@ -244,7 +335,11 @@ function Dashboard() {
                       <div key={a.id} className="flex items-center space-x-4 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                          <div className="flex-1 space-y-1 min-w-0">
                            <p className="text-sm font-medium leading-none truncate">{a.party?.name || '—'}</p>
-                           <p className="text-sm text-muted-foreground truncate">{a.tailor?.name || 'Unassigned'}</p>
+                           <div className="text-sm text-muted-foreground truncate flex items-center gap-2">
+                             {a.tailor ? (
+                               <UserAvatar user={{ id: a.tailor.id, name: a.tailor.name }} size="xs" showName />
+                             ) : 'Unassigned'}
+                           </div>
                          </div>
                          <Badge className="flex-shrink-0">{a.status}</Badge>
                       </div>

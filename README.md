@@ -124,7 +124,32 @@ The project is organized as a monorepo to streamline development and deployment.
 - **[Environment Configuration](docs/ENVIRONMENT.md)** - Environment variables and configuration
 - **[API Reference](docs/API_REFERENCE.md)** - Complete API documentation
 
+## Testing
+
+### Quick Test Commands
+```bash
+# Run all tests in Docker (recommended)
+./scripts/test-docker.sh
+
+# Run backend tests only
+cd backend && npm test
+
+# Run frontend tests only
+cd frontend && npm test
+
+# Run with coverage
+cd backend && npm run test:coverage
+```
+
+### Test Results
+- ✅ **Backend**: 26/26 tests passing
+- ✅ **Frontend**: 8/8 tests passing
+- ✅ **Docker**: Full environment working
+- ✅ **TypeScript**: Zero compilation errors
+
 ### Testing & Quality Assurance
+- **[Docker Test Environment](docs/DOCKER_TEST_ENVIRONMENT.md)** - Comprehensive Docker testing setup
+- **[Lightspeed API Compliance](docs/LIGHTSPEED_API_COMPLIANCE_REPORT.md)** - API compliance and testing report
 - **[AI Workflow](docs/AI_WORKFLOW.md)** - AI-assisted development workflow
 - **[Critical Fixes](docs/CRITICAL_FIXES.md)** - Important fixes and workarounds
 
@@ -136,6 +161,27 @@ The project is organized as a monorepo to streamline development and deployment.
 - The frontend API client always sends credentials with requests for session-based authentication (`credentials: 'include'`).
 
 ---
+
+## 🏗️ Installation Types
+
+SuitSync supports three different installation types for your single-location business:
+
+### 🖥️ **SuitSync Server** (Main Business System)
+- **Purpose**: Your main business computer where all data is stored and managed
+- **Features**: Syncs with your Lightspeed store, all staff can log in, complete functionality
+- **Use Case**: Your main business computer or server
+
+### 💻 **SuitSync PC** (Windows 11 Workstations)
+- **Purpose**: For your office computers and workstations
+- **Features**: Staff can switch between accounts, connects to your main server, works offline
+- **Use Case**: Office computers, workstations, point-of-sale terminals
+
+### 📱 **SuitSync Mobile** (iOS/Android Devices)
+- **Purpose**: For tablets and mobile devices in your business
+- **Features**: One user per device, perfect for customer interactions and field work
+- **Use Case**: Tablets, mobile devices, customer service devices
+
+For detailed configuration information, see [Installation Types Guide](docs/INSTALLATION_TYPES.md).
 
 ## 🔐 Authentication
 
@@ -177,6 +223,19 @@ Create a `.env` file in the project root with your Lightspeed X-Series credentia
 
 ```bash
 # Database
+```
+
+### 5. Quick Authentication Setup (Development)
+For development and testing, you can quickly authenticate using the provided script:
+
+```bash
+cd backend
+node simple-auth.js
+```
+
+This will authenticate you with an available user session for testing API endpoints.
+
+**📖 For detailed authentication troubleshooting, see [Authentication Troubleshooting Guide](docs/AUTHENTICATION_TROUBLESHOOTING.md)**
 DATABASE_URL="postgresql://postgres:postgres@db:5432/suitsync_prod"
 
 # Application

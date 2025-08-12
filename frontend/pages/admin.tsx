@@ -12,6 +12,9 @@ import { Modal } from '../components/ui/Modal';
 import { useAuth } from '../src/AuthContext';
 import { apiFetch, getApiUrl } from '../lib/apiClient';
 import MonitoringDashboard from '../components/MonitoringDashboard';
+import HealthAndSyncDashboard from '../components/HealthAndSyncDashboard';
+import InstallationTypeIndicator from '../components/InstallationTypeIndicator';
+import useSWR from 'swr';
 
 // Dynamically import heavy components
 const UserSettings = dynamic(() => import('./UserSettings'), {
@@ -32,31 +35,7 @@ const defaultConfig = {
   syncFrequency: 15,
 };
 
-function SyncStatusCard() {
-  const toast = useToast();
-  const [status, setStatus] = useState('ok');
-  const [lastSync, setLastSync] = useState('');
-  const [errors, setErrors] = useState([]);
-  useEffect(() => {
-    fetch('/api/webhooks/sync-status', { credentials: 'include' }).then(r => r.json()).then(d => { setStatus(d.status); setLastSync(d.lastSync); });
-    fetch('/api/sync/errors', { credentials: 'include' }).then(r => r.json()).then(d => setErrors(d));
-  }, []);
-  return (
-    <div className="bg-white dark:bg-gray-dark rounded shadow p-4 mb-6">
-      <div className="flex items-center gap-2 mb-2">
-        <span className={`inline-block w-3 h-3 rounded-full ${status === 'ok' ? 'bg-green-500' : errors.length > 0 ? 'bg-red-500' : 'bg-yellow-400'}`}></span>
-        <span className="font-semibold">Sync Status</span>
-        <span className="ml-auto text-xs text-gray-500">Last: {lastSync ? new Date(lastSync).toLocaleString() : '—'}</span>
-      </div>
-      {errors.length > 0 && (
-        <ul className="text-xs text-red-600 space-y-1">
-          {errors.map(e => <li key={e.id}>{e.createdAt ? new Date(e.createdAt).toLocaleString() : ''}: {e.message}</li>)}
-        </ul>
-      )}
-      {errors.length === 0 && <div className="text-xs text-green-600">No sync errors in last 24h.</div>}
-    </div>
-  );
-}
+
 
 function ReminderSettingsCard() {
   const toast = useToast();
@@ -267,7 +246,11 @@ function TailorAbilitiesAdmin() {
             <tbody>
               {abilities.map(a => (
                 <tr key={a.id} className="border-b">
-                  <td>{a.tailor?.name}</td>
+                  <td>
+                    {a.tailor ? (
+                      <span className="inline-flex items-center gap-2"><img src={a.tailor.photoUrl || ''} onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display='none'}} className="w-6 h-6 rounded-full object-cover"/><span>{a.tailor.name}</span></span>
+                    ) : null}
+                  </td>
                   <td>{a.taskType?.name}</td>
                   <td>{a.proficiency}</td>
                   <td>
@@ -369,7 +352,11 @@ function TailorSchedulesAdmin() {
             <tbody>
               {schedules.map(s => (
                 <tr key={s.id} className="border-b">
-                  <td>{s.tailor?.name}</td>
+                  <td>
+                    {s.tailor ? (
+                      <span className="inline-flex items-center gap-2"><img src={s.tailor.photoUrl || ''} onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display='none'}} className="w-6 h-6 rounded-full object-cover"/><span>{s.tailor.name}</span></span>
+                    ) : null}
+                  </td>
                   <td>{['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][s.dayOfWeek]}</td>
                   <td>{s.startTime}</td>
                   <td>{s.endTime}</td>
@@ -398,6 +385,287 @@ function TailorSchedulesAdmin() {
       )}
       <ConfirmModal open={showConfirm} onClose={() => setShowConfirm(false)} onConfirm={confirmDelete} loading={false} title="Delete Tailor Schedule" message="Are you sure you want to delete this schedule?" />
     </Card>
+  );
+}
+
+// --- Availability Editor (Recurring, Overrides, Exceptions, Holidays) ---
+function AvailabilityEditor() {
+  const toast = useToast();
+  const [selectedUserId, setSelectedUserId] = useState<string>('');
+  const [users, setUsers] = useState<any[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [recurring, setRecurring] = useState<Record<number, { start: string; end: string }[]>>({});
+  const [exceptions, setExceptions] = useState<any[]>([]);
+  const [holidays, setHolidays] = useState<any[]>([]);
+  const [newBlock, setNewBlock] = useState<{ day: number; start: string; end: string }>({ day: 1, start: '09:00', end: '17:00' });
+  const [newException, setNewException] = useState<{ date: string; isOff: boolean; blocks: { start: string; end: string }[]; reason: string }>({ date: '', isOff: true, blocks: [], reason: '' });
+  const [newHoliday, setNewHoliday] = useState<{ date: string; name: string; isClosed: boolean }>({ date: '', name: '', isClosed: true });
+
+  useEffect(() => {
+    setLoadingUsers(true);
+    fetch('/api/users', { credentials: 'include' })
+      .then(async r => r.json())
+      .then(data => {
+        const arr = data.users || [...(data.localUsers || []), ...(data.lightspeedUsers || [])];
+        // filter to sales and tailors for availability
+        const filtered = (arr || []).filter((u: any) => ['sales', 'tailor', 'admin', 'associate'].includes(String(u.role || '').toLowerCase()));
+        setUsers(filtered);
+      })
+      .catch(() => setUsers([]))
+      .finally(() => setLoadingUsers(false));
+  }, []);
+
+  useEffect(() => {
+    if (!selectedUserId) return;
+    // Load current availability summary for user
+    fetch(`/api/admin/availability/${selectedUserId}`, { credentials: 'include' })
+      .then(async r => r.json())
+      .then(data => {
+        const days = data?.recurring?.days || data?.recurring || {};
+        setRecurring(days);
+        setExceptions(Array.isArray(data?.exceptions) ? data.exceptions : []);
+      })
+      .catch(() => {
+        setRecurring({});
+        setExceptions([]);
+      });
+  }, [selectedUserId]);
+
+  useEffect(() => {
+    // Load holidays
+    fetch('/api/admin/holidays', { credentials: 'include' })
+      .then(async r => r.json())
+      .then(setHolidays)
+      .catch(() => setHolidays([]));
+  }, []);
+
+  const addRecurringBlock = () => {
+    const d = Number(newBlock.day);
+    if (Number.isNaN(d)) return;
+    setRecurring(prev => ({ ...prev, [d]: [ ...(prev[d] || []), { start: newBlock.start, end: newBlock.end } ] }));
+  };
+  const removeRecurringBlock = (day: number, idx: number) => {
+    setRecurring(prev => ({ ...prev, [day]: (prev[day] || []).filter((_, i) => i !== idx) }));
+  };
+  const saveRecurring = async () => {
+    if (!selectedUserId) return;
+    setSaving(true);
+    try {
+      await fetch(`/api/admin/availability/${selectedUserId}/recurring`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ days: recurring }),
+      });
+      toast.success('Recurring schedule saved');
+    } catch (e: any) {
+      toast.error('Failed to save recurring');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addExceptionBlock = () => {
+    setNewException(prev => ({ ...prev, blocks: [...prev.blocks, { start: '09:00', end: '12:00' }] }));
+  };
+  const updateExceptionBlock = (i: number, key: 'start' | 'end', val: string) => {
+    setNewException(prev => ({ ...prev, blocks: prev.blocks.map((b, idx) => idx === i ? { ...b, [key]: val } : b) }));
+  };
+  const removeExceptionBlock = (i: number) => {
+    setNewException(prev => ({ ...prev, blocks: prev.blocks.filter((_, idx) => idx !== i) }));
+  };
+  const saveException = async () => {
+    if (!selectedUserId || !newException.date) return;
+    try {
+      const res = await fetch(`/api/admin/availability/${selectedUserId}/exception`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newException),
+      });
+      const saved = await res.json();
+      setExceptions(prev => [...prev, saved]);
+      setNewException({ date: '', isOff: true, blocks: [], reason: '' });
+      toast.success('Exception saved');
+    } catch {
+      toast.error('Failed to save exception');
+    }
+  };
+  const deleteException = async (dateISO: string) => {
+    if (!selectedUserId) return;
+    await fetch(`/api/admin/availability/${selectedUserId}/exception?date=${encodeURIComponent(dateISO)}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+    setExceptions(prev => prev.filter(e => (e.date || '').slice(0,10) !== dateISO));
+  };
+
+  const saveHoliday = async () => {
+    if (!newHoliday.date) return;
+    const body = { date: newHoliday.date, name: newHoliday.name, isClosed: !!newHoliday.isClosed };
+    const res = await fetch('/api/admin/holidays', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const saved = await res.json();
+    // normalize date to YYYY-MM-DD for list comparison
+    setHolidays(prev => {
+      const others = prev.filter((h: any) => (h.date || '').slice(0,10) !== (saved.date || '').slice(0,10));
+      return [...others, saved].sort((a: any, b: any) => String(a.date).localeCompare(String(b.date)));
+    });
+    setNewHoliday({ date: '', name: '', isClosed: true });
+  };
+  const deleteHoliday = async (dateISO: string) => {
+    await fetch(`/api/admin/holidays?date=${encodeURIComponent(dateISO)}`, { method: 'DELETE', credentials: 'include' });
+    setHolidays(prev => prev.filter((h: any) => (h.date || '').slice(0,10) !== dateISO));
+  };
+
+  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  return (
+    <div className="space-y-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="md:col-span-2">
+          <label className="block font-semibold mb-1">Select Staff</label>
+          <select
+            className="border rounded px-3 py-2 w-full bg-white dark:bg-gray-800 text-black dark:text-white"
+            value={selectedUserId}
+            onChange={e => setSelectedUserId(e.target.value)}
+          >
+            <option value="">Choose a staff member…</option>
+            {loadingUsers ? <option>Loading…</option> : users.map(u => (
+              <option key={u.id} value={u.id}>{u.name || u.email || `User ${u.id}`} ({u.role})</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Recurring schedule */}
+      <div className="bg-gray-50 dark:bg-gray-800 rounded p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold">Recurring Weekly Schedule</h3>
+          <Button onClick={saveRecurring} disabled={!selectedUserId || saving}>{saving ? 'Saving…' : 'Save'}</Button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {dayNames.map((name, i) => (
+            <div key={i} className="border rounded p-3 bg-white dark:bg-gray-900">
+              <div className="font-medium mb-2">{name}</div>
+              <div className="space-y-2">
+                {(recurring[i] || []).map((b, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <input type="time" value={b.start} onChange={e => setRecurring(prev => ({ ...prev, [i]: (prev[i]||[]).map((x, j) => j===idx ? { ...x, start: e.target.value } : x) }))} className="border rounded px-2 py-1" />
+                    <span>to</span>
+                    <input type="time" value={b.end} onChange={e => setRecurring(prev => ({ ...prev, [i]: (prev[i]||[]).map((x, j) => j===idx ? { ...x, end: e.target.value } : x) }))} className="border rounded px-2 py-1" />
+                    <Button variant="outline" size="sm" onClick={() => removeRecurringBlock(i, idx)}>Remove</Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2 items-end mt-3">
+          <select value={newBlock.day} onChange={e => setNewBlock({ ...newBlock, day: Number(e.target.value) })} className="border rounded px-2 py-1">
+            {dayNames.map((d, idx) => <option key={idx} value={idx}>{d}</option>)}
+          </select>
+          <input type="time" value={newBlock.start} onChange={e => setNewBlock({ ...newBlock, start: e.target.value })} className="border rounded px-2 py-1" />
+          <span>to</span>
+          <input type="time" value={newBlock.end} onChange={e => setNewBlock({ ...newBlock, end: e.target.value })} className="border rounded px-2 py-1" />
+          <Button onClick={addRecurringBlock} variant="outline">Add Block</Button>
+        </div>
+      </div>
+
+      {/* Exceptions */}
+      <div className="bg-gray-50 dark:bg-gray-800 rounded p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold">Exceptions (PTO / One-off changes)</h3>
+          <div />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-white dark:bg-gray-900 rounded p-3">
+            <div className="font-medium mb-2">Add Exception</div>
+            <div className="space-y-2">
+              <input type="date" value={newException.date} onChange={e => setNewException(prev => ({ ...prev, date: e.target.value }))} className="border rounded px-2 py-1 w-full" />
+              <label className="inline-flex items-center gap-2">
+                <input type="checkbox" checked={newException.isOff} onChange={e => setNewException(prev => ({ ...prev, isOff: e.target.checked }))} />
+                <span>All day off</span>
+              </label>
+              {!newException.isOff && (
+                <div className="space-y-2">
+                  {newException.blocks.map((b, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <input type="time" value={b.start} onChange={e => updateExceptionBlock(i, 'start', e.target.value)} className="border rounded px-2 py-1" />
+                      <span>to</span>
+                      <input type="time" value={b.end} onChange={e => updateExceptionBlock(i, 'end', e.target.value)} className="border rounded px-2 py-1" />
+                      <Button size="sm" variant="outline" onClick={() => removeExceptionBlock(i)}>Remove</Button>
+                    </div>
+                  ))}
+                  <Button size="sm" variant="outline" onClick={addExceptionBlock}>Add Block</Button>
+                </div>
+              )}
+              <input type="text" placeholder="Reason (optional)" value={newException.reason} onChange={e => setNewException(prev => ({ ...prev, reason: e.target.value }))} className="border rounded px-2 py-1 w-full" />
+              <Button onClick={saveException} disabled={!selectedUserId || !newException.date}>Save Exception</Button>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-gray-900 rounded p-3">
+            <div className="font-medium mb-2">Existing Exceptions</div>
+            <div className="space-y-2 max-h-72 overflow-auto">
+              {exceptions.length === 0 && <div className="text-sm text-gray-500">No exceptions</div>}
+              {exceptions.map((e: any, idx: number) => (
+                <div key={idx} className="flex items-center justify-between border rounded px-3 py-2">
+                  <div>
+                    <div className="font-medium">{String(e.date).slice(0,10)} {e.isOff ? '(Off)' : ''}</div>
+                    {!e.isOff && Array.isArray(e.blocks) && e.blocks.length > 0 && (
+                      <div className="text-xs text-gray-600">{e.blocks.map((b: any) => `${b.start}-${b.end}`).join(', ')}</div>
+                    )}
+                    {e.reason && <div className="text-xs text-gray-500">{e.reason}</div>}
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => deleteException(String(e.date).slice(0,10))}>Delete</Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Holidays */}
+      <div className="bg-gray-50 dark:bg-gray-800 rounded p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold">Global Holidays / Closures</h3>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-white dark:bg-gray-900 rounded p-3">
+            <div className="font-medium mb-2">Add / Update Holiday</div>
+            <div className="space-y-2">
+              <input type="date" value={newHoliday.date} onChange={e => setNewHoliday(prev => ({ ...prev, date: e.target.value }))} className="border rounded px-2 py-1 w-full" />
+              <input type="text" placeholder="Name" value={newHoliday.name} onChange={e => setNewHoliday(prev => ({ ...prev, name: e.target.value }))} className="border rounded px-2 py-1 w-full" />
+              <label className="inline-flex items-center gap-2">
+                <input type="checkbox" checked={newHoliday.isClosed} onChange={e => setNewHoliday(prev => ({ ...prev, isClosed: e.target.checked }))} />
+                <span>Closed</span>
+              </label>
+              <Button onClick={saveHoliday} disabled={!newHoliday.date}>Save Holiday</Button>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-gray-900 rounded p-3">
+            <div className="font-medium mb-2">Upcoming Holidays</div>
+            <div className="space-y-2 max-h-72 overflow-auto">
+              {holidays.length === 0 && <div className="text-sm text-gray-500">No holidays</div>}
+              {holidays.map((h: any) => (
+                <div key={String(h.date)} className="flex items-center justify-between border rounded px-3 py-2">
+                  <div>
+                    <div className="font-medium">{String(h.date).slice(0,10)} {h.isClosed ? '(Closed)' : ''}</div>
+                    {h.name && <div className="text-xs text-gray-500">{h.name}</div>}
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => deleteHoliday(String(h.date).slice(0,10))}>Delete</Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -618,74 +886,12 @@ const TABS = [
   { value: 'tailors', label: 'Tailors' },
   { value: 'availability', label: 'My Availability' },
   { value: 'integrations', label: 'Integrations' },
-  { value: 'sync', label: 'Sync & Health' },
-  { value: 'health', label: 'Health & Sync' },
+  { value: 'installation', label: 'Installation' },
+  { value: 'health-sync', label: 'Health & Sync' },
+  { value: 'booking', label: 'Online Booking' },
 ];
 
-function SyncStatusPanel() {
-  const [syncStatus, setSyncStatus] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [errors, setErrors] = useState([]);
 
-  useEffect(() => {
-    async function fetchStatus() {
-      setLoading(true);
-      try {
-        const res = await fetch('/api/sync/status', { credentials: 'include' });
-        const data = await res.json();
-        setSyncStatus(Array.isArray(data.statuses) ? data.statuses : []);
-        setErrors(Array.isArray(data.errors) ? data.errors : []);
-      } catch (err) {
-        setErrors(['Failed to load sync status']);
-      }
-      setLoading(false);
-    }
-    fetchStatus();
-  }, []);
-
-  const handleManualSync = async (resource) => {
-    await fetch(`/api/sync/${resource}`, { method: 'POST', credentials: 'include' });
-    // Optionally refetch status
-  };
-
-  return (
-    <div className="mt-4">
-      <h2 className="text-xl font-bold mb-4">Lightspeed API Health & Sync</h2>
-      {loading ? <div>Loading...</div> : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full border border-gray-200 dark:border-gray-700 rounded-lg">
-            <thead className="bg-gray-100 dark:bg-gray-800">
-              <tr>
-                <th className="px-4 py-2 text-left">Resource</th>
-                <th className="px-4 py-2 text-left">Status</th>
-                <th className="px-4 py-2 text-left">Last Sync</th>
-                <th className="px-4 py-2 text-left">Error</th>
-                <th className="px-4 py-2 text-left">Manual Sync</th>
-              </tr>
-            </thead>
-            <tbody>
-              {syncStatus.map((s) => (
-                <tr key={s.resource} className="border-t border-gray-200 dark:border-gray-700">
-                  <td className="px-4 py-2">{s.resource}</td>
-                  <td className="px-4 py-2">{s.status}</td>
-                  <td className="px-4 py-2">{s.lastSyncedAt ? new Date(s.lastSyncedAt).toLocaleString() : '-'}</td>
-                  <td className="px-4 py-2">{s.errorMessage || '-'}</td>
-                  <td className="px-4 py-2"><button className="px-2 py-1 bg-primary text-white rounded" onClick={() => handleManualSync(s.resource)}>Sync Now</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      <div className="mt-6">
-        <h3 className="font-semibold mb-2">Sync Errors</h3>
-        <ul className="list-disc ml-6 text-red-600 dark:text-red-400">
-          {errors.length === 0 ? <li>None</li> : errors.map((e, i) => <li key={i}>{e}</li>)}
-        </ul>
-      </div>
-    </div>
-  );
-}
 
 export default function AdminSettings() {
   const { success, error: toastError } = useToast();
@@ -849,16 +1055,113 @@ export default function AdminSettings() {
                   <TailorSchedulesAdmin />
                 </TabsContent>
                 <TabsContent value="availability">
-                  {/* Availability Admin Card */}
+                  <Card title="User Availability Editor">
+                    <AvailabilityEditor />
+                  </Card>
                 </TabsContent>
                 <TabsContent value="integrations">
                   {/* Integrations Admin Card */}
                 </TabsContent>
-                <TabsContent value="sync">
-                  <SyncStatusPanel />
+                <TabsContent value="installation">
+                  <InstallationTypeIndicator />
                 </TabsContent>
-                <TabsContent value="health">
-                  <MonitoringDashboard />
+                <TabsContent value="booking">
+                  <Card title="Online Booking Settings" className="mb-8">
+                    {!settings ? (
+                      <Skeleton className="h-32 w-full" />
+                    ) : (
+                      <form onSubmit={handleSave} className="space-y-4">
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={!!settings.onlineBookingEnabled}
+                            onChange={e => { setSettings((s:any)=>({ ...s, onlineBookingEnabled: e.target.checked })); setDirty(true);} }
+                          />
+                          <span>Enable Online Booking</span>
+                        </label>
+                        <div>
+                          <label className="block text-sm font-medium mb-1">Allowed Types (CSV of AppointmentType)</label>
+                          <Input name="onlineBookingAllowedTypes" value={settings.onlineBookingAllowedTypes || ''} onChange={handleChange} />
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium mb-1">Advance Days</label>
+                            <Input type="number" name="onlineBookingAdvanceDays" value={settings.onlineBookingAdvanceDays || ''} onChange={handleChange} />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-1">Min Notice (minutes)</label>
+                            <Input type="number" name="onlineBookingMinNoticeMinutes" value={settings.onlineBookingMinNoticeMinutes || ''} onChange={handleChange} />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium mb-1">Max Per Day</label>
+                            <Input type="number" name="onlineBookingMaxPerDay" value={settings.onlineBookingMaxPerDay || ''} onChange={handleChange} />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-1">Timezone</label>
+                            <Input name="onlineBookingTimezone" value={settings.onlineBookingTimezone || ''} onChange={handleChange} placeholder="America/New_York" />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-1">Iframe Allowed Origins (CSV)</label>
+                          <Input name="onlineBookingIframeAllowedOrigins" value={settings.onlineBookingIframeAllowedOrigins || ''} onChange={handleChange} placeholder="https://yourdomain.com" />
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium mb-1">Business Name</label>
+                            <Input name="bookingBusinessName" value={settings.bookingBusinessName || ''} onChange={handleChange} />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-1">Subtitle</label>
+                            <Input name="bookingBusinessSubtitle" value={settings.bookingBusinessSubtitle || ''} onChange={handleChange} />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium mb-1">Address</label>
+                            <Input name="bookingBusinessAddress" value={settings.bookingBusinessAddress || ''} onChange={handleChange} />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-1">Phone</label>
+                            <Input name="bookingBusinessPhone" value={settings.bookingBusinessPhone || ''} onChange={handleChange} />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium mb-1">Logo URL</label>
+                            <Input name="bookingLogoUrl" value={settings.bookingLogoUrl || ''} onChange={handleChange} placeholder="https://.../logo.png" />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-1">Primary Color</label>
+                            <Input name="bookingPrimaryColor" value={settings.bookingPrimaryColor || ''} onChange={handleChange} placeholder="#2563eb" />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-1">Welcome Message</label>
+                          <Input name="bookingWelcomeMessage" value={settings.bookingWelcomeMessage || ''} onChange={handleChange} placeholder="Book your appointment" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-1">Success Message</label>
+                          <Input name="bookingSuccessMessage" value={settings.bookingSuccessMessage || ''} onChange={handleChange} placeholder="Thank you! Your appointment has been booked." />
+                        </div>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={!!settings.onlineBookingRequirePhone}
+                            onChange={e => { setSettings((s:any)=>({ ...s, onlineBookingRequirePhone: e.target.checked })); setDirty(true);} }
+                          />
+                          <span>Require Phone for Booking</span>
+                        </label>
+                        <div className="pt-2">
+                          <Button type="submit" disabled={saving || !dirty}>{saving ? 'Saving…' : 'Save'}</Button>
+                        </div>
+                      </form>
+                    )}
+                  </Card>
+                </TabsContent>
+                <TabsContent value="health-sync">
+                  <HealthAndSyncDashboard />
                 </TabsContent>
               </Tabs>
             </>

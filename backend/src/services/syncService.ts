@@ -11,6 +11,7 @@ const prisma = new PrismaClient().$extends(withAccelerate());
 const prismaRaw = new PrismaClientRaw();
 
 type Mapper<T> = (item: any) => Omit<T, 'id'>;
+type WhereClause<T> = (item: any) => any;
 
 type PrismaModel<T> = {
   upsert: (args: any) => Promise<T>;
@@ -39,10 +40,18 @@ function buildReqWithPersistentToken(req: any) {
 /**
  * A generic function to sync a resource from Lightspeed to the local database.
  */
-async function syncResource<T>(req: any, resourceName: string, endpoint: string, model: PrismaModel<T>, mapper: Mapper<T>) {
+async function syncResource<T>(req: any, resourceName: string, endpoint: string, model: PrismaModel<T>, mapper: Mapper<T>, whereClause?: WhereClause<T>) {
   logger.info(`[SyncService] Starting Lightspeed sync for resource: ${resourceName}`);
-  logger.info(`[SyncService] Incoming req object:`, JSON.stringify(req));
-  logger.info(`[SyncService] Session access token: ${req?.session?.lsAccessToken || 'NONE'}`);
+  // Avoid circular JSON on Express req
+  try {
+    logger.info(`[SyncService] Incoming req meta`, {
+      method: req?.method,
+      url: req?.originalUrl || req?.url,
+      ip: req?.ip,
+      hasSession: !!req?.session,
+    });
+  } catch {}
+  logger.info(`[SyncService] Session access token present: ${req?.session?.lsAccessToken ? 'YES' : 'NO'}`);
   const SYNC_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
   let syncTimedOut = false;
   let syncCompleted = false;
@@ -75,7 +84,8 @@ async function syncResource<T>(req: any, resourceName: string, endpoint: string,
     let persistentToken;
     try {
       persistentToken = await getPersistentLightspeedToken();
-      logger.info(`[SyncService] Loaded persistent Lightspeed token:`, persistentToken);
+      // Do not log tokens; log only presence and expiry
+      logger.info(`[SyncService] Loaded persistent Lightspeed token (present: YES, expiresAt: ${persistentToken.expiresAt?.toISOString?.() || 'unknown'})`);
     } catch (e) {
       logger.error(`[SyncService] Could not load persistent Lightspeed token:`, e);
       await prisma.syncStatus.update({
@@ -139,7 +149,7 @@ async function syncResource<T>(req: any, resourceName: string, endpoint: string,
     // Limit concurrency for external API calls (e.g., 5 at a time)
     const limit = pLimit(5);
 
-    // Upsert all customers in parallel (with concurrency limit)
+    // Upsert all items in parallel (with concurrency limit)
     const upsertResults = await Promise.all(
       allItems.map(item => limit(async () => {
         try {
@@ -157,92 +167,20 @@ async function syncResource<T>(req: any, resourceName: string, endpoint: string,
             maxVersion = version;
           }
           const mappedData = mapper(item);
-          logger.info(`[SyncService] Upserting ${resourceName} item with ID ${id}`);
-          const customer = await model.upsert({
-            where: { lightspeedId: id.toString() },
-            update: mappedData,
+          
+          // Use custom where clause if provided, otherwise use default lightspeedId
+          const where = whereClause ? whereClause(item) : { lightspeedId: item.id?.toString() };
+          
+          const result = await model.upsert({
+            where,
             create: mappedData,
+            update: mappedData,
           });
-          logger.info(`[SyncService] Upserted ${resourceName} item with ID ${id}`);
-          // --- GOLD STANDARD: Sync tags, custom fields, groups ---
-          await Promise.all([
-            // Tags
-            limit(async () => {
-              try {
-                const tagsResp = await lightspeedClient.get(`/customers/${id}/tags`);
-                const tags = tagsResp?.data?.data || [];
-                if (Array.isArray(tags)) {
-                  await Promise.all(tags.map(tag =>
-                    prisma.customerTag.upsert({
-                      where: { name: tag.name },
-                      update: {},
-                      create: { name: tag.name },
-                    }).then(tagRec => {
-                      const tagRecIdRaw = (tagRec as { id: string | number }).id;
-                      const tagRecId = typeof tagRecIdRaw === 'string' ? parseInt(tagRecIdRaw, 10) : tagRecIdRaw;
-                      return prisma.customer.update({
-                        where: { id: id },
-                        data: { tags: { connect: { id: tagRecId } } },
-                      });
-                    })
-                  ));
-                }
-              } catch (err) {
-                logger.error(`[SyncService] Failed to sync tags for customer ${id}:`, (err as any)?.message || err);
-              }
-            }),
-            // Custom Fields
-            limit(async () => {
-              try {
-                const fieldsResp = await lightspeedClient.get(`/customers/${id}/CustomFieldValues`);
-                const fields = fieldsResp?.data?.data || [];
-                if (Array.isArray(fields)) {
-                  await Promise.all(fields.map(field =>
-                    prisma.customerCustomField.upsert({
-                      where: { customerId_key: { customerId: id, key: field.customFieldName } },
-                      update: { value: field.value },
-                      create: { customerId: id, key: field.customFieldName, value: field.value },
-                    })
-                  ));
-                }
-              } catch (err) {
-                logger.error(`[SyncService] Failed to sync custom fields for customer ${id}:`, (err as any)?.message || err);
-              }
-            }),
-            // Groups
-            limit(async () => {
-              try {
-                const groupsResp = await lightspeedClient.get(`/customer_groups`);
-                const groups = groupsResp?.data?.data || [];
-                await Promise.all(groups.map(async (group: any) => {
-                  if (Array.isArray(group.customers) && group.customers.some((c: any) => c.id == id)) {
-                    const groupRec = await prisma.customerGroup.upsert({
-                      where: { name_externalId: { name: group.name, externalId: group.id.toString() } },
-                      update: {},
-                      create: { name: group.name, externalId: group.id.toString() },
-                    });
-                    const groupRecIdRaw = (groupRec as { id: string | number }).id;
-                    const groupRecId = typeof groupRecIdRaw === 'string' ? parseInt(groupRecIdRaw, 10) : groupRecIdRaw;
-                    await prisma.customer.update({
-                      where: { id: id },
-                      data: { groups: { connect: { id: groupRecId } } },
-                    });
-                  }
-                }));
-              } catch (err) {
-                logger.error(`[SyncService] Failed to sync groups for customer ${id}:`, (err as any)?.message || err);
-              }
-            })
-          ]);
-          // --- END GOLD STANDARD ---
-          return customer;
-        } catch (loopError: any) {
+          return result;
+        } catch (error: any) {
+          logger.error(`[SyncService] Error upserting item in ${resourceName}:`, error);
           failedCount++;
-          const idRaw = (item as { id: string | number }).id;
-          const id = typeof idRaw === 'string' ? parseInt(idRaw, 10) : idRaw;
-          const itemIdentifier = id || JSON.stringify(item);
-          logger.error(`[SyncService] Failed to process item ${itemIdentifier} for ${resourceName}.`, { error: (loopError as any)?.message || loopError, item });
-          failedItems.push({ item, error: (loopError as any)?.message || loopError });
+          failedItems.push({ item, error: error.message });
           return null;
         }
       }))
@@ -265,6 +203,7 @@ async function syncResource<T>(req: any, resourceName: string, endpoint: string,
         status: finalErrorMessage ? 'FAILED' : 'SUCCESS',
         lastSyncedAt: new Date(),
         errorMessage: finalErrorMessage,
+        lastSyncedVersion: maxVersion,
       },
     });
     logger.info(`[SyncService] Sync status updated for ${resourceName}: ${finalErrorMessage ? 'FAILED' : 'SUCCESS'}`);
@@ -283,6 +222,40 @@ async function syncResource<T>(req: any, resourceName: string, endpoint: string,
 }
 
 const syncCustomers = async (req: any) => {
+  console.log('[SyncService] Starting customers sync...');
+  
+  // Use the generic syncResource function for proper sync status handling
+  await syncResource(
+    req,
+    'customers',
+    '/customers',
+    prisma.customer,
+    (item: any) => ({
+      lightspeedId: item.id?.toString(),
+      first_name: item.first_name || null,
+      last_name: item.last_name || null,
+      name: (() => { // Deprecated, for migration only
+        const first = item.first_name === '?' ? '' : (item.first_name || '');
+        const last = item.last_name === '?' ? '' : (item.last_name || '');
+        const full = [first, last].filter(Boolean).join(' ');
+        return full || 'N/A';
+      })(),
+      email: item.email ? item.email : 'N/A',
+      phone: item.phone ? item.phone : 'N/A',
+      address: item.address || null,
+      createdAt: item.created_at ? new Date(item.created_at) : new Date(),
+      updatedAt: item.updated_at ? new Date(item.updated_at) : new Date(),
+      lightspeedVersion: item.version ? BigInt(item.version) : null,
+      syncedAt: new Date(),
+      createdBy: null,
+    })
+  );
+  
+  console.log('[SyncService] Customers sync completed');
+};
+
+const syncCustomerGroups = async (req: any) => {
+  console.log('Starting customer groups sync...');
   const persistentToken = await getPersistentLightspeedToken();
   const reqWithToken = {
     ...req,
@@ -295,255 +268,243 @@ const syncCustomers = async (req: any) => {
     _forcePersistentToken: true,
   };
   const lightspeedClient = createLightspeedClient(reqWithToken);
-  const items = await lightspeedClient.fetchAllWithPagination('/customers', {});
-  const BATCH_SIZE = 10;
-  for (let i = 0; i < items.length; i += BATCH_SIZE) {
-    const batch = items.slice(i, i + BATCH_SIZE);
-    await Promise.all(
-      batch.map((item: any) =>
-        prisma.customer.upsert({
-          where: { lightspeedId: item.id?.toString() },
-          create: {
-            lightspeedId: item.id?.toString(),
-            first_name: item.first_name || null,
-            last_name: item.last_name || null,
-            name: (() => { // Deprecated, for migration only
-              const first = item.first_name === '?' ? '' : (item.first_name || '');
-              const last = item.last_name === '?' ? '' : (item.last_name || '');
-              const full = [first, last].filter(Boolean).join(' ');
-              return full || 'N/A';
-            })(),
-            email: item.email ? item.email : 'N/A',
-            phone: item.phone ? item.phone : 'N/A',
-            address: item.address || null,
-            createdAt: item.created_at ? new Date(item.created_at) : new Date(),
-            updatedAt: item.updated_at ? new Date(item.updated_at) : new Date(),
-            lightspeedVersion: item.version ? BigInt(item.version) : null,
-            syncedAt: new Date(),
-            createdBy: null,
-          },
-          update: {
-            first_name: item.first_name || null,
-            last_name: item.last_name || null,
-            name: (() => { // Deprecated, for migration only
-              const first = item.first_name === '?' ? '' : (item.first_name || '');
-              const last = item.last_name === '?' ? '' : (item.last_name || '');
-              const full = [first, last].filter(Boolean).join(' ');
-              return full || 'N/A';
-            })(),
-            email: item.email ? item.email : 'N/A',
-            phone: item.phone ? item.phone : 'N/A',
-            address: item.address || null,
-            updatedAt: item.updated_at ? new Date(item.updated_at) : new Date(),
-            lightspeedVersion: item.version ? BigInt(item.version) : null,
-            syncedAt: new Date(),
-          },
+
+  try {
+    const groups = await lightspeedClient.getCustomerGroups();
+    const BATCH_SIZE = 10;
+
+    for (let i = 0; i < groups.length; i += BATCH_SIZE) {
+      const batch = groups.slice(i, i + BATCH_SIZE);
+      await Promise.all(
+        batch.map(async (group: any) => {
+          // Sync customer group to SuitSync CustomerGroup
+          const groupName = group.name || 'Unnamed Group';
+          const externalId = group.id?.toString();
+
+          const customerGroup = await prisma.customerGroup.upsert({
+            where: {
+              name_externalId: {
+                name: groupName,
+                externalId: externalId
+              }
+            },
+            create: {
+              name: groupName,
+              externalId: externalId,
+            },
+            update: {
+              name: groupName,
+            },
+          });
+
+          // Sync group members if available
+          if (group.customers && Array.isArray(group.customers)) {
+            for (const customerId of group.customers) {
+              try {
+                const customer = await prisma.customer.findUnique({
+                  where: { lightspeedId: customerId.toString() }
+                });
+
+                if (customer) {
+                  // Connect customer to group
+                  await prisma.customerGroup.update({
+                    where: { id: customerGroup.id },
+                    data: {
+                      customers: {
+                        connect: { id: customer.id }
+                      }
+                    }
+                  });
+                }
+              } catch (error) {
+                console.warn(`Failed to connect customer ${customerId} to group ${group.id}:`, error);
+              }
+            }
+          }
         })
-      )
-    );
+      );
+    }
+
+    // Update sync status
+    await prisma.syncStatus.upsert({
+      where: { resource: 'customer_groups' },
+      update: {
+        status: 'SUCCESS',
+        errorMessage: null,
+        lastSyncedAt: new Date(),
+        updatedAt: new Date(),
+      },
+      create: {
+        resource: 'customer_groups',
+        status: 'SUCCESS',
+        errorMessage: null,
+        lastSyncedAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    console.log(`Customer groups sync completed. Processed ${groups.length} groups.`);
+  } catch (error: any) {
+    console.error('Customer groups sync failed:', error);
+
+    // Update sync status with error
+    await prisma.syncStatus.upsert({
+      where: { resource: 'customer_groups' },
+      update: {
+        status: 'ERROR',
+        errorMessage: error.message,
+        lastSyncedAt: new Date(),
+        updatedAt: new Date(),
+      },
+      create: {
+        resource: 'customer_groups',
+        status: 'ERROR',
+        errorMessage: error.message,
+        lastSyncedAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    throw error;
   }
-  // Always set syncStatus to SUCCESS after a successful sync
-  await prisma.syncStatus.updateMany({
-    where: { resource: 'customers' },
-    data: {
-      status: 'SUCCESS',
-      errorMessage: null,
-      lastSyncedAt: new Date(),
-    },
-  });
 };
 
 const syncSales = async (req: any) => {
-  const persistentToken = await getPersistentLightspeedToken();
-  const reqWithToken = {
-    ...req,
-    session: {
-      ...(req?.session || {}),
-      lsAccessToken: persistentToken.accessToken,
-      lsRefreshToken: persistentToken.refreshToken,
-      lsDomainPrefix: process.env.LS_DOMAIN || req?.session?.lsDomainPrefix,
-    },
-    _forcePersistentToken: true,
-  };
-  const lightspeedClient = createLightspeedClient(reqWithToken);
-  const items = await lightspeedClient.fetchAllWithPagination('/sales', {});
-  const BATCH_SIZE = 10;
-  for (let i = 0; i < items.length; i += BATCH_SIZE) {
-    const batch = items.slice(i, i + BATCH_SIZE);
-    await Promise.all(
-      batch.map((item: any) =>
-        prisma.sale.upsert({
-          where: { lightspeedId: item.id?.toString() },
-          create: {
-            lightspeedId: item.id?.toString(),
-            total: item.total_amount ? parseFloat(item.total_amount) : 0,
-            saleDate: item.created_at ? new Date(item.created_at) : new Date(),
-            customerId: 1, // Default customer ID - will need to be linked properly
-            syncedAt: new Date(),
-          },
-          update: {
-            total: item.total_amount ? parseFloat(item.total_amount) : 0,
-            saleDate: item.created_at ? new Date(item.created_at) : new Date(),
-            syncedAt: new Date(),
-          },
-        })
-      )
-    );
-  }
+  console.log('[SyncService] Starting sales sync...');
+  
+  // Use the generic syncResource function for proper sync status handling
+  await syncResource(
+    req,
+    'sales',
+    '/sales',
+    prisma.sale,
+    (item: any) => ({
+      lightspeedId: item.id?.toString(),
+      total: item.total_amount ? parseFloat(item.total_amount) : 0,
+      saleDate: item.created_at ? new Date(item.created_at) : new Date(),
+      customerId: 1, // Default customer ID - will need to be linked properly
+      syncedAt: new Date(),
+    })
+  );
   
   // Sync sale line items for commission tracking
-  for (const sale of items) {
-    if (sale.sale_line_items && Array.isArray(sale.sale_line_items)) {
-      for (const lineItem of sale.sale_line_items) {
-        await prisma.saleLineItem.upsert({
-          where: { lightspeedId: lineItem.id?.toString() },
-          create: {
-            lightspeedId: lineItem.id?.toString(),
-            saleId: parseInt(sale.id?.toString()) || 0,
-            productId: parseInt(lineItem.product_id?.toString()) || 1, // Default product ID
-            quantity: lineItem.quantity || 1,
-            price: lineItem.total_price ? parseFloat(lineItem.total_price) : 0,
-            syncedAt: new Date(),
-          },
-          update: {
-            saleId: parseInt(sale.id?.toString()) || 0,
-            productId: parseInt(lineItem.product_id?.toString()) || 1,
-            quantity: lineItem.quantity || 1,
-            price: lineItem.total_price ? parseFloat(lineItem.total_price) : 0,
-            syncedAt: new Date(),
-          },
-        });
-      }
-    }
-  }
-  
-  // Always set syncStatus to SUCCESS after a successful sync
-  await prisma.syncStatus.updateMany({
-    where: { resource: 'sales' },
-    data: {
-      status: 'SUCCESS',
-      errorMessage: null,
-      lastSyncedAt: new Date(),
-    },
-  });
-};
-
-const syncUsers = async (req: any) => {
-  const persistentToken = await getPersistentLightspeedToken();
-  const reqWithToken = {
-    ...req,
-    session: {
-      ...(req?.session || {}),
-      lsAccessToken: persistentToken.accessToken,
-      lsRefreshToken: persistentToken.refreshToken,
-      lsDomainPrefix: process.env.LS_DOMAIN || req?.session?.lsDomainPrefix,
-    },
-    _forcePersistentToken: true,
-  };
-  const lightspeedClient = createLightspeedClient(reqWithToken);
-  const items = await lightspeedClient.fetchAllWithPagination('/users', {});
-  const BATCH_SIZE = 10;
-  for (let i = 0; i < items.length; i += BATCH_SIZE) {
-    const batch = items.slice(i, i + BATCH_SIZE);
-    await Promise.all(
-      batch.map((item: any) =>
-        prisma.user.upsert({
-          where: { id: parseInt(item.id?.toString()) || 0 },
-          create: {
-            name: item.display_name || item.first_name + ' ' + item.last_name || 'Unknown User',
-            email: item.email || null,
-            role: mapLightspeedRoleToSuitSync(item.account_type || 'employee'),
-            lightspeedEmployeeId: item.id?.toString(),
-            photoUrl: item.photo_url || null,
-            createdAt: item.created_at ? new Date(item.created_at) : new Date(),
-            updatedAt: item.updated_at ? new Date(item.updated_at) : new Date(),
-          },
-          update: {
-            name: item.display_name || item.first_name + ' ' + item.last_name || 'Unknown User',
-            email: item.email || null,
-            role: mapLightspeedRoleToSuitSync(item.account_type || 'employee'),
-            lightspeedEmployeeId: item.id?.toString(),
-            photoUrl: item.photo_url || null,
-            updatedAt: item.updated_at ? new Date(item.updated_at) : new Date(),
-          },
-        })
-      )
-    );
-  }
-  
-  // Always set syncStatus to SUCCESS after a successful sync
-  await prisma.syncStatus.updateMany({
-    where: { resource: 'users' },
-    data: {
-      status: 'SUCCESS',
-      errorMessage: null,
-      lastSyncedAt: new Date(),
-    },
-  });
-};
-
-const syncGroups = async (req: any) => {
-  const persistentToken = await getPersistentLightspeedToken();
-  const reqWithToken = {
-    ...req,
-    session: {
-      ...(req?.session || {}),
-      lsAccessToken: persistentToken.accessToken,
-      lsRefreshToken: persistentToken.refreshToken,
-      lsDomainPrefix: process.env.LS_DOMAIN || req?.session?.lsDomainPrefix,
-    },
-    _forcePersistentToken: true,
-  };
-  const lightspeedClient = createLightspeedClient(reqWithToken);
-  const items = await lightspeedClient.fetchAllWithPagination('/customer_groups', {});
-  const BATCH_SIZE = 10;
-  for (let i = 0; i < items.length; i += BATCH_SIZE) {
-    const batch = items.slice(i, i + BATCH_SIZE);
-    await Promise.all(
-      batch.map(async (item: any) => {
-        // Check if party already exists with this lightspeedGroupId
-        const existingParty = await prisma.party.findFirst({
-          where: { lightspeedGroupId: item.id?.toString() }
-        });
-        
-        if (existingParty) {
-          // Update existing party
-          await prisma.party.update({
-            where: { id: existingParty.id },
-            data: {
-              name: item.name || 'Unnamed Party',
-              notes: item.description || '',
-              updatedAt: item.updated_at ? new Date(item.updated_at) : new Date(),
+  try {
+    const persistentToken = await getPersistentLightspeedToken();
+    const reqWithToken = {
+      ...req,
+      session: {
+        ...(req?.session || {}),
+        lsAccessToken: persistentToken.accessToken,
+        lsRefreshToken: persistentToken.refreshToken,
+        lsDomainPrefix: process.env.LS_DOMAIN || req?.session?.lsDomainPrefix,
+      },
+      _forcePersistentToken: true,
+    };
+    const lightspeedClient = createLightspeedClient(reqWithToken);
+    const items = await lightspeedClient.fetchAllWithPagination('/sales', {});
+    
+    for (const sale of items) {
+      if (sale.sale_line_items && Array.isArray(sale.sale_line_items)) {
+        for (const lineItem of sale.sale_line_items) {
+          await prisma.saleLineItem.upsert({
+            where: { lightspeedId: lineItem.id?.toString() },
+            create: {
+              lightspeedId: lineItem.id?.toString(),
+              saleId: parseInt(sale.id?.toString()) || 0,
+              productId: parseInt(lineItem.product_id?.toString()) || 1, // Default product ID
+              quantity: lineItem.quantity || 1,
+              price: lineItem.total_price ? parseFloat(lineItem.total_price) : 0,
+              syncedAt: new Date(),
             },
-          });
-        } else {
-          // Create new party
-          await prisma.party.create({
-            data: {
-              name: item.name || 'Unnamed Party',
-              eventDate: new Date(), // Default date since groups don't have event dates
-              notes: item.description || '',
-              lightspeedGroupId: item.id?.toString(),
-              customerId: 1, // Default customer ID
-              salesPersonId: 1, // Default sales person ID
-              createdAt: item.created_at ? new Date(item.created_at) : new Date(),
-              updatedAt: item.updated_at ? new Date(item.updated_at) : new Date(),
+            update: {
+              saleId: parseInt(sale.id?.toString()) || 0,
+              productId: parseInt(lineItem.product_id?.toString()) || 1,
+              quantity: lineItem.quantity || 1,
+              price: lineItem.total_price ? parseFloat(lineItem.total_price) : 0,
+              syncedAt: new Date(),
             },
           });
         }
-      })
-    );
+      }
+    }
+  } catch (error) {
+    console.error('[SyncService] Error syncing sale line items:', error);
+    // Don't fail the entire sync for line item errors
   }
   
-  // Always set syncStatus to SUCCESS after a successful sync
-  await prisma.syncStatus.updateMany({
-    where: { resource: 'groups' },
-    data: {
-      status: 'SUCCESS',
-      errorMessage: null,
-      lastSyncedAt: new Date(),
+  console.log('[SyncService] Sales sync completed');
+};
+
+const syncUsers = async (req: any) => {
+  console.log('[SyncService] Starting users sync...');
+  
+  // Use the generic syncResource function for proper sync status handling
+  await syncResource(
+    req,
+    'users',
+    '/users',
+    prisma.user,
+    (item: any) => {
+      const role = mapLightspeedRoleToSuitSync(item.account_type || 'employee');
+      
+      // Determine if user can login to SuitSync based on role
+      const canLoginToSuitSync = role === 'admin' || role === 'sales' || role === 'manager';
+      
+      return {
+        name: item.display_name || item.first_name + ' ' + item.last_name || 'Unknown User',
+        email: item.email || null,
+        role: role,
+        lightspeedEmployeeId: item.id?.toString(),
+        photoUrl: item.photo_url || null,
+        canLoginToSuitSync: canLoginToSuitSync,
+        isActive: true,
+        passwordHash: null, // Will be set by admin if needed
+        commissionRate: 0.1, // Default commission rate
+        notificationPrefs: null,
+        pinHash: null,
+        pinSetAt: null,
+        pinAttempts: null,
+        pinLockedUntil: null,
+        lastPinUse: null,
+        createdAt: item.created_at ? new Date(item.created_at) : new Date(),
+        updatedAt: item.updated_at ? new Date(item.updated_at) : new Date(),
+      };
     },
-  });
+    (item: any) => ({ lightspeedEmployeeId: item.id?.toString() }) // Custom where clause for users
+  );
+  
+  console.log('[SyncService] Users sync completed');
+};
+
+const syncGroups = async (req: any) => {
+  console.log('[SyncService] Starting groups sync...');
+  
+  // Use the generic syncResource function for proper sync status handling
+  // Note: Groups are synced to the Party model
+  await syncResource(
+    req,
+    'groups',
+    '/customer_groups',
+    prisma.party,
+    (item: any) => ({
+      name: item.name || 'Unnamed Party',
+      eventDate: new Date(), // Default date since groups don't have event dates
+      notes: item.description || '',
+      lightspeedGroupId: item.id?.toString(),
+      customerId: 1, // Default customer ID
+      salesPersonId: 1, // Default sales person ID
+      syncedAt: new Date(),
+      suitStyle: null,
+      suitColor: null,
+      externalId: null,
+      syncedToLs: false,
+      createdAt: item.created_at ? new Date(item.created_at) : new Date(),
+      updatedAt: item.updated_at ? new Date(item.updated_at) : new Date(),
+    }),
+    (item: any) => ({ lightspeedGroupId: item.id?.toString() }) // Custom where clause for groups
+  );
+  
+  console.log('[SyncService] Groups sync completed');
 };
 
 // Helper function to map Lightspeed roles to SuitSync roles
@@ -567,4 +528,4 @@ function mapLightspeedRoleToSuitSync(lightspeedAccountType: string): string {
   }
 }
 
-export { syncCustomers, syncSales, syncUsers, syncGroups };
+export { syncCustomers, syncCustomerGroups, syncSales, syncUsers, syncGroups };

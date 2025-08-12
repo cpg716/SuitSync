@@ -1,9 +1,9 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { withAccelerate } from '@prisma/extension-accelerate';
-import { logChange } from '../services/AuditLogService';
+import AuditLogService, { logChange } from '../services/AuditLogService';
 import { createLightspeedClient } from '../lightspeedClient'; // TODO: migrate this as well
-import AuditLogService from '../services/AuditLogService'; // TODO: migrate this as well
+// duplicate import removed
 import { verifyAndGetCustomField, createOrUpdateCustomField, initialize as initializeWorkflow } from '../services/workflowService';
 import { processWebhook } from '../services/webhookService';
 

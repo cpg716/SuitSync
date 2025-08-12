@@ -42,28 +42,28 @@ router.get('/dashboard-stats', asyncHandler(alterationsController.getDashboardSt
 router.get('/dashboard/stats', asyncHandler(alterationsController.getDashboardStats));
 
 // Workflow management
-router.put('/jobs/:jobId/workflow/:stepId', asyncHandler(alterationsController.updateWorkflowStep));
+router.put('/jobs/:jobId/workflow/:stepId', requirePermission('alterations', 'write'), asyncHandler(alterationsController.updateWorkflowStep));
 
 // Auto-assign tailors
-router.post('/jobs/:id/auto-assign', asyncHandler(alterationsController.autoAssignTailors));
+router.post('/jobs/:id/auto-assign', requirePermission('alterations', 'write'), asyncHandler(alterationsController.autoAssignTailors));
 
 // Get alterations by member
-router.get('/member/:memberId', asyncHandler(alterationsController.getAlterationsByMember));
+router.get('/member/:memberId', requirePermission('alterations', 'read'), asyncHandler(alterationsController.getAlterationsByMember));
 
 // Scan QR code to mark part as started/finished
-router.post('/scan', asyncHandler(alterationsController.scanQRCode));
+router.post('/scan', requirePermission('alterations', 'write'), asyncHandler(alterationsController.scanQRCode));
 
 // Schedule pickup date
-router.post('/pickup', asyncHandler(alterationsController.schedulePickup));
+router.post('/pickup', requirePermission('alterations', 'write'), asyncHandler(alterationsController.schedulePickup));
 
 // Generate alterations ticket for printing
-router.get('/jobs/:jobId/ticket', asyncHandler(alterationsController.generateAlterationsTicket));
+router.get('/jobs/:jobId/ticket', requirePermission('alterations', 'read'), asyncHandler(alterationsController.generateAlterationsTicket));
 
 // Get all alterations with status and due dates
-router.get('/jobs', asyncHandler(alterationsController.getAllAlterations));
+router.get('/jobs', requirePermission('alterations', 'read'), asyncHandler(alterationsController.getAllAlterations));
 
 // Update alteration due date
-router.put('/jobs/:jobId/due-date', asyncHandler(alterationsController.updateAlterationDueDate));
+router.put('/jobs/:jobId/due-date', requirePermission('alterations', 'write'), asyncHandler(alterationsController.updateAlterationDueDate));
 
 // Tailor assignment and work tracking
 router.post('/parts/:partId/assign', requirePermission('alterations', 'write'), asyncHandler(alterationsController.assignTailorToPart));

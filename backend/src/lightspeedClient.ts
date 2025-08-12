@@ -10,14 +10,20 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 // Exponential backoff for rate limiting
 const handleRateLimit = async (error: any, retryCount: number = 0): Promise<void> => {
   if (error.response?.status === 429 && retryCount < 3) {
-    const retryAfter = error.response.headers['retry-after'];
+    const retryAfterHeader = error.response.headers['retry-after'];
     let waitTime = 1000 * Math.pow(2, retryCount); // Exponential backoff: 1s, 2s, 4s
 
-    if (retryAfter) {
-      // If Retry-After header is present, use it
-      const retryDate = new Date(retryAfter);
-      if (!isNaN(retryDate.getTime())) {
-        waitTime = Math.max(retryDate.getTime() - Date.now(), waitTime);
+    if (retryAfterHeader) {
+      // Try to parse as number first (seconds)
+      const numericRetryAfter = parseInt(retryAfterHeader);
+      if (!isNaN(numericRetryAfter)) {
+        waitTime = Math.max(numericRetryAfter * 1000, waitTime);
+      } else {
+        // Try to parse as date
+        const retryDate = new Date(retryAfterHeader);
+        if (!isNaN(retryDate.getTime())) {
+          waitTime = Math.max(retryDate.getTime() - Date.now(), waitTime);
+        }
       }
     }
 
@@ -73,7 +79,8 @@ async function refreshAccessToken(req: any) {
   const LS_CLIENT_ID = process.env.LS_CLIENT_ID || '';
   const LS_CLIENT_SECRET = process.env.LS_CLIENT_SECRET || '';
   if (!domainPrefix || !refreshToken) throw new Error('Missing domain or refresh token for Lightspeed refresh');
-  const tokenUrl = `https://${domainPrefix}.retail.lightspeed.app/oauth/token`;
+  // Use API 1.0 token endpoint per Lightspeed X-Series spec
+  const tokenUrl = `https://${domainPrefix}.retail.lightspeed.app/api/1.0/token`;
   const response = await axios.post(
     tokenUrl,
     querystring.stringify({
@@ -155,9 +162,15 @@ export function createLightspeedClient(req: any) {
         }
         // Log rate limit headers for monitoring
         if (response?.headers['x-ratelimit-remaining']) {
-          const remaining = response.headers['x-ratelimit-remaining'];
-          const limit = response.headers['x-ratelimit-limit'];
-          console.debug(`Rate limit: ${remaining}/${limit} remaining`);
+          const remaining = parseInt(response.headers['x-ratelimit-remaining']);
+          const limit = parseInt(response.headers['x-ratelimit-limit']);
+          const reset = response.headers['x-ratelimit-reset'];
+          console.debug(`Rate limit: ${remaining}/${limit} remaining, resets at ${reset}`);
+
+          // Warn if approaching rate limit
+          if (remaining < 10) {
+            console.warn(`⚠️  Approaching Lightspeed rate limit: ${remaining}/${limit} remaining`);
+          }
         }
         return response;
       } catch (error) {
@@ -183,7 +196,53 @@ export function createLightspeedClient(req: any) {
             return await client.put(endpoint, data);
           }
         }
-        throw error;
+
+        // Enhanced error handling for other status codes
+        const statusCode = err.response?.status;
+        const errorData = err.response?.data;
+
+        switch (statusCode) {
+          case 403:
+            const permissionError: any = new Error('Insufficient permissions for this Lightspeed resource');
+            permissionError.statusCode = 403;
+            permissionError.code = 'LIGHTSPEED_PERMISSION_DENIED';
+            permissionError.details = errorData;
+            throw permissionError;
+
+          case 404:
+            const notFoundError: any = new Error(`Lightspeed resource not found: ${endpoint}`);
+            notFoundError.statusCode = 404;
+            notFoundError.code = 'LIGHTSPEED_RESOURCE_NOT_FOUND';
+            notFoundError.endpoint = endpoint;
+            throw notFoundError;
+
+          case 422:
+            const validationError: any = new Error('Lightspeed validation error');
+            validationError.statusCode = 422;
+            validationError.code = 'LIGHTSPEED_VALIDATION_ERROR';
+            validationError.details = errorData;
+            throw validationError;
+
+          case 500:
+          case 502:
+          case 503:
+          case 504:
+            const serverError: any = new Error('Lightspeed service temporarily unavailable');
+            serverError.statusCode = statusCode;
+            serverError.code = 'LIGHTSPEED_SERVICE_ERROR';
+            serverError.details = errorData;
+            throw serverError;
+
+          default:
+            // Log the original error for debugging
+            console.error(`Unhandled Lightspeed API error:`, {
+              status: statusCode,
+              endpoint,
+              method: method.toUpperCase(),
+              error: errorData
+            });
+            throw error;
+        }
       }
     });
   }
@@ -243,6 +302,15 @@ export function createLightspeedClient(req: any) {
     getCustomers: async () => {
       return await fetchAllWithPagination('/customers');
     },
+    getCustomerGroups: async () => {
+      return await fetchAllWithPagination('/customer_groups');
+    },
+    getSales: async (params?: any) => {
+      return await fetchAllWithPagination('/sales', params || {});
+    },
+    getUsers: async () => {
+      return await fetchAllWithPagination('/users');
+    },
   };
 }
 
@@ -251,8 +319,20 @@ export async function searchLightspeed(client: any, resource: string, query: any
   return data;
 }
 
-export async function setCustomFieldValue(_session: any, _payload: any) {
-  return {};
+export async function setCustomFieldValue(session: any, payload: { customFieldId: string; resourceId: string; value: string }) {
+  const domainPrefix = process.env.LS_DOMAIN;
+  if (!domainPrefix) throw new Error('LS_DOMAIN not configured');
+  const accessToken = session?.lsAccessToken || (await getPersistentToken())?.accessToken;
+  if (!accessToken) throw new Error('No Lightspeed access token');
+  const client = axios.create({
+    baseURL: `https://${domainPrefix}.retail.lightspeed.app/api/2.0`,
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    timeout: 20000,
+  });
+  // Note: endpoint path may differ; using workflows/custom_fields/value as placeholder
+  const endpoint = `/workflows/custom_fields/${payload.customFieldId}/values/${payload.resourceId}`;
+  const { data } = await client.put(endpoint, { value: payload.value });
+  return data;
 }
 
 export async function createServiceOrder(_session: any, _payload: any) {

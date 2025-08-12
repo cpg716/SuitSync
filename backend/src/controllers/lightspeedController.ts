@@ -30,8 +30,32 @@ export const getLightspeedHealth = async (req: Request, res: Response) => {
     const statuses = await prisma.syncStatus.findMany({ orderBy: { resource: 'asc' } });
     const statusMap = new Map(statuses.map(s => [s.resource, s]));
     const now = new Date();
+    
+    // Create sync status records for expected resources if they don't exist
+    for (const resource of expectedResources) {
+      if (!statusMap.has(resource)) {
+        try {
+          await prisma.syncStatus.create({
+            data: {
+              resource,
+              status: 'IDLE',
+              lastSyncedAt: now,
+              errorMessage: null,
+            }
+          });
+          logger.info(`[Lightspeed Health] Created sync status record for ${resource}`);
+        } catch (error) {
+          logger.error(`[Lightspeed Health] Failed to create sync status for ${resource}:`, error);
+        }
+      }
+    }
+    
+    // Fetch updated statuses after creating missing ones
+    const updatedStatuses = await prisma.syncStatus.findMany({ orderBy: { resource: 'asc' } });
+    const updatedStatusMap = new Map(updatedStatuses.map(s => [s.resource, s]));
+    
     const sanitizedStatuses = expectedResources.map(resource => {
-      const s = statusMap.get(resource);
+      const s = updatedStatusMap.get(resource);
       return {
         resource,
         status: s?.status || 'IDLE',

@@ -113,7 +113,7 @@ For more details on environment variables, Docker usage, and AI-augmented workfl
   - SESSION_SECRET (32+ chars)
   - LS_CLIENT_ID, LS_CLIENT_SECRET, LS_REFRESH_TOKEN, LS_DOMAIN
   - REDIS_URL=redis://redis:6379
-  - CORS_ORIGIN=http://localhost:3001 (for local dev)
+- FRONTEND_URL=http://localhost:3001 (for local dev)
 
 ## 3. Running Migrations
 - Before starting backend, run:
@@ -132,7 +132,7 @@ For more details on environment variables, Docker usage, and AI-augmented workfl
 
 ## 5. Session & Cookie Config
 - Session cookies are `secure: false` in dev, `secure: true` in production.
-- CORS allows credentials and uses `CORS_ORIGIN`.
+- CORS allows credentials and uses `FRONTEND_URL`.
 - Frontend API client must send `credentials: 'include'` on all requests.
 
 ## 6. Health & Monitoring

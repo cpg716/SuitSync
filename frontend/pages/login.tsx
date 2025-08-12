@@ -18,6 +18,11 @@ export default function LoginPage() {
   const [showSwitchUser, setShowSwitchUser] = useState(false);
   const [allUsers, setAllUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  
+  // Local authentication state
+  const [authMethod, setAuthMethod] = useState<'lightspeed' | 'local'>('lightspeed');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   useEffect(() => {
     // If user is already logged in, redirect to the dashboard.
@@ -66,6 +71,7 @@ export default function LoginPage() {
     const detailsParam = urlParams.get('details');
     const reasonParam = urlParams.get('reason');
     const sessionExpired = urlParams.get('sessionExpired');
+    const retryAfter = urlParams.get('retry_after');
 
     if (sessionExpired === 'true') {
       setError('Your session has expired. Please sign in again.');
@@ -74,7 +80,10 @@ export default function LoginPage() {
       setError('Authentication required. Please sign in with your Lightspeed account to continue.');
     } else if (errorParam) {
       let errorMessage = 'Authentication failed';
-      if (errorParam === 'auth_failed') {
+      if (errorParam === 'rate_limit') {
+        const waitTime = retryAfter || '60';
+        errorMessage = `Lightspeed API rate limit exceeded. Please wait ${waitTime} seconds and try again.`;
+      } else if (errorParam === 'auth_failed') {
         errorMessage = 'Lightspeed authentication failed';
       } else if (errorParam === 'oauth_error') {
         errorMessage = 'OAuth authorization error';
@@ -116,7 +125,30 @@ export default function LoginPage() {
     window.location.href = `${backendUrl}/auth/start-lightspeed`;
   };
 
+  const handleLocalLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
 
+    try {
+      const response = await api.post('/api/auth/login', {
+        email,
+        password
+      });
+
+      if (response.data) {
+        success('Login successful!');
+        // The AuthContext will handle the session update
+        router.replace('/');
+      }
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.error || 'Login failed. Please try again.';
+      setError(errorMessage);
+      toastError(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleUserSelect = (selectedUser) => {
     // Implement Lightspeed OAuth for the selected user
@@ -146,8 +178,32 @@ export default function LoginPage() {
           />
           <h1 className="text-2xl font-bold mb-2 text-primary">Sign in to SuitSync</h1>
           <p className="text-sm text-gray-600 text-center">
-            Sign in with your Lightspeed X-Series account to access SuitSync
+            Choose your authentication method
           </p>
+        </div>
+
+        {/* Authentication Method Toggle */}
+        <div className="flex mb-6 bg-gray-100 rounded-lg p-1">
+          <button
+            onClick={() => setAuthMethod('lightspeed')}
+            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+              authMethod === 'lightspeed'
+                ? 'bg-white text-primary shadow-sm'
+                : 'text-gray-600 hover:text-gray-800'
+            }`}
+          >
+            Lightspeed OAuth
+          </button>
+          <button
+            onClick={() => setAuthMethod('local')}
+            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+              authMethod === 'local'
+                ? 'bg-white text-primary shadow-sm'
+                : 'text-gray-600 hover:text-gray-800'
+            }`}
+          >
+            Local Login
+          </button>
         </div>
         
         {error && (
@@ -155,42 +211,103 @@ export default function LoginPage() {
             {error}
           </div>
         )}
-        
-        <Button
-          onClick={handleLightspeedLogin}
-          disabled={loading}
-          className="w-full bg-accent hover:bg-accent/90 text-white font-bold py-4 px-4 rounded-lg shadow-lg transition flex items-center justify-center gap-3"
-          aria-label="Sign in with Lightspeed"
-        >
-          {loading ? (
-            <>
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-              Connecting to Lightspeed...
-            </>
-          ) : (
-            <>
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 2L2 7v10c0 5.55 3.84 9.74 9 11 5.16-1.26 9-5.45 9-11V7l-10-5z"/>
-              </svg>
-              Sign in with Lightspeed
-            </>
-          )}
-        </Button>
 
-
+        {authMethod === 'lightspeed' ? (
+          // Lightspeed OAuth Login
+          <div>
+            <Button
+              onClick={handleLightspeedLogin}
+              disabled={loading}
+              className="w-full bg-accent hover:bg-accent/90 text-white font-bold py-4 px-4 rounded-lg shadow-lg transition flex items-center justify-center gap-3"
+              aria-label="Sign in with Lightspeed"
+            >
+              {loading ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  Connecting to Lightspeed...
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2L2 7v10c0 5.55 3.84 9.74 9 11 5.16-1.26 9-5.45 9-11V7l-10-5z"/>
+                  </svg>
+                  Sign in with Lightspeed
+                </>
+              )}
+            </Button>
+            
+            <div className="mt-6 text-xs text-gray-500 text-center space-y-2">
+              <p>
+                Your Lightspeed X-Series account credentials will be used to access SuitSync.
+              </p>
+              <p>
+                Permissions and roles are automatically synced from your Lightspeed account.
+              </p>
+            </div>
+          </div>
+        ) : (
+          // Local Login Form
+          <form onSubmit={handleLocalLogin} className="space-y-4">
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                Email Address
+              </label>
+              <input
+                type="email"
+                id="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent"
+                placeholder="Enter your email"
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+                Password
+              </label>
+              <input
+                type="password"
+                id="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent"
+                placeholder="Enter your password"
+              />
+            </div>
+            
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-4 px-4 rounded-lg shadow-lg transition flex items-center justify-center gap-3"
+            >
+              {loading ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  Signing in...
+                </>
+              ) : (
+                'Sign In'
+              )}
+            </Button>
+            
+            <div className="mt-6 text-xs text-gray-500 text-center space-y-2">
+              <p>
+                Use your local SuitSync account credentials.
+              </p>
+              <p>
+                Contact your administrator to set up your account.
+              </p>
+            </div>
+          </form>
+        )}
         
-        <div className="mt-6 text-xs text-gray-500 text-center space-y-2">
-          <p>
-            Your Lightspeed X-Series account credentials will be used to access SuitSync.
-          </p>
-          <p>
-            Permissions and roles are automatically synced from your Lightspeed account.
-          </p>
-          <p>
-            <a href="/status" className="text-blue-600 hover:text-blue-800 underline">
-              Check system status
-            </a>
-          </p>
+        <div className="mt-6 text-xs text-gray-500 text-center">
+          <a href="/status" className="text-blue-600 hover:text-blue-800 underline">
+            Check system status
+          </a>
         </div>
       </Card>
       <SwitchUserModal open={showSwitchUser} onClose={() => setShowSwitchUser(false)} allUsers={allUsers} onUserSelect={handleUserSelect} />

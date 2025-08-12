@@ -2,9 +2,31 @@
 
 This document provides a comprehensive list of all environment variables used in SuitSync, their purposes, and configuration guidelines.
 
+## Installation Type Configuration
+
+SuitSync supports three installation types. Set `SUITSYNC_INSTALL_TYPE` to configure your installation:
+
+- `server` - Main server with Lightspeed integration (default)
+- `pc` - Windows 11 PWA client installation
+- `mobile` - iOS/Android PWA client installation
+
+For detailed information about installation types, see [Installation Types Guide](INSTALLATION_TYPES.md).
+
 ## Required Environment Variables
 
-### Lightspeed API Configuration
+### Installation Type Configuration
+```bash
+# Installation type (server, pc, or mobile)
+SUITSYNC_INSTALL_TYPE="server"
+
+# Unique identifier for this installation
+SUITSYNC_INSTANCE_ID="main-server-001"
+
+# Server URL (required for pc and mobile installations)
+SUITSYNC_SERVER_URL="https://your-server.com"
+```
+
+### Lightspeed API Configuration (Server installations only)
 ```bash
 # Your Lightspeed store domain (without .retail.lightspeed.app)
 LS_DOMAIN="your-store-name"

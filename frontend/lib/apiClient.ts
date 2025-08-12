@@ -147,7 +147,8 @@ export const getApiUrl = (path: string): string => {
 
 // Helper function for fetch calls with proper credentials
 export async function apiFetch(path: string, options: Record<string, any> = {}) {
-  const res = await fetch(`http://localhost:3000${path}`, {
+  const url = getApiUrl(path);
+  const res = await fetch(url, {
     ...options,
     credentials: 'include',
     headers: {

@@ -48,13 +48,13 @@ export const switchUser = async (req: Request, res: Response): Promise<void> => 
       const switchedUser = await prisma.user.findUnique({ where: { id: userId } });
       if (switchedUser) {
         req.session.lightspeedUser = {
-          id: switchedUser.id,
+          id: String(switchedUser.id),
+          lightspeedId: String(switchedUser.id),
           name: switchedUser.name,
           email: switchedUser.email,
           role: switchedUser.role,
-          photoUrl: switchedUser.photoUrl,
-          lightspeedEmployeeId: switchedUser.lightspeedEmployeeId,
-          isLightspeedUser: true,
+          photoUrl: switchedUser.photoUrl || undefined,
+          lightspeedEmployeeId: switchedUser.lightspeedEmployeeId || String(switchedUser.id),
           hasLocalRecord: true,
           localUserId: switchedUser.id
         };
@@ -206,7 +206,7 @@ export const getSessionStatus = async (req: Request, res: Response): Promise<voi
       sessionInfo: currentSession ? {
         domain: currentSession.lsDomainPrefix,
         expiresAt: currentSession.expiresAt,
-        lastActiveAt: currentSession.lastActiveAt,
+        lastActiveAt: currentSession.lastActive,
       } : null,
     });
   } catch (error) {
@@ -317,7 +317,7 @@ export const refreshUserSession = async (req: Request, res: Response): Promise<v
       sessionInfo: currentSession ? {
         domain: currentSession.lsDomainPrefix,
         expiresAt: currentSession.expiresAt,
-        lastActiveAt: currentSession.lastActiveAt,
+        lastActiveAt: currentSession.lastActive,
       } : null,
     });
   } catch (error) {

@@ -3,7 +3,7 @@ import * as partiesController from '../controllers/partiesController';
 import { authMiddleware, requirePermission } from '../middleware/auth';
 import { PrismaClient } from '@prisma/client';
 import { withAccelerate } from '@prisma/extension-accelerate';
-import { logChange } from '../services/AuditLogService';
+import AuditLogService, { logChange } from '../services/AuditLogService';
 import { asyncHandler } from '../utils/asyncHandler';
 
 const router = express.Router();

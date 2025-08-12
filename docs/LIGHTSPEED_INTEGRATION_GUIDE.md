@@ -50,7 +50,7 @@ This is the standard flow for actions performed by a logged-in user.
 
 1.  **Initiation**: The user is redirected from `/api/auth/start` to the Lightspeed authorization screen.
 2.  **Callback**: Lightspeed redirects the user back to `/api/auth/callback` with an `authorization_code`.
-3.  **Token Exchange**: The server exchanges this code for an `access_token` and `refresh_token` by making a `POST` request to `https://{LS_DOMAIN}.retail.lightspeed.app/oauth/token`.
+3.  **Token Exchange**: The server exchanges this code for an `access_token` and `refresh_token` by making a `POST` request to `https://{LS_DOMAIN}.retail.lightspeed.app/api/1.0/token`.
 4.  **Session Storage**: The `access_token` and `refresh_token` are stored securely in the user's encrypted session.
 
 ### 2.2. System Authentication (Personal Access Token)
@@ -63,7 +63,7 @@ For background processes like the initial data sync or scheduled jobs where no u
 
 ### 3.1. Base URLs
 
-- **OAuth Token Endpoint**: `https://{LS_DOMAIN}.retail.lightspeed.app/oauth/token`
+- **OAuth Token Endpoint**: `https://{LS_DOMAIN}.retail.lightspeed.app/api/1.0/token`
 - **Data API Base**: `https://{LS_DOMAIN}.retail.lightspeed.app/api/2.0`
 
 ### 3.2. Supported Resources
@@ -271,9 +271,9 @@ const syncUsers = async (req: any) => {
 
 **Problem**: Mixed API versions causing token refresh failures
 
-**Solution**: All OAuth operations now use the unified endpoint:
+**Solution**: All OAuth operations use the official endpoint:
 ```typescript
-const tokenUrl = `https://${domainPrefix}.retail.lightspeed.app/oauth/token`;
+const tokenUrl = `https://${domainPrefix}.retail.lightspeed.app/api/1.0/token`;
 ```
 
 ### 6.2. Pagination Issues

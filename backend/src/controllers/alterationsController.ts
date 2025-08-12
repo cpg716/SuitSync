@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import logger from '../utils/logger';
-import { logChange } from '../services/AuditLogService';
+import AuditLogService, { logChange } from '../services/AuditLogService';
 
 const prisma = new PrismaClient();
 
@@ -243,7 +243,7 @@ export async function getAlterationsJob(req: Request, res: Response) {
  */
 export async function scanQRCode(req: Request, res: Response) {
   try {
-    const { qrCode, action } = req.body;
+    const { qrCode, action, tailorId } = req.body;
     
     if (!qrCode || !action) {
       return res.status(400).json({ error: 'qrCode and action are required' });
@@ -289,12 +289,18 @@ export async function scanQRCode(req: Request, res: Response) {
       });
     }
 
+    // Require a valid tailorId and attribute scan correctly
+    const scannedById = typeof tailorId === 'number' ? tailorId : (req as any).user?.id;
+    if (!scannedById) {
+      return res.status(400).json({ error: 'tailorId is required' });
+    }
+
     // Log the scan
     await prisma.qRScanLog.create({
       data: {
         qrCode,
         partId: jobPart.id,
-        scannedBy: (req as any).user?.id || 1,
+        scannedBy: scannedById,
         scanType: action === 'start' ? 'START_WORK' : 'FINISH_WORK',
         location: req.ip,
         result: 'SUCCESS'

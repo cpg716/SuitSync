@@ -8,7 +8,13 @@ module.exports = {
     '**/?(*.)+(spec|test).ts'
   ],
   transform: {
-    '^.+\\.ts$': 'ts-jest',
+    '^.+\\.ts$': ['ts-jest', {
+      useESM: false,
+      tsconfig: {
+        module: 'commonjs',
+        target: 'es2017'
+      }
+    }],
   },
   collectCoverageFrom: [
     'src/**/*.ts',

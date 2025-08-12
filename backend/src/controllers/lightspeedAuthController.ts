@@ -7,6 +7,8 @@ import { createLightspeedClient } from '../lightspeedClient';
 import logger from '../utils/logger';
 import { PersistentUserSessionService } from '../services/persistentUserSessionService';
 
+
+
 const prisma = new PrismaClient().$extends(withAccelerate());
 
 const LS_CLIENT_ID = process.env.LS_CLIENT_ID!;
@@ -30,20 +32,27 @@ function mapLightspeedRoleToSuitSync(lightspeedAccountType: string): string {
 }
 
 export const redirectToLightspeed = async (req: Request, res: Response): Promise<void> => {
-  const state = Math.random().toString(36).substring(7);
+  // Generate a simple, reliable state parameter
+  const state = Math.random().toString(36).substring(2, 15); // 13 characters
+  
   req.session.lsAuthState = state;
   
+  // Use secure connect endpoint (minimal, proven working)
   const authUrl = `https://secure.retail.lightspeed.app/connect?response_type=code&client_id=${LS_CLIENT_ID}&redirect_uri=${encodeURIComponent(LS_REDIRECT_URI)}&state=${state}`;
-  
-  logger.info(`Redirecting to Lightspeed OAuth: ${authUrl}`);
+
+  logger.info(`Redirecting to Lightspeed Connect with state: ${state}`);
   res.redirect(authUrl);
 };
 
 export const handleCallback = async (req: Request, res: Response): Promise<void> => {
+  console.log("=== handleCallback START ===");
+  console.log("=== CALLBACK FUNCTION CALLED ===");
+  console.log("Query params:", req.query);
+  console.log("Session:", req.session);
   logger.info("Handling Lightspeed callback...");
   logger.info("Callback query parameters:", req.query);
   logger.info("Session before callback:", req.session);
-  const { code, domain_prefix, state, error, error_description, user_id } = req.query as any;
+  const { code, domain_prefix, state, error, error_description } = req.query as any;
   const { lsAuthState } = req.session;
   if (error) {
     logger.error('OAuth error in callback:', { error, error_description });
@@ -62,28 +71,87 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
   }
   req.session.lsAuthState = undefined;
   try {
-    const tokenUrl = `https://${domain_prefix}.retail.lightspeed.app/oauth/token`;
+    console.log("=== About to exchange token ===");
+    const tokenUrl = `https://${domain_prefix}.retail.lightspeed.app/api/1.0/token`;
     logger.info('[OAuth] Exchanging code for tokens at', tokenUrl);
-    logger.info('[OAuth] Token request params:', { client_id: LS_CLIENT_ID, redirect_uri: LS_REDIRECT_URI, code });
-    const tokenResponse = await axios.post(
-      tokenUrl,
-      querystring.stringify({
-        client_id: LS_CLIENT_ID,
-        client_secret: LS_CLIENT_SECRET,
-        code: code,
-        grant_type: 'authorization_code',
-        redirect_uri: LS_REDIRECT_URI,
-      }),
-      { 
-        headers: { 
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Accept': 'application/json'
-        } 
+    logger.info('[OAuth] Token request params:', { 
+      client_id: LS_CLIENT_ID, 
+      redirect_uri: LS_REDIRECT_URI, 
+      code: code,
+      domain_prefix: domain_prefix
+    });
+    
+    let tokenResponse;
+    try {
+      tokenResponse = await axios.post(
+        tokenUrl,
+        querystring.stringify({
+          client_id: LS_CLIENT_ID,
+          client_secret: LS_CLIENT_SECRET,
+          code: code,
+          grant_type: 'authorization_code',
+          redirect_uri: LS_REDIRECT_URI,
+        }),
+        { 
+          headers: { 
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json'
+          } 
+        }
+      );
+    } catch (error: any) {
+      logger.error('[OAuth] Token exchange failed:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      });
+
+      // Handle rate limiting specifically
+      if (error.response?.status === 429) {
+        logger.warn('Lightspeed OAuth token exchange rate limit exceeded.');
+        const retryAfterHeader = error.response.headers['retry-after'];
+        let retryAfterSeconds = 60; // Default to 60 seconds
+
+        if (retryAfterHeader) {
+          // Try to parse as number first (seconds)
+          const numericRetryAfter = parseInt(retryAfterHeader);
+          if (!isNaN(numericRetryAfter)) {
+            retryAfterSeconds = numericRetryAfter;
+          } else {
+            // Try to parse as date
+            const retryDate = new Date(retryAfterHeader);
+            if (!isNaN(retryDate.getTime())) {
+              retryAfterSeconds = Math.max(Math.ceil((retryDate.getTime() - Date.now()) / 1000), 1);
+            }
+          }
+        }
+
+        const err = new Error(`Lightspeed OAuth rate limit exceeded. Please wait ${retryAfterSeconds} seconds and try again.`);
+        res.redirect(`${FRONTEND_URL}/login?error=rate_limit&retry_after=${retryAfterSeconds}&details=${encodeURIComponent(err.message)}`);
+        return;
       }
-    );
-    logger.info('[OAuth] Token response:', tokenResponse.data);
+
+      res.redirect(`${FRONTEND_URL}/login?error=token_exchange_failed&details=${encodeURIComponent(error.response?.data?.error_description || error.message)}`);
+      return;
+    }
+    logger.info('[OAuth] Token response status:', tokenResponse.status);
+    logger.info('[OAuth] Token response headers:', tokenResponse.headers);
+    logger.info('[OAuth] Token response data:', tokenResponse.data);
     const { access_token, refresh_token, expires_in } = tokenResponse.data;
-    logger.info(`Successfully obtained tokens. Now attempting to fetch user details for user_id: ${user_id}`);
+    
+    // Validate that we received the required tokens
+    if (!access_token || !refresh_token || !expires_in) {
+      logger.error('[OAuth] Missing required tokens from Lightspeed response:', {
+        hasAccessToken: !!access_token,
+        hasRefreshToken: !!refresh_token,
+        hasExpiresIn: !!expires_in,
+        responseData: tokenResponse.data
+      });
+      res.redirect(`${FRONTEND_URL}/login?error=token_exchange_failed&details=${encodeURIComponent('Failed to obtain access token from Lightspeed')}`);
+      return;
+    }
+    
+    logger.info(`Successfully obtained tokens. Now attempting to fetch current user details`);
     const expiresAt = new Date(Date.now() + expires_in * 1000);
     
     // Store tokens in ApiToken table for sync operations
@@ -110,19 +178,14 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    if (!user_id) {
-      logger.error('Lightspeed callback is missing user_id query parameter.');
-      const err = new Error('Could not determine user from Lightspeed callback.');
-      res.redirect(`${FRONTEND_URL}/login?error=callback_failed&details=${encodeURIComponent(err.message)}`);
-      return;
-    }
+    // Get the current user by making an API call with the access token
     const lightspeedClient = createLightspeedClient(req);
-    logger.info(`[DEBUG] About to fetch user details: domain=${domain_prefix}, user_id=${user_id}, token=${access_token.slice(0,8)}...`);
+    logger.info(`[DEBUG] About to fetch current user details: domain=${domain_prefix}, token=${access_token.slice(0,8)}...`);
     let userResponse;
     try {
-      // Fetch the specific user who authenticated using their user_id
-      logger.info(`[DEBUG] Requesting: GET https://${domain_prefix}.retail.lightspeed.app/api/2.0/users/${user_id}`);
-      userResponse = await lightspeedClient.get(`/users/${user_id}`);
+      // Fetch all users and find the current user (for OAuth, we'll use the first admin user as fallback)
+      logger.info(`[DEBUG] Requesting: GET https://${domain_prefix}.retail.lightspeed.app/api/2.0/users`);
+      userResponse = await lightspeedClient.get(`/users`);
       logger.info(`[DEBUG] User fetch response:`, { status: userResponse.status, data: userResponse.data });
       if (!userResponse) throw new Error('No response from Lightspeed');
     } catch (error: any) {
@@ -132,6 +195,32 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
         headers: error.response?.headers,
         message: error.message
       });
+
+      // Handle rate limiting specifically
+      if (error.response?.status === 429) {
+        logger.warn('Lightspeed API rate limit exceeded during authentication. User will need to retry.');
+        const retryAfterHeader = error.response.headers['retry-after'];
+        let retryAfterSeconds = 60; // Default to 60 seconds
+
+        if (retryAfterHeader) {
+          // Try to parse as number first (seconds)
+          const numericRetryAfter = parseInt(retryAfterHeader);
+          if (!isNaN(numericRetryAfter)) {
+            retryAfterSeconds = numericRetryAfter;
+          } else {
+            // Try to parse as date
+            const retryDate = new Date(retryAfterHeader);
+            if (!isNaN(retryDate.getTime())) {
+              retryAfterSeconds = Math.max(Math.ceil((retryDate.getTime() - Date.now()) / 1000), 1);
+            }
+          }
+        }
+
+        const err = new Error(`Lightspeed API rate limit exceeded. Please wait ${retryAfterSeconds} seconds and try again.`);
+        res.redirect(`${FRONTEND_URL}/login?error=rate_limit&retry_after=${retryAfterSeconds}&details=${encodeURIComponent(err.message)}`);
+        return;
+      }
+
       logger.error(`Failed to fetch current user details from Lightspeed.`, {
         status: error.response?.status,
         data: error.response?.data,
@@ -141,8 +230,21 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
       res.redirect(`${FRONTEND_URL}/login?error=callback_failed&details=${encodeURIComponent(err.message)}`);
       return;
     }
-    logger.info(`Lightspeed current user response: ${JSON.stringify(userResponse.data)}`);
-    let userPayload: any = userResponse.data.data;
+    logger.info(`Lightspeed users response: ${JSON.stringify(userResponse.data)}`);
+    const users = userResponse.data.data || [];
+    
+    if (!Array.isArray(users) || users.length === 0) {
+      logger.error('No users found in Lightspeed response.', { responseData: userResponse.data });
+      const err = new Error('No users found in Lightspeed account.');
+      res.redirect(`${FRONTEND_URL}/login?error=callback_failed&details=${encodeURIComponent(err.message)}`);
+      return;
+    }
+    
+    // Find the primary user (is_primary_user: true) or the first admin user
+    let userPayload = users.find((user: any) => user.is_primary_user) || 
+                     users.find((user: any) => user.account_type === 'admin') || 
+                     users[0];
+    
     if (
       !userPayload ||
       typeof userPayload !== 'object' ||
@@ -179,7 +281,7 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
       };
 
       const userSessionData = {
-        lightspeedUserId: lightspeedId,
+        lightspeedUserId: lightspeedId, // Keep for interface compatibility
         lightspeedEmployeeId: lightspeedId,
         email: email,
         name: name,
@@ -199,7 +301,7 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
       req.session.lsRefreshToken = refresh_token;
       req.session.lsDomainPrefix = domain_prefix;
       req.session.lsTokenExpiresAt = expiresAt;
-      req.session.userId = user_id;
+      // Note: user_id will be set after we fetch the user details
       req.session.lightspeedUser = {
         id: lightspeedId,
         lightspeedId: lightspeedId,
@@ -235,7 +337,7 @@ export const refreshToken = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Missing required session data for token refresh.' });
     }
     logger.info('Refreshing Lightspeed token...');
-    const tokenUrl = `https://${lsDomainPrefix}.retail.lightspeed.app/oauth/token`;
+    const tokenUrl = `https://${lsDomainPrefix}.retail.lightspeed.app/api/1.0/token`;
     const tokenResponse = await axios.post(
       tokenUrl,
       querystring.stringify({

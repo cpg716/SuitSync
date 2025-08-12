@@ -12,7 +12,7 @@ export default function UserSettings({ userId, adminView }: { userId?: number, a
   const { user: currentUser, loading: authLoading, refreshUser } = useAuth();
   const { success, error: toastError } = useToast();
   const [user, setUser] = useState<any>(null);
-  const [form, setForm] = useState({ name: '', email: '' });
+  const [form, setForm] = useState<{ name: string; email: string; role?: string; photoUrl?: string; commissionRate?: number; canLoginToSuitSync?: boolean; isActive?: boolean }>({ name: '', email: '' });
   const [notifs, setNotifs] = useState({ sms: true, email: true, push: true });
   const [availability, setAvailability] = useState('');
   const [commissionRate, setCommissionRate] = useState('');
@@ -30,6 +30,10 @@ export default function UserSettings({ userId, adminView }: { userId?: number, a
   const [scheduleLoading, setScheduleLoading] = useState(false);
   const [conflicts, setConflicts] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  // Activity (change history)
+  const [activity, setActivity] = useState<any[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
 
   // PIN management state (for admin view)
   const [pinInfo, setPinInfo] = useState<any>(null);
@@ -56,7 +60,15 @@ export default function UserSettings({ userId, adminView }: { userId?: number, a
       if (res.ok) {
         const data = await res.json();
         setUser(data);
-        setForm({ name: data.name || '', email: data.email || '' });
+        setForm({
+          name: data.name || '',
+          email: data.email || '',
+          role: data.role,
+          photoUrl: data.photoUrl,
+          commissionRate: data.commissionRate,
+          canLoginToSuitSync: data.canLoginToSuitSync,
+          isActive: data.isActive,
+        });
         setNotifs(data.notificationPrefs || { sms: true, email: true, push: true });
         setAvailability(data.availability || '');
         setCommissionRate(data.commissionRate || '');
@@ -80,6 +92,18 @@ export default function UserSettings({ userId, adminView }: { userId?: number, a
       }).then(r => r.json()).then(setAllSkills);
     }
   }, [userId, adminView, currentUser]);
+
+  // Fetch change history (audit log) for the viewed user
+  useEffect(() => {
+    const id = (adminView && userId) ? userId : currentUser?.id;
+    if (!id) return;
+    setActivityLoading(true);
+    fetch(`/api/users/${id}/activity`, { credentials: 'include' })
+      .then(async r => (r.ok ? r.json() : []))
+      .then(list => setActivity(Array.isArray(list) ? list : []))
+      .catch(() => setActivity([]))
+      .finally(() => setActivityLoading(false));
+  }, [adminView, userId, currentUser]);
 
   // Fetch schedule
   useEffect(() => {
@@ -347,6 +371,39 @@ export default function UserSettings({ userId, adminView }: { userId?: number, a
           <Input id="name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required />
           <label htmlFor="email">Email</label>
           <Input id="email" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required />
+          {adminView && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="role" className="block text-sm font-medium mb-1">Role</label>
+                <select id="role" value={form.role || user.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} className="border rounded px-3 py-2 w-full">
+                  <option value="user">User</option>
+                  <option value="tailor">Tailor</option>
+                  <option value="sales">Sales</option>
+                  <option value="associate">Associate</option>
+                  <option value="manager">Manager</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="photoUrl" className="block text-sm font-medium mb-1">Photo URL</label>
+                <Input id="photoUrl" value={form.photoUrl || ''} onChange={e => setForm(f => ({ ...f, photoUrl: e.target.value }))} placeholder="https://..." />
+              </div>
+              <div>
+                <label htmlFor="commissionRate" className="block text-sm font-medium mb-1">Commission Rate</label>
+                <Input id="commissionRate" type="number" min={0} max={1} step={0.01} value={String(form.commissionRate ?? commissionRate)} onChange={e => setForm(f => ({ ...f, commissionRate: Number(e.target.value) }))} />
+              </div>
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked={!!form.canLoginToSuitSync} onChange={e => setForm(f => ({ ...f, canLoginToSuitSync: e.target.checked }))} />
+                  <span>Can Login to SuitSync</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked={!!form.isActive} onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))} />
+                  <span>Active</span>
+                </label>
+              </div>
+            </div>
+          )}
           <Button type="submit" className="w-full bg-primary text-white" disabled={saving}>{saving ? 'Saving...' : 'Save Changes'}</Button>
         </form>
         {/* Notification Preferences */}
@@ -405,6 +462,49 @@ export default function UserSettings({ userId, adminView }: { userId?: number, a
             </div>
             <Button className="mt-2 bg-primary text-white" type="submit" disabled={skillsSaving}>{skillsSaving ? 'Saving...' : 'Save Skills'}</Button>
           </form>
+        )}
+
+        {/* Change History (Admin view) */}
+        {adminView && (
+          <Card className="w-full p-6 mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">Change History</h3>
+              {activityLoading && <span className="text-sm text-gray-500">Loading…</span>}
+            </div>
+            {activity.length === 0 && !activityLoading ? (
+              <div className="text-sm text-gray-500">No recent activity</div>
+            ) : (
+              <div className="space-y-3">
+                {activity.map((ev: any) => {
+                  let details: any = ev.details;
+                  try { details = typeof details === 'string' ? JSON.parse(details) : details; } catch {}
+                  const changePairs = details?.changes ? Object.entries(details.changes as Record<string, any>) : [];
+                  return (
+                    <div key={ev.id} className="border rounded-lg p-3 bg-gray-50 dark:bg-gray-800">
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-medium capitalize">{ev.action} {ev.entity}#{ev.entityId}</div>
+                        <div className="text-xs text-gray-500">{new Date(ev.createdAt).toLocaleString()}</div>
+                      </div>
+                      {changePairs.length > 0 ? (
+                        <div className="mt-2 text-sm">
+                          {changePairs.map(([field, { from, to }]: any) => (
+                            <div key={field} className="flex flex-wrap gap-2">
+                              <span className="font-semibold">{field}:</span>
+                              <span className="line-through text-gray-500 break-all">{String(from)}</span>
+                              <span>→</span>
+                              <span className="break-all">{String(to)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : details ? (
+                        <pre className="mt-2 text-xs whitespace-pre-wrap break-words bg-white/60 dark:bg-gray-900/60 p-2 rounded">{JSON.stringify(details, null, 2)}</pre>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
         )}
 
         {/* PIN Management (admin view only) */}

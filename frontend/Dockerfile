@@ -1,5 +1,5 @@
 # Stage 1: Development
-FROM node:20-alpine AS development
+FROM node:18-alpine AS development
 WORKDIR /app
 
 # Install curl for health checks
@@ -20,8 +20,12 @@ EXPOSE 3000
 CMD ["npm", "run", "dev"]
 
 # Stage 2: Build
-FROM node:20-alpine AS build
+FROM node:18-alpine AS build
 WORKDIR /app
+
+# Set build-time environment variables
+ENV NEXT_PUBLIC_BACKEND_URL=http://backend:3000
+ENV BACKEND_URL=http://backend:3000
 
 # Copy package files and install dependencies
 COPY package.json package-lock.json ./
@@ -32,7 +36,7 @@ COPY . .
 RUN npm run build
 
 # Stage 3: Production
-FROM node:20-alpine AS production
+FROM node:18-alpine AS production
 WORKDIR /app
 ENV NODE_ENV=production
 

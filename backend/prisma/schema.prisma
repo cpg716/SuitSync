@@ -99,6 +99,7 @@ model User {
   assignedAlterationTasks AlterationTask[]    @relation("TaskAssignedUser")
   assignmentLogs       AssignmentLog[]
   userSchedules        UserSchedule[]
+  scheduleExceptions   ScheduleException[]
   userSessions         UserSession[]       @relation("UserSessions")
   parties              Party[]             @relation("PartySalesPerson")
   notifications        NotificationHistory[] @relation("UserNotifications")
@@ -119,6 +120,13 @@ model User {
   pinLockedUntil       DateTime?
   lastPinUse           DateTime?
 
+  // User authentication and access control
+  canLoginToSuitSync   Boolean             @default(true)  // Whether user can login to SuitSync
+  isActive             Boolean             @default(true)  // Whether user account is active
+
+  // Tailor selection sessions (for QR workflows)
+  tailorSelectionSessions TailorSelectionSession[]
+
   @@index([email])
   @@index([role])
   @@index([lightspeedEmployeeId])
@@ -126,6 +134,8 @@ model User {
   @@index([name])
   @@index([pinHash])
   @@index([pinLockedUntil])
+  @@index([canLoginToSuitSync])
+  @@index([isActive])
 }
 
 model UserSchedule {
@@ -138,6 +148,32 @@ model UserSchedule {
   updatedAt    DateTime  @updatedAt
 
   @@unique([userId, weekStart])
+}
+
+// One-off blackout dates or custom blocks for a specific date.
+model ScheduleException {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id])
+  date      DateTime
+  isOff     Boolean  @default(false)
+  blocks    Json?    // override blocks for the day: same shape as in UserSchedule.days[day].blocks
+  reason    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, date])
+  @@unique([userId, date])
+}
+
+// Global holiday/blackout days
+model GlobalHoliday {
+  id        Int      @id @default(autoincrement())
+  date      DateTime @unique
+  name      String?
+  isClosed  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // DEPRECATED: Use UserSchedule instead
@@ -361,17 +397,16 @@ enum WorkflowStepType {
 }
 
 model QRScanLog {
-  id        Int               @id @default(autoincrement())
+  id        Int       @id @default(autoincrement())
   qrCode    String
-  partId    Int?
-  part      AlterationJobPart? @relation("PartScanLogs", fields: [partId], references: [id])
-  scannedBy Int
-  user      User              @relation("QRScanUser", fields: [scannedBy], references: [id])
+  partId    Int
+  scannedBy Int?
+  user      User?     @relation("QRScanUser", fields: [scannedBy], references: [id])
   scanType  QRScanType
-  location  String?           // Optional location/device info
-  timestamp DateTime          @default(now())
-  metadata  Json?             // Additional scan data
-  result    String?           // Success/error message
+  location  String?
+  result    String
+  timestamp DateTime  @default(now())
+  part      AlterationJobPart @relation("PartScanLogs", fields: [partId], references: [id])
 
   @@index([qrCode])
   @@index([partId])
@@ -382,9 +417,23 @@ model QRScanLog {
 enum QRScanType {
   START_WORK
   FINISH_WORK
-  PICKUP
   STATUS_CHECK
-  QUALITY_CHECK
+}
+
+// Track tailor selection persistence for QR workflows
+model TailorSelectionSession {
+  id              Int      @id @default(autoincrement())
+  sessionId       String   @unique  // Browser session ID or device identifier
+  selectedTailorId Int
+  selectedTailor  User     @relation(fields: [selectedTailorId], references: [id])
+  lastUsed        DateTime @default(now())
+  deviceInfo      Json?    // Store device/browser info for persistence
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([sessionId])
+  @@index([selectedTailorId])
+  @@index([lastUsed])
 }
 
 model Appointment {
@@ -565,6 +614,27 @@ model Settings {
   pickupReadySms     String  @default("Your garment for {partyName} is ready for pickup at {shopName}!")
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+
+  // Online booking settings
+  onlineBookingEnabled           Boolean  @default(false)
+  onlineBookingAllowedTypes      String?  // CSV of AppointmentType values
+  onlineBookingAdvanceDays       Int?     // How many days ahead can be booked
+  onlineBookingIframeAllowedOrigins String? // CSV of allowed iframe parent origins
+  onlineBookingTimezone          String?  // e.g., America/New_York
+  onlineBookingMinNoticeMinutes  Int?     // Minimum minutes from now for booking
+  onlineBookingMaxPerDay         Int?     // Max bookings per day (all-tailors)
+  onlineBookingRequirePhone      Boolean  @default(false)
+
+  // Public booking page branding & business info
+  bookingBusinessName            String?
+  bookingBusinessSubtitle        String?
+  bookingBusinessAddress         String?
+  bookingBusinessPhone           String?
+  bookingBusinessEmail           String?
+  bookingLogoUrl                 String?
+  bookingPrimaryColor            String?
+  bookingWelcomeMessage          String?
+  bookingSuccessMessage          String?
 }
 
 model NotificationSchedule {
@@ -807,35 +877,23 @@ model AssignmentLog {
 }
 
 model UserSession {
-  id                    String   @id @default(cuid())
-  lightspeedUserId      String   @unique // Lightspeed user ID for persistent sessions
-  lightspeedEmployeeId  String   // Lightspeed employee ID
-  email                 String
-  name                  String
-  role                  String
-  photoUrl              String?
-  lastActiveAt          DateTime @default(now())
-  isActive              Boolean  @default(true)
-  deviceInfo            String?  // JSON string with device information
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-
-  // Legacy fields for backward compatibility
-  userId                Int?     // Optional link to local User
-  user                  User?    @relation("UserSessions", fields: [userId], references: [id], onDelete: SetNull)
-  browserSessionId      String?  // Optional for browser sessions
-  lsAccessToken         String?  @db.Text
-  lsRefreshToken        String?  @db.Text
-  lsDomainPrefix        String?
-  expiresAt             DateTime?
+  id              String   @id @default(cuid())
+  userId          Int
+  user            User     @relation("UserSessions", fields: [userId], references: [id], onDelete: Cascade)
+  browserSessionId String  // Links to express session ID
+  lsAccessToken   String   @db.Text
+  lsRefreshToken  String   @db.Text
+  lsDomainPrefix  String
+  expiresAt       DateTime
+  lastActive      DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@unique([userId, browserSessionId])
   @@index([browserSessionId])
   @@index([userId])
-  @@index([lightspeedUserId])
-  @@index([isActive])
-  @@index([lastActiveAt])
   @@index([expiresAt])
+  @@index([lastActive])
 }
 
 model Session {

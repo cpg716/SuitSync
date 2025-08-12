@@ -1,17 +1,28 @@
 import { useState } from 'react';
 import { useRouter } from 'next/router';
 import useSWR from 'swr';
-import { Card } from '@/components/ui/Card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '../../components/ToastContext';
 import { useAuth } from '../../src/AuthContext';
-import { MagnifyingGlass, Plus, Users } from '@phosphor-icons/react';
 import { simpleFetcher } from '@/lib/simpleApiClient';
 import { api } from '@/lib/apiClient';
 import { ResourceSyncStatus } from '@/components/ResourceSyncStatus';
-import { CheckCircle, XCircle, Loader2, AlertTriangle } from 'lucide-react';
+import { 
+  CheckCircle, 
+  XCircle, 
+  Loader2, 
+  AlertTriangle, 
+  Search, 
+  Plus, 
+  Users, 
+  TrendingUp, 
+  Clock, 
+  PieChart 
+} from 'lucide-react';
+import { UserAvatar } from '../../components/ui/UserAvatar';
 
 interface Customer {
   id: number;
@@ -59,6 +70,16 @@ export default function CustomersPage() {
 
   const customers = data?.customers || [];
   const pagination = data?.pagination;
+
+  // Summary data for hero section
+  const summary = {
+    totalCustomers: pagination?.total || 0,
+    customersWithParties: customers.filter(c => c.parties && c.parties.length > 0).length,
+    customersWithMeasurements: customers.filter(c => c.measurements).length,
+    activeCustomers: customers.filter(c => c.parties && c.parties.length > 0).length,
+  };
+
+
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -140,7 +161,68 @@ export default function CustomersPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="w-full space-y-8">
+      {/* Hero Header */}
+      <div className="relative bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-600 rounded-xl shadow-lg p-8 flex flex-col md:flex-row items-center gap-6 animate-fade-in">
+        <div className="flex-1">
+          <h1 className="text-4xl font-extrabold text-white mb-2 drop-shadow-lg">Customer Management</h1>
+          <p className="text-lg text-blue-100 mb-4">Manage all your customers and their information.</p>
+          <div className="flex items-center gap-3">
+            <UserAvatar user={user} size="lg" showName />
+          </div>
+        </div>
+        <div className="flex flex-col items-center gap-2">
+          <div className="w-24 h-24 bg-white/20 rounded-full flex items-center justify-center">
+            <PieChart className="w-12 h-12 text-white" />
+          </div>
+          <span className="text-white text-sm font-semibold">{summary.customersWithParties} / {summary.totalCustomers} Active</span>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="bg-blue-50 dark:bg-blue-900/30 shadow-md hover:scale-105 transition-transform">
+          <CardHeader className="flex flex-row items-center gap-2">
+            <Users className="w-6 h-6 text-blue-600" />
+            <CardTitle>Total Customers</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-blue-700 dark:text-blue-200 animate-countup">{summary.totalCustomers}</div>
+            <div className="text-sm text-blue-500">registered</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-green-50 dark:bg-green-900/30 shadow-md hover:scale-105 transition-transform">
+          <CardHeader className="flex flex-row items-center gap-2">
+            <CheckCircle className="w-6 h-6 text-green-600" />
+            <CardTitle>With Parties</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-green-700 dark:text-green-200 animate-countup">{summary.customersWithParties}</div>
+            <div className="text-sm text-green-500">have events</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-purple-50 dark:bg-purple-900/30 shadow-md hover:scale-105 transition-transform">
+          <CardHeader className="flex flex-row items-center gap-2">
+            <TrendingUp className="w-6 h-6 text-purple-600" />
+            <CardTitle>With Measurements</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-purple-700 dark:text-purple-200 animate-countup">{summary.customersWithMeasurements}</div>
+            <div className="text-sm text-purple-500">measured</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-indigo-50 dark:bg-indigo-900/30 shadow-md hover:scale-105 transition-transform">
+          <CardHeader className="flex flex-row items-center gap-2">
+            <Clock className="w-6 h-6 text-indigo-600" />
+            <CardTitle>Active</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-indigo-700 dark:text-indigo-200 animate-countup">{summary.activeCustomers}</div>
+            <div className="text-sm text-indigo-500">recent activity</div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Streamlined Action Bar - All in One Row */}
       <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-start sm:items-center">
         {/* Search Section */}
@@ -153,7 +235,7 @@ export default function CustomersPage() {
               onChange={(e) => setSearch(e.target.value)}
               className="pl-10 w-full h-10 sm:h-11 text-sm sm:text-base"
             />
-            <MagnifyingGlass size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           </div>
           <Button type="submit" className="flex-shrink-0 px-4 sm:px-6 min-h-[44px] sm:min-h-[40px] text-sm sm:text-base touch-manipulation">
             Search

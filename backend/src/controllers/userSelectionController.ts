@@ -21,16 +21,24 @@ export class UserSelectionController {
     try {
       const activeSessions = await PersistentUserSessionService.getActiveSessions();
       
-      // Format for frontend display
-      const users = activeSessions.map(session => ({
-        id: session.lightspeedUserId,
-        name: session.name,
-        email: session.email,
-        role: session.role,
-        photoUrl: session.photoUrl,
-        lastActiveAt: session.lastActiveAt,
-        deviceInfo: session.deviceInfo
-      }));
+      // Get user details for each session
+      const users = await Promise.all(
+        activeSessions.map(async (session) => {
+          const user = await prisma.user.findUnique({
+            where: { id: session.userId }
+          });
+          
+          return {
+            id: session.userId,
+            name: user?.name || 'Unknown User',
+            email: user?.email || '',
+            role: user?.role || '',
+            photoUrl: user?.photoUrl || null,
+            lastActiveAt: session.lastActive,
+            deviceInfo: null // Not stored in simple schema
+          };
+        })
+      );
 
       res.json({
         success: true,
@@ -51,19 +59,19 @@ export class UserSelectionController {
    */
   static async selectUser(req: Request, res: Response): Promise<void> {
     try {
-      const { lightspeedUserId } = req.body;
+      const { userId } = req.body;
 
-      if (!lightspeedUserId) {
+      if (!userId) {
         res.status(400).json({
           success: false,
-          error: 'lightspeedUserId is required'
+          error: 'userId is required'
         });
         return;
       }
 
       // Get the user session
-      const userSession = await PersistentUserSessionService.getActiveSession(lightspeedUserId);
-      
+      const userSession = await PersistentUserSessionService.getActiveSession(userId);
+
       if (!userSession) {
         res.status(404).json({
           success: false,
@@ -72,17 +80,30 @@ export class UserSelectionController {
         return;
       }
 
+      // Get user details from the User table
+      const user = await prisma.user.findUnique({
+        where: { id: userId }
+      });
+
+      if (!user) {
+        res.status(404).json({
+          success: false,
+          error: 'User not found'
+        });
+        return;
+      }
+
       // Update session activity
-      await PersistentUserSessionService.updateActivity(lightspeedUserId);
+      await PersistentUserSessionService.updateActivity(userId);
 
       // Set the selected user in the current session
-      req.session.selectedUserId = lightspeedUserId;
+      req.session.selectedUserId = String(userId);
       req.session.selectedUser = {
-        id: userSession.lightspeedUserId,
-        name: userSession.name,
-        email: userSession.email,
-        role: userSession.role,
-        photoUrl: userSession.photoUrl
+        id: String(user.id),
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        photoUrl: user.photoUrl
       };
 
       // Log the user selection for audit
@@ -106,13 +127,13 @@ export class UserSelectionController {
       res.json({
         success: true,
         user: {
-          id: userSession.lightspeedUserId,
-          name: userSession.name,
-          email: userSession.email,
-          role: userSession.role,
-          photoUrl: userSession.photoUrl
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          photoUrl: user.photoUrl
         },
-        message: `Selected user: ${userSession.name}`
+        message: `Selected user: ${user.name}`
       });
 
     } catch (error) {
@@ -139,13 +160,30 @@ export class UserSelectionController {
         return;
       }
 
-      const userSession = await PersistentUserSessionService.getActiveSession(selectedUserId);
-      
+      const userSession = await PersistentUserSessionService.getActiveSession(parseInt(selectedUserId));
+
       if (!userSession) {
         // Clear invalid selection
         req.session.selectedUserId = undefined;
         req.session.selectedUser = undefined;
-        
+
+        res.json({
+          success: true,
+          selectedUser: null
+        });
+        return;
+      }
+
+      // Get user details from the User table
+      const user = await prisma.user.findUnique({
+        where: { id: userSession.userId }
+      });
+
+      if (!user) {
+        // Clear invalid selection
+        req.session.selectedUserId = undefined;
+        req.session.selectedUser = undefined;
+
         res.json({
           success: true,
           selectedUser: null
@@ -156,11 +194,11 @@ export class UserSelectionController {
       res.json({
         success: true,
         selectedUser: {
-          id: userSession.lightspeedUserId,
-          name: userSession.name,
-          email: userSession.email,
-          role: userSession.role,
-          photoUrl: userSession.photoUrl
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          photoUrl: user.photoUrl
         }
       });
 
@@ -222,20 +260,21 @@ export class UserSelectionController {
    */
   static async deactivateUser(req: Request, res: Response): Promise<void> {
     try {
-      const { lightspeedUserId } = req.params;
+      const { userId } = req.params;
 
-      if (!lightspeedUserId) {
+      if (!userId) {
         res.status(400).json({
           success: false,
-          error: 'lightspeedUserId is required'
+          error: 'userId is required'
         });
         return;
       }
 
-      await PersistentUserSessionService.deactivateSession(lightspeedUserId);
+      const userIdNum = parseInt(userId);
+      await PersistentUserSessionService.deactivateSession(userIdNum);
 
       // If this was the currently selected user, clear the selection
-      if (req.session.selectedUserId === lightspeedUserId) {
+      if (req.session.selectedUserId === userIdNum.toString()) {
         req.session.selectedUserId = undefined;
         req.session.selectedUser = undefined;
       }

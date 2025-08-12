@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useAuth } from '../src/AuthContext';
 import { Button } from '../components/ui/Button';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Skeleton } from '../components/ui/Skeleton';
 import { apiFetch } from '../lib/apiClient';
 
@@ -139,17 +140,20 @@ export default function SalesWorkspace() {
       <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Sales Leaderboard</h3>
         <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={pagedLeaderboard.map(row => ({ name: row.associate?.name, sales: row.totalSales }))}>
+          <BarChart data={pagedLeaderboard.map(row => ({ name: row.associate?.name, sales: row.totalSales, associate: row.associate }))}>
             <XAxis dataKey="name" stroke="#6b7280" className="dark:stroke-gray-400" />
             <YAxis stroke="#6b7280" className="dark:stroke-gray-400" />
-            <Tooltip 
-              contentStyle={{ 
-                backgroundColor: 'var(--color-background)', 
-                border: '1px solid var(--color-border)',
-                borderRadius: '8px'
-              }}
-              labelStyle={{ color: 'var(--color-foreground)' }}
-            />
+            <Tooltip content={({ payload }) => {
+              const p = Array.isArray(payload) && payload.length ? payload[0].payload : null;
+              return p ? (
+                <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md p-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    {p.associate ? <UserAvatar user={{ id: p.associate.id, name: p.associate.name }} size="xs" showName /> : <span>{p.name}</span>}
+                  </div>
+                  <div className="mt-1">Sales: ${p.sales}</div>
+                </div>
+              ) : null;
+            }} />
             <Bar dataKey="sales" fill="#0055A5" />
           </BarChart>
         </ResponsiveContainer>

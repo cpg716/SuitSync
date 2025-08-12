@@ -11,7 +11,7 @@ import { lightspeedCustomFieldsService } from '../services/lightspeedCustomField
 import { Route, Get, Post, Body, Path, SuccessResponse, Tags, Controller } from 'tsoa';
 import { sendAppointmentConfirmationNotification } from '../services/staffNotificationService';
 import { sendCancellationNotificationToStaff } from '../services/staffNotificationService';
-import { logChange } from '../services/AuditLogService';
+import AuditLogService, { logChange } from '../services/AuditLogService';
 
 const prisma = new PrismaClient().$extends(withAccelerate());
 
@@ -57,7 +57,7 @@ const syncAppointmentsToLightspeed = async (req: any, partyId: number) => {
       notes: appt.notes,
     }));
     await setCustomFieldValue(req.session, {
-      customFieldId: appointmentsField.id,
+      customFieldId: String(appointmentsField.id),
       resourceId: lightspeedCustomerId,
       value: JSON.stringify(payload),
     });
@@ -158,6 +158,38 @@ export const createAppointment = async (req: Request, res: Response): Promise<vo
       appointmentData.autoScheduleNext = autoScheduleNext;
     }
 
+    // Basic conflict checks: customer/member and tailor overlapping
+    const conflictChecks: Promise<any>[] = [];
+    if (tailorId) {
+      conflictChecks.push(prisma.appointment.findFirst({
+        where: {
+          tailorId,
+          dateTime: {
+            gte: new Date(new Date(dateTime).getTime() - (durationMinutes || 60) * 60000),
+            lte: new Date(new Date(dateTime).getTime() + (durationMinutes || 60) * 60000),
+          },
+          status: { in: ['scheduled', 'confirmed', 'in_progress'] as any },
+        },
+      }));
+    }
+    if (memberId) {
+      conflictChecks.push(prisma.appointment.findFirst({
+        where: {
+          memberId,
+          dateTime: {
+            gte: new Date(new Date(dateTime).getTime() - (durationMinutes || 60) * 60000),
+            lte: new Date(new Date(dateTime).getTime() + (durationMinutes || 60) * 60000),
+          },
+          status: { in: ['scheduled', 'confirmed', 'in_progress'] as any },
+        },
+      }));
+    }
+    const conflicts = await Promise.all(conflictChecks);
+    if (conflicts.some(Boolean)) {
+      res.status(409).json({ error: 'Scheduling conflict detected' });
+      return;
+    }
+
     const appointment = await prisma.appointment.create({
       data: appointmentData,
       include: {
@@ -245,6 +277,46 @@ export const updateAppointment = async (req: Request, res: Response): Promise<vo
     if (!currentAppointment) {
       res.status(404).json({ error: 'Appointment not found' });
       return;
+    }
+
+    // Conflict check for updated time/tailor/member
+    if (dateTime || tailorId || memberId) {
+      const newStart = dateTime ? new Date(dateTime) : currentAppointment.dateTime;
+      const duration = (typeof durationMinutes === 'number' ? durationMinutes : currentAppointment.durationMinutes) || 60;
+      const checks: Promise<any>[] = [];
+      const newTailorId = typeof tailorId === 'number' ? tailorId : currentAppointment.tailorId;
+      const newMemberId = typeof memberId === 'number' ? memberId : currentAppointment.memberId;
+      if (newTailorId) {
+        checks.push(prisma.appointment.findFirst({
+          where: {
+            id: { not: appointmentId },
+            tailorId: newTailorId,
+            dateTime: {
+              gte: new Date(newStart.getTime() - duration * 60000),
+              lte: new Date(newStart.getTime() + duration * 60000),
+            },
+            status: { in: ['scheduled', 'confirmed', 'in_progress'] as any },
+          },
+        }));
+      }
+      if (newMemberId) {
+        checks.push(prisma.appointment.findFirst({
+          where: {
+            id: { not: appointmentId },
+            memberId: newMemberId,
+            dateTime: {
+              gte: new Date(newStart.getTime() - duration * 60000),
+              lte: new Date(newStart.getTime() + duration * 60000),
+            },
+            status: { in: ['scheduled', 'confirmed', 'in_progress'] as any },
+          },
+        }));
+      }
+      const found = await Promise.all(checks);
+      if (found.some(Boolean)) {
+        res.status(409).json({ error: 'Scheduling conflict detected' });
+        return;
+      }
     }
 
     const updatedAppointment = await prisma.appointment.update({
@@ -506,6 +578,7 @@ export const scheduleNextAppointmentController = async (req: Request, res: Respo
 /**
  * Reschedule an appointment
  */
+// Public endpoint: reschedule using signed JWT token
 export const rescheduleAppointment = async (req: Request, res: Response): Promise<void> => {
   try {
     const { appointmentId, token, newDateTime, newDurationMinutes, notes } = req.body;
@@ -515,9 +588,20 @@ export const rescheduleAppointment = async (req: Request, res: Response): Promis
       return;
     }
 
-    // Verify token (in production, use proper JWT validation)
-    const expectedToken = Buffer.from(`${appointmentId}-${Date.now()}`).toString('base64');
-    if (token !== expectedToken) {
+    // Verify token (JWT signed link)
+    const jwt = require('jsonwebtoken');
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      res.status(500).json({ error: 'JWT secret not configured' });
+      return;
+    }
+    try {
+      const payload = jwt.verify(token, secret) as any;
+      if (!payload || String(payload.appointmentId) !== String(appointmentId) || payload.action !== 'reschedule') {
+        res.status(401).json({ error: 'Invalid or expired token' });
+        return;
+      }
+    } catch (e) {
       res.status(401).json({ error: 'Invalid or expired token' });
       return;
     }
@@ -582,6 +666,7 @@ export const rescheduleAppointment = async (req: Request, res: Response): Promis
 /**
  * Cancel an appointment
  */
+// Public endpoint: cancel using signed JWT token
 export const cancelAppointment = async (req: Request, res: Response): Promise<void> => {
   try {
     const { appointmentId, token, reason } = req.body;
@@ -591,9 +676,20 @@ export const cancelAppointment = async (req: Request, res: Response): Promise<vo
       return;
     }
 
-    // Verify token (in production, use proper JWT validation)
-    const expectedToken = Buffer.from(`${appointmentId}-${Date.now()}`).toString('base64');
-    if (token !== expectedToken) {
+    // Verify JWT token
+    const jwt = require('jsonwebtoken');
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      res.status(500).json({ error: 'JWT secret not configured' });
+      return;
+    }
+    try {
+      const payload = jwt.verify(token, secret) as any;
+      if (!payload || String(payload.appointmentId) !== String(appointmentId) || payload.action !== 'cancel') {
+        res.status(401).json({ error: 'Invalid or expired token' });
+        return;
+      }
+    } catch (e) {
       res.status(401).json({ error: 'Invalid or expired token' });
       return;
     }

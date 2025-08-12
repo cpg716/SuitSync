@@ -7,8 +7,8 @@
   },
   "scripts": {
     "prisma:gen": "prisma generate",
-    "tsoa:routes": "tsoa routes",
-    "tsoa:spec": "tsoa spec",
+    "tsoa:routes": "npx tsoa routes",
+    "tsoa:spec": "npx tsoa spec",
     "build": "npm run prisma:gen && npm run tsoa:routes && npm run tsoa:spec && tsc",
     "seed": "node dist/seed.js",
     "start": "node dist/index.js",

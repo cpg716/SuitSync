@@ -144,7 +144,7 @@ curl -f http://localhost:3001
 - **NODE_ENV:** Production (in container)
 - **Database URL:** `postgresql://suitsync_user:supersecret@db:5432/suitsync`
 - **Redis URL:** `redis://redis:6379`
-- **CORS Origin:** `http://localhost:3001`
+- **Frontend URL / CORS Origin:** `http://localhost:3001`
 
 ### Frontend Environment
 - **NEXT_PUBLIC_BACKEND_URL:** `http://backend:3000`

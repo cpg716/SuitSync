@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { withAccelerate } from '@prisma/extension-accelerate';
-import { syncCustomers, syncSales, syncUsers, syncGroups } from '../services/syncService';
+import { syncCustomers, syncCustomerGroups, syncSales, syncUsers, syncGroups } from '../services/syncService';
 import logger from '../utils/logger';
 import { createLightspeedClient } from '../lightspeedClient';
 
@@ -33,9 +33,10 @@ export const triggerSync = async (req: Request, res: Response) => {
     time: new Date().toISOString()
   });
   const { resource } = req.params;
-  const userId = (req as any).user.id;
+  const userId = (req as any).user?.id || 'system';
   const syncFunctions: Record<string, (req: Request) => Promise<void>> = {
     customers: syncCustomers,
+    customer_groups: syncCustomerGroups,
     sales: syncSales,
     users: syncUsers,
     groups: syncGroups,
@@ -105,6 +106,73 @@ export const previewCustomerSync = async (req: Request, res: Response) => {
   } catch (error: any) {
     logger.error('Failed to preview customer sync:', error);
     res.status(500).json({ message: 'Failed to preview customer sync', error: error.message });
+  }
+};
+
+export const syncUserPhotos = async (req: Request, res: Response) => {
+  try {
+    logger.info('[SyncController] Starting user photo sync from Lightspeed');
+
+    const lightspeedClient = createLightspeedClient(req);
+    
+    // Fetch all users from Lightspeed
+    const lightspeedUsers = await lightspeedClient.get('/users');
+    
+    if (!lightspeedUsers.data || !lightspeedUsers.data.data) {
+      throw new Error('Failed to fetch users from Lightspeed');
+    }
+
+    let updatedCount = 0;
+    let errorCount = 0;
+    const errors: string[] = [];
+
+    // Update each user's photo URL
+    for (const lsUser of lightspeedUsers.data.data) {
+      try {
+        const photoUrl = lsUser.image_source || null;
+        const lightspeedId = lsUser.id.toString();
+
+        // Find and update the user in our database
+        const updatedUser = await prisma.user.updateMany({
+          where: {
+            lightspeedEmployeeId: lightspeedId
+          },
+          data: {
+            photoUrl: photoUrl
+          }
+        });
+
+        if (updatedUser.count > 0) {
+          updatedCount++;
+          logger.debug(`[SyncController] Updated photo for user ${lsUser.display_name} (${lightspeedId})`);
+        }
+      } catch (error: any) {
+        errorCount++;
+        const errorMsg = `Failed to update photo for user ${lsUser.display_name}: ${error.message}`;
+        errors.push(errorMsg);
+        logger.error(`[SyncController] ${errorMsg}`);
+      }
+    }
+
+    const result = {
+      success: true,
+      message: 'User photo sync completed',
+      updatedCount,
+      errorCount,
+      errors,
+      timestamp: new Date().toISOString()
+    };
+
+    logger.info(`[SyncController] User photo sync completed: ${updatedCount} updated, ${errorCount} errors`);
+    res.json(result);
+
+  } catch (error: any) {
+    logger.error('[SyncController] Error during user photo sync:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to sync user photos',
+      details: error.message
+    });
   }
 };
 

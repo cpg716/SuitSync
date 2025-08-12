@@ -47,16 +47,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLightspeedConnected, setIsLightspeedConnected] = useState(false);
   const { success: toastSuccess, error: toastError } = useToast();
 
-  const fetcher = (url: string): Promise<User | null> => Promise.resolve(api.get(url)).then(res => res.data as User | null);
+  const fetcher = async (url: string): Promise<User | null> => {
+    try {
+      const res = await api.get(url);
+      return res.data as User | null;
+    } catch (err: any) {
+      // 401 is expected when not authenticated, return null instead of throwing
+      if (err?.response?.status === 401) {
+        return null;
+      }
+      // Re-throw other errors
+      throw err;
+    }
+  };
+
+  // Check for URL parameters that might indicate user authentication
+  const getUrlUserInfo = () => {
+    if (typeof window === 'undefined') return null;
+    
+    const urlParams = new URLSearchParams(window.location.search);
+    const authStatus = urlParams.get('auth');
+    const userName = urlParams.get('user');
+    
+    if (authStatus === 'success' && userName) {
+      // Try to find user by name in the users list
+      return { name: decodeURIComponent(userName) };
+    }
+    
+    return null;
+  };
 
   const { data: user, mutate, isLoading } = useSWR<User | null>('/api/auth/session', fetcher, {
     shouldRetryOnError: false,
     refreshInterval: 0, // Don't auto-refresh session endpoint
     revalidateOnFocus: false,
-    onError: (err) => {
+    onError: async (err) => {
       if (err && typeof err === 'object' && 'response' in err && err.response && typeof err.response === 'object' && 'status' in err.response) {
         if (err.response.status === 401) {
-          // 401 is expected when not authenticated, clear any auth errors
+          // 401 is expected when not authenticated, but let's try to get user data from URL params
+          const urlUserInfo = getUrlUserInfo();
+          if (urlUserInfo) {
+            try {
+              // Try to find user by name in the users list
+              const usersResponse = await api.get('/api/users');
+              const responseData = usersResponse.data as any;
+              const allUsers = responseData?.users || responseData?.localUsers || [];
+              const matchingUser = allUsers.find((u: any) => u.name === urlUserInfo.name);
+              
+              if (matchingUser) {
+                // Update the user data with the found user
+                await mutate(matchingUser, false);
+                setAuthError(null);
+                return;
+              }
+            } catch (userErr) {
+              console.log('Could not fetch user data from URL params:', userErr);
+            }
+          }
           setAuthError(null);
         } else if (err.response.status >= 500) {
           setAuthError('Backend unavailable');
@@ -73,6 +120,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAuthError(null);
     }
   });
+
+  // If the session is missing a photoUrl but we have an email, try to enrich it
+  useEffect(() => {
+    const enrichPhoto = async () => {
+      if (!user || (user as any).photoUrl || !user.email) return;
+      try {
+        const res = await api.get('/api/auth/user-photo', { params: { email: user.email } });
+        const data = res.data as any;
+        if (data && data.photoUrl) {
+          await mutate({ ...(user as any), photoUrl: data.photoUrl } as any, false);
+        }
+      } catch {
+        // ignore
+      }
+    };
+    enrichPhoto();
+  }, [user?.email, (user as any)?.photoUrl]);
 
   const { data: syncStatus, mutate: mutateSyncStatus } = useSWR(
     user ? '/api/sync/status' : null, // Only fetch sync status if user is authenticated

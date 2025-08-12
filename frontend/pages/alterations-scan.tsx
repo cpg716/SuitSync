@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { TailorSelectionModal } from '../components/TailorSelectionModal';
 import { 
   QrCode, 
   User, 
@@ -16,6 +17,14 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/router';
 import { Skeleton } from '@/components/ui/Skeleton';
+
+interface Tailor {
+  id: number;
+  name: string;
+  email: string;
+  photoUrl?: string;
+  role: string;
+}
 
 interface AlterationJob {
   id: number;
@@ -58,6 +67,23 @@ export default function AlterationsScanPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState<'success' | 'error' | 'info'>('info');
+  
+  // Tailor selection state
+  const [selectedTailor, setSelectedTailor] = useState<Tailor | null>(null);
+  const [showTailorSelection, setShowTailorSelection] = useState(false);
+  const [sessionId, setSessionId] = useState('');
+
+  // Generate a unique session ID for this device/browser session
+  useEffect(() => {
+    const storedSessionId = localStorage.getItem('tailorSessionId');
+    if (storedSessionId) {
+      setSessionId(storedSessionId);
+    } else {
+      const newSessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      localStorage.setItem('tailorSessionId', newSessionId);
+      setSessionId(newSessionId);
+    }
+  }, []);
 
   // Auto-focus QR input on page load
   useEffect(() => {
@@ -67,9 +93,37 @@ export default function AlterationsScanPage() {
     }
   }, []);
 
+  const handleTailorSelected = (tailor: Tailor) => {
+    setSelectedTailor(tailor);
+    // Remember tailor for this device
+    try {
+      localStorage.setItem('tailorSelected', JSON.stringify({ id: tailor.id, name: tailor.name, email: tailor.email, photoUrl: tailor.photoUrl }));
+    } catch {}
+    setShowTailorSelection(false);
+  };
+
+  // Load remembered tailor on first load
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('tailorSelected');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.id && parsed.name) {
+          setSelectedTailor(parsed);
+        }
+      }
+    } catch {}
+  }, []);
+
   const handleQRSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!qrCode.trim()) return;
+
+    // Check if tailor is selected
+    if (!selectedTailor) {
+      setShowTailorSelection(true);
+      return;
+    }
 
     setScanning(true);
     setLoading(true);
@@ -82,7 +136,8 @@ export default function AlterationsScanPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           qrCode: qrCode.trim(),
-          action: 'status_check'
+          action: 'status_check',
+          tailorId: selectedTailor.id
         })
       });
 
@@ -106,6 +161,11 @@ export default function AlterationsScanPage() {
   };
 
   const handleStartWork = async (partId: number) => {
+    if (!selectedTailor) {
+      setShowTailorSelection(true);
+      return;
+    }
+
     setLoading(true);
     try {
       const response = await fetch('/api/alterations/scan', {
@@ -113,7 +173,8 @@ export default function AlterationsScanPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           qrCode: qrCode.trim(),
-          action: 'start'
+          action: 'start',
+          tailorId: selectedTailor.id
         })
       });
 
@@ -136,6 +197,11 @@ export default function AlterationsScanPage() {
   };
 
   const handleFinishWork = async (partId: number) => {
+    if (!selectedTailor) {
+      setShowTailorSelection(true);
+      return;
+    }
+
     setLoading(true);
     try {
       const response = await fetch('/api/alterations/scan', {
@@ -143,7 +209,8 @@ export default function AlterationsScanPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           qrCode: qrCode.trim(),
-          action: 'finish'
+          action: 'finish',
+          tailorId: selectedTailor.id
         })
       });
 
@@ -268,6 +335,48 @@ export default function AlterationsScanPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
+            {/* Tailor Selection */}
+            <div className="mb-4 p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-medium text-gray-900 dark:text-gray-100 mb-1">
+                    Selected Tailor
+                  </h3>
+                  {selectedTailor ? (
+                    <div className="flex items-center gap-2">
+                      {selectedTailor.photoUrl ? (
+                        <img
+                          src={selectedTailor.photoUrl}
+                          alt={selectedTailor.name}
+                          className="w-8 h-8 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center">
+                          <span className="text-gray-600 dark:text-gray-400 font-medium text-sm">
+                            {selectedTailor.name.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                      )}
+                      <span className="text-gray-700 dark:text-gray-300">
+                        {selectedTailor.name}
+                      </span>
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 dark:text-gray-400 text-sm">
+                      No tailor selected
+                    </p>
+                  )}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowTailorSelection(true)}
+                >
+                  {selectedTailor ? 'Change Tailor' : 'Select Tailor'}
+                </Button>
+              </div>
+            </div>
+
             <form onSubmit={handleQRSubmit} className="space-y-4">
               <div className="flex gap-2">
                 <Input
@@ -449,30 +558,53 @@ export default function AlterationsScanPage() {
             <CardTitle>How to Use</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3 text-sm text-gray-600 dark:text-gray-400">
-              <div className="flex items-start gap-2">
-                <span className="w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0 mt-0.5">1</span>
-                <p>Enter or scan the QR code from the alterations ticket</p>
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm font-medium mt-0.5">
+                  1
+                </div>
+                <div>
+                  <h4 className="font-medium text-gray-900 dark:text-gray-100">Select Your Tailor</h4>
+                  <p className="text-gray-600 dark:text-gray-400 text-sm">
+                    Choose which tailor you are from the dropdown above. Your selection will be remembered for future scans.
+                  </p>
+                </div>
               </div>
-              <div className="flex items-start gap-2">
-                <span className="w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0 mt-0.5">2</span>
-                <p>Review the customer information and alterations needed</p>
+              
+              <div className="flex items-start gap-3">
+                <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm font-medium mt-0.5">
+                  2
+                </div>
+                <div>
+                  <h4 className="font-medium text-gray-900 dark:text-gray-100">Scan QR Code</h4>
+                  <p className="text-gray-600 dark:text-gray-400 text-sm">
+                    Scan or enter the QR code from the garment tag to view job details and update status.
+                  </p>
+                </div>
               </div>
-              <div className="flex items-start gap-2">
-                <span className="w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0 mt-0.5">3</span>
-                <p>Click "Start Work" when you begin working on a part</p>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0 mt-0.5">4</span>
-                <p>Click "Finish Work" when you complete a part</p>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0 mt-0.5">5</span>
-                <p>When all parts are complete, the job will be marked as ready for pickup</p>
+              
+              <div className="flex items-start gap-3">
+                <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm font-medium mt-0.5">
+                  3
+                </div>
+                <div>
+                  <h4 className="font-medium text-gray-900 dark:text-gray-100">Update Status</h4>
+                  <p className="text-gray-600 dark:text-gray-400 text-sm">
+                    Click "Start Work" when you begin alterations and "Finish Work" when complete.
+                  </p>
+                </div>
               </div>
             </div>
           </CardContent>
         </Card>
+
+        {/* Tailor Selection Modal */}
+        <TailorSelectionModal
+          isOpen={showTailorSelection}
+          onClose={() => setShowTailorSelection(false)}
+          onTailorSelected={handleTailorSelected}
+          sessionId={sessionId}
+        />
       </div>
     </div>
   );

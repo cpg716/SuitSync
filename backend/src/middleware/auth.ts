@@ -21,13 +21,8 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       });
     }
 
-    // Special bypass for sync endpoints that use persistent tokens
-    if (req.originalUrl.startsWith('/api/sync/')) {
-      // For sync endpoints, we allow them to proceed without session authentication
-      // The sync service will use persistent tokens from the database
-      console.log('Sync endpoint detected, allowing access with persistent tokens');
-      return next();
-    }
+    // Special bypass only for internal/manual sync endpoints that use persistent tokens
+    // No automatic bypass for sync endpoints; all sync routes require authentication
 
     // Check for Lightspeed user authentication with optional local user data
     if (req.session.lightspeedUser) {
@@ -80,12 +75,51 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       };
 
       // Check if Lightspeed connection is required and available
-      const requiresLightspeed = ['/api/customers', '/api/sales'].some(p => req.originalUrl.startsWith(p));
+      // Only require Lightspeed tokens for Lightspeed proxy endpoints, not internal DB-backed routes
+      const requiresLightspeed = ['/api/lightspeed', '/api/lightspeed-sync'].some(p => req.originalUrl.startsWith(p));
       if (requiresLightspeed && !req.session.lsAccessToken) {
         console.error('Lightspeed token missing or expired for user', lightspeedUser.id);
         return res.status(401).json({
           error: 'Session expired or Lightspeed connection required. Please log in again.',
           errorCode: 'LS_AUTH_EXPIRED',
+          redirectTo: '/auth/start-lightspeed'
+        });
+      }
+
+      return next();
+    }
+
+    // Check for local user authentication (non-Lightspeed)
+    if (req.session.user && (req.session.user as any).isLocalUser) {
+      const localUser = req.session.user as any;
+
+      // Create unified user object from local session
+      (req as any).user = {
+        id: localUser.id,
+        lightspeedId: localUser.lightspeedEmployeeId || String(localUser.id),
+        email: localUser.email,
+        name: localUser.name,
+        role: localUser.role,
+        lightspeedEmployeeId: localUser.lightspeedEmployeeId,
+        photoUrl: localUser.photoUrl,
+        isLightspeedUser: false,
+        hasLocalRecord: true,
+        localUserId: localUser.id,
+        commissionRate: 0.1,
+        tailorAbilities: [],
+        tailorSchedules: [],
+        skills: [],
+        notificationPrefs: null,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      // Local users only need LS tokens for Lightspeed proxy endpoints
+      const requiresLightspeed = ['/api/lightspeed', '/api/lightspeed-sync'].some(p => req.originalUrl.startsWith(p));
+      if (requiresLightspeed && !req.session.lsAccessToken) {
+        return res.status(401).json({
+          error: 'Lightspeed connection required for this operation. Please connect your Lightspeed account.',
+          errorCode: 'LS_AUTH_REQUIRED',
           redirectTo: '/auth/start-lightspeed'
         });
       }

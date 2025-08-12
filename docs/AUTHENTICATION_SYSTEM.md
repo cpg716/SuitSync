@@ -15,7 +15,7 @@ User → Lightspeed OAuth → SuitSync → Persistent Session Created
 ```
 
 **Steps:**
-1. User visits `/api/auth/start-lightspeed`
+1. User visits `/api/auth/start` (alias supported: `/api/auth/start-lightspeed`)
 2. Redirected to Lightspeed login
 3. User authorizes SuitSync
 4. OAuth callback creates persistent session
@@ -41,21 +41,35 @@ PC User → Select User → Make Changes → Audit Trail
 
 ### **Database Models**
 
+> **Note on Field Naming:** 
+> - `lightspeedEmployeeId` in the `User` model stores the Lightspeed employee ID
+> - `lightspeedUserId` in the `UserSession` model stores the same Lightspeed employee ID
+> - This naming convention exists for historical reasons and both fields contain the same value
+
 #### **UserSession Model**
 ```prisma
 model UserSession {
   id                    String   @id @default(cuid())
-  lightspeedUserId      String   @unique // Lightspeed user ID
-  lightspeedEmployeeId  String   // Lightspeed employee ID
-  email                 String
-  name                  String
-  role                  String
-  photoUrl              String?
-  lastActiveAt          DateTime @default(now())
-  isActive              Boolean  @default(true)
-  deviceInfo            String?  // JSON with device info
+  userId                Int      // Required link to local User
+  lightspeedUserId      String   // Lightspeed employee ID (same as User.lightspeedEmployeeId)
+  browserSessionId      String   // Required for browser sessions
+  lsAccessToken         String   @db.Text
+  lsRefreshToken        String   @db.Text
+  lsDomainPrefix        String
+  expiresAt             DateTime
+  lastActive            DateTime @default(now())
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+
+  // Relations
+  user                  User     @relation("UserSessions", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, browserSessionId])
+  @@index([browserSessionId])
+  @@index([userId])
+  @@index([lightspeedUserId])
+  @@index([expiresAt])
+  @@index([lastActive])
 }
 ```
 
@@ -299,7 +313,7 @@ GET /api/user-selection/selected-user
 ## 📚 **API Reference**
 
 ### **Authentication Endpoints**
-- `GET /api/auth/start-lightspeed` - Start OAuth flow
+- `GET /api/auth/start` - Start OAuth flow (alias: `/api/auth/start-lightspeed`)
 - `GET /api/auth/callback` - OAuth callback handler
 - `GET /api/auth/session-debug` - Debug session state
 

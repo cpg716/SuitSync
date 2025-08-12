@@ -1,0 +1,81 @@
+# Docker Compose configuration for testing
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: suitsync-db-test
+    restart: always
+    environment:
+      POSTGRES_DB: suitsync_test
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - '5433:5432'
+    volumes:
+      - suitsync_test_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: 
+      context: ./backend
+      target: development
+    container_name: suitsync-backend-test
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - ./.env
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/suitsync_test
+      SESSION_SECRET: super_secret_session_key_1234567890
+      FRONTEND_URL: http://localhost:3002
+      NODE_ENV: test
+    ports:
+      - '3002:3000'
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/__tests__:/app/__tests__
+      - suitsync_test_sessions:/app/sessions
+    command: ["npm", "run", "dev"]
+
+  frontend:
+    build:
+      context: ./frontend
+      target: development
+    container_name: suitsync-frontend-test
+    restart: always
+    env_file:
+      - ./frontend/.env.docker
+    environment:
+      NEXT_PUBLIC_BACKEND_URL: http://backend:3000
+      NODE_ENV: development
+    ports:
+      - '3003:3000'
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - backend
+    command: ["npm", "run", "dev"]
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis-test-data:/data
+
+volumes:
+  suitsync_test_db_data:
+  suitsync_test_sessions:
+  redis-test-data:
+
+networks:
+  suitsync-test-net:
+    driver: bridge

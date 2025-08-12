@@ -531,5 +531,5 @@ customer = api.create_customer({
 
 ## Session & Auth
 - Session cookies are `secure: false` in dev, `secure: true` in production.
-- CORS allows credentials and uses `CORS_ORIGIN`.
+- CORS allows credentials and uses `FRONTEND_URL` as the allowed origin.
 - Frontend must send `credentials: 'include'` on all API requests.
