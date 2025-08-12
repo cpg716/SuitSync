@@ -262,6 +262,8 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
     const name = userPayload.display_name;
     // Handle null email from Lightspeed - create a fallback email using username
     const email = userPayload.email || `${userPayload.username}@lightspeed.local`;
+    // Robust photo resolution across LS fields
+    const resolvedPhotoUrl = userPayload.image_source || userPayload.photo_url || userPayload.avatar || undefined;
 
     // Map Lightspeed account types to SuitSync roles
     // Default to 'sales' for non-admin users, can be updated in SuitSync admin interface
@@ -286,7 +288,7 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
         email: email,
         name: name,
         role: role,
-        photoUrl: userPayload.photo_url || undefined,
+        photoUrl: resolvedPhotoUrl,
         accessToken: access_token,
         refreshToken: refresh_token,
         expiresAt: expiresAt,
@@ -309,7 +311,7 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
         name: name,
         role: role,
         lightspeedEmployeeId: lightspeedId,
-        photoUrl: userPayload.photo_url || undefined,
+        photoUrl: resolvedPhotoUrl,
         hasLocalRecord: false,
         localUserId: null
       };

@@ -69,7 +69,7 @@ export const getUsers = async (req: Request, res: Response) => {
           name: lightspeedData?.display_name || localUser.name,
           email: lightspeedData?.email || localUser.email,
           role: lightspeedData?.account_type === 'admin' ? 'admin' : localUser.role,
-          photoUrl: lightspeedData?.image_source || localUser.photoUrl,
+          photoUrl: lightspeedData?.image_source || lightspeedData?.photo_url || lightspeedData?.avatar || localUser.photoUrl,
           lightspeedEmployeeId: localUser.lightspeedEmployeeId,
           commissionRate: localUser.commissionRate,
           source: 'hybrid',

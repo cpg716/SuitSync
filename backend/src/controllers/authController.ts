@@ -175,7 +175,7 @@ export const getSession = async (req: Request, res: Response): Promise<void> => 
         name: localUser.name,
         email: localUser.email,
         role: localUser.role,
-        photoUrl: localUser.photoUrl,
+         photoUrl: localUser.photoUrl,
         lightspeedEmployeeId: localUser.lightspeedEmployeeId,
         isLocalUser: true,
         lightspeed: {
@@ -208,12 +208,13 @@ export const getSession = async (req: Request, res: Response): Promise<void> => 
         lastSync: req.session?.lastLightspeedSync || null
       };
 
+      const resolvedPhotoUrl = lightspeedUser.photoUrl || (lightspeedUser as any).image_source || (lightspeedUser as any).photo_url || (lightspeedUser as any).avatar || undefined;
       const sessionResponse = {
         id: lightspeedUser.id,
         name: lightspeedUser.name,
         email: lightspeedUser.email,
         role: lightspeedUser.role,
-        photoUrl: lightspeedUser.photoUrl,
+        photoUrl: resolvedPhotoUrl,
         lightspeedEmployeeId: lightspeedUser.lightspeedEmployeeId,
         isLightspeedUser: true,
         lightspeed: lightspeedStatus

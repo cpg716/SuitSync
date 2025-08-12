@@ -9,7 +9,7 @@ const DEMO = process.env.DEMO === 'true';
 
 export async function authMiddleware(req: Request, res: Response, next: NextFunction) {
   try {
-    // HYBRID AUTHENTICATION: Lightspeed + Local User Support
+    // HYBRID AUTHENTICATION: Lightspeed users with optional local augmentation
 
     // Defensive: check for session existence
     if (!req.session) {
@@ -50,7 +50,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
         }
       }
 
-      // Create hybrid user object combining Lightspeed and local data
+      // Create hybrid user object combining Lightspeed identity and optional local augmentations
       (req as any).user = {
         // Core identity from Lightspeed
         id: lightspeedUser.id,
@@ -59,7 +59,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
         name: lightspeedUser.name,
         role: lightspeedUser.role,
         lightspeedEmployeeId: lightspeedUser.lightspeedEmployeeId,
-        photoUrl: lightspeedUser.photoUrl,
+        photoUrl: lightspeedUser.photoUrl || (lightspeedUser as any).image_source || (lightspeedUser as any).photo_url || (lightspeedUser as any).avatar || undefined,
         isLightspeedUser: true,
 
         // Enhanced data from local database (if available)
@@ -89,43 +89,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       return next();
     }
 
-    // Check for local user authentication (non-Lightspeed)
-    if (req.session.user && (req.session.user as any).isLocalUser) {
-      const localUser = req.session.user as any;
-
-      // Create unified user object from local session
-      (req as any).user = {
-        id: localUser.id,
-        lightspeedId: localUser.lightspeedEmployeeId || String(localUser.id),
-        email: localUser.email,
-        name: localUser.name,
-        role: localUser.role,
-        lightspeedEmployeeId: localUser.lightspeedEmployeeId,
-        photoUrl: localUser.photoUrl,
-        isLightspeedUser: false,
-        hasLocalRecord: true,
-        localUserId: localUser.id,
-        commissionRate: 0.1,
-        tailorAbilities: [],
-        tailorSchedules: [],
-        skills: [],
-        notificationPrefs: null,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-
-      // Local users only need LS tokens for Lightspeed proxy endpoints
-      const requiresLightspeed = ['/api/lightspeed', '/api/lightspeed-sync'].some(p => req.originalUrl.startsWith(p));
-      if (requiresLightspeed && !req.session.lsAccessToken) {
-        return res.status(401).json({
-          error: 'Lightspeed connection required for this operation. Please connect your Lightspeed account.',
-          errorCode: 'LS_AUTH_REQUIRED',
-          redirectTo: '/auth/start-lightspeed'
-        });
-      }
-
-      return next();
-    }
+    // Remove legacy pure-local auth: all users are Lightspeed identities with optional local augmentation
 
     // Check for multi-user session (legacy support for user switching)
     if (req.session.userSessions && req.session.activeUserId) {
