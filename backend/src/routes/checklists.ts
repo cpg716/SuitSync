@@ -62,58 +62,30 @@ const updateItemSchema = z.object({
 // Routes (place static paths before numeric id routes to avoid conflicts)
 
 // Templates
-router.get('/templates', authMiddleware, requirePermission('admin', 'read'), asyncHandler(listChecklistTemplates));
-router.post('/templates', authMiddleware, requirePermission('admin', 'write'), asyncHandler(upsertChecklistTemplate));
-router.post('/templates/assign', authMiddleware, requirePermission('admin', 'write'), asyncHandler(assignTemplate));
+router.get('/templates', authMiddleware, asyncHandler(listChecklistTemplates));
+router.post('/templates', authMiddleware, asyncHandler(upsertChecklistTemplate));
+router.post('/templates/assign', authMiddleware, asyncHandler(assignTemplate));
 
-router.get('/', 
-  authMiddleware, 
-  requirePermission('admin', 'read'),
-  asyncHandler(getChecklists)
-);
+router.get('/', authMiddleware, asyncHandler(getChecklists));
 
-router.get('/my-checklists', 
-  authMiddleware,
-  asyncHandler(getUserChecklists)
-);
+router.get('/my-checklists', authMiddleware, asyncHandler(getUserChecklists));
 
-router.get('/:id(\\d+)', authMiddleware, requirePermission('admin','read'), asyncHandler(getChecklistById));
+router.get('/:id(\\d+)', authMiddleware, asyncHandler(getChecklistById));
 
-router.post('/', 
-  authMiddleware, 
-  requirePermission('admin', 'write'),
-  validateBody(createChecklistSchema),
-  asyncHandler(createChecklist)
-);
+router.post('/', authMiddleware, validateBody(createChecklistSchema), asyncHandler(createChecklist));
 
-router.put('/:id(\\d+)', authMiddleware, requirePermission('admin','write'), asyncHandler(updateChecklist));
+router.put('/:id(\\d+)', authMiddleware, asyncHandler(updateChecklist));
 
-router.post('/:checklistId(\\d+)/assign', 
-  authMiddleware, 
-  requirePermission('admin', 'write'),
-  validateBody(assignChecklistSchema),
-  asyncHandler(assignChecklist)
-);
+router.post('/:checklistId(\\d+)/assign', authMiddleware, validateBody(assignChecklistSchema), asyncHandler(assignChecklist));
 
-router.post('/assignments/:assignmentId(\\d+)/start', 
-  authMiddleware,
-  asyncHandler(startChecklistExecution)
-);
+router.post('/assignments/:assignmentId(\\d+)/start', authMiddleware, asyncHandler(startChecklistExecution));
 
-router.put('/executions/:executionId(\\d+)/items/:itemId(\\d+)', 
-  authMiddleware,
-  validateBody(updateItemSchema),
-  asyncHandler(updateChecklistItem)
-);
+router.put('/executions/:executionId(\\d+)/items/:itemId(\\d+)', authMiddleware, validateBody(updateItemSchema), asyncHandler(updateChecklistItem));
 
-router.get('/analytics', 
-  authMiddleware, 
-  requirePermission('admin', 'read'),
-  asyncHandler(getChecklistAnalytics)
-);
+router.get('/analytics', authMiddleware, asyncHandler(getChecklistAnalytics));
 
 // Delete checklist
-router.delete('/:id(\\d+)', authMiddleware, requirePermission('admin', 'write'), asyncHandler(deleteChecklist));
-router.delete('/assignments/:assignmentId(\\d+)', authMiddleware, requirePermission('admin', 'write'), asyncHandler(deleteChecklistAssignment));
+router.delete('/:id(\\d+)', authMiddleware, asyncHandler(deleteChecklist));
+router.delete('/assignments/:assignmentId(\\d+)', authMiddleware, asyncHandler(deleteChecklistAssignment));
 
 export default router;

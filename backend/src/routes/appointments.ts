@@ -8,11 +8,11 @@ const router = express.Router();
 router.use(authMiddleware);
 
 // Appointments are for Sales, Sales Management, Admin, and Sales Support (assign only)
-router.get('/', requirePermission('appointments', 'read'), asyncHandler(appointmentsController.listAppointments));
-router.post('/', requirePermission('appointments', 'write'), asyncHandler(appointmentsController.createAppointment));
-router.put('/:id', requirePermission('appointments', 'write'), asyncHandler(appointmentsController.updateAppointment));
-router.delete('/:id', requirePermission('appointments', 'write'), asyncHandler(appointmentsController.deleteAppointment));
-router.get('/:id', requirePermission('appointments', 'read'), asyncHandler(appointmentsController.getAppointment));
+router.get('/', asyncHandler(appointmentsController.listAppointments));
+router.post('/', asyncHandler(appointmentsController.createAppointment));
+router.put('/:id', asyncHandler(appointmentsController.updateAppointment));
+router.delete('/:id', asyncHandler(appointmentsController.deleteAppointment));
+router.get('/:id', asyncHandler(appointmentsController.getAppointment));
 
 // Workflow management
 router.post('/:id/trigger-workflow', requirePermission('appointments', 'write'), asyncHandler(appointmentsController.triggerWorkflow));

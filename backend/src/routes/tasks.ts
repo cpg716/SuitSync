@@ -50,47 +50,18 @@ const bulkCreateTaskSchema = z.object({
 });
 
 // Routes
-router.get('/', 
-  authMiddleware, 
-  requirePermission('admin', 'read'),
-  asyncHandler(getTasks)
-);
+router.get('/', authMiddleware, asyncHandler(getTasks));
 
-router.post('/', 
-  authMiddleware, 
-  requirePermission('admin', 'write'),
-  validateBody(createTaskSchema),
-  asyncHandler(createTask)
-);
+router.post('/', authMiddleware, validateBody(createTaskSchema), asyncHandler(createTask));
 
-router.post('/bulk',
-  authMiddleware,
-  requirePermission('admin', 'write'),
-  validateBody(bulkCreateTaskSchema),
-  asyncHandler(bulkCreateTasks)
-);
+router.post('/bulk', authMiddleware, validateBody(bulkCreateTaskSchema), asyncHandler(bulkCreateTasks));
 
-router.put('/:id', 
-  authMiddleware,
-  validateBody(updateTaskSchema),
-  asyncHandler(updateTask)
-);
+router.put('/:id', authMiddleware, validateBody(updateTaskSchema), asyncHandler(updateTask));
 
-router.delete('/:id', 
-  authMiddleware, 
-  requirePermission('admin', 'write'),
-  asyncHandler(deleteTask)
-);
+router.delete('/:id', authMiddleware, asyncHandler(deleteTask));
 
-router.get('/my-tasks', 
-  authMiddleware,
-  asyncHandler(getUserTasks)
-);
+router.get('/my-tasks', authMiddleware, asyncHandler(getUserTasks));
 
-router.get('/analytics', 
-  authMiddleware, 
-  requirePermission('admin', 'read'),
-  asyncHandler(getTaskAnalytics)
-);
+router.get('/analytics', authMiddleware, asyncHandler(getTaskAnalytics));
 
 export default router;
