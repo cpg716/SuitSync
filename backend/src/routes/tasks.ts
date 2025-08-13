@@ -45,7 +45,8 @@ const bulkCreateTaskSchema = z.object({
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
   assignedToIds: z.array(z.number().int().positive()).min(1),
   dueDate: z.string().datetime().optional(),
-  estimatedMinutes: z.number().int().min(1).max(480).optional()
+  estimatedMinutes: z.number().int().min(1).max(480).optional(),
+  customerId: z.number().int().positive().optional()
 });
 
 // Routes

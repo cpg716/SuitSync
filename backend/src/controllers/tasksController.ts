@@ -261,8 +261,9 @@ export const getTaskAnalytics = async (req: Request, res: Response): Promise<voi
 // Bulk create tasks for multiple users
 export const bulkCreateTasks = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { title, description, priority, assignedToIds, dueDate, estimatedMinutes } = req.body as any;
-    const assignedById = (req as any).user.id;
+    const { title, description, priority, assignedToIds, dueDate, estimatedMinutes, customerId } = req.body as any;
+    const assignedById = await resolveLocalUserId(req);
+    if (!assignedById) { res.status(400).json({ error: 'Unable to resolve assigning user.' }); return; }
     if (!Array.isArray(assignedToIds) || assignedToIds.length === 0) {
       res.status(400).json({ error: 'assignedToIds must be a non-empty array' });
       return;
@@ -276,6 +277,7 @@ export const bulkCreateTasks = async (req: Request, res: Response): Promise<void
         assignedById,
         dueDate: dueDate ? new Date(dueDate) : null,
         estimatedMinutes: estimatedMinutes ?? null,
+        customerId: customerId ? Number(customerId) : null,
       },
       include: {
         assignedTo: { select: { id: true, name: true, photoUrl: true, role: true } },

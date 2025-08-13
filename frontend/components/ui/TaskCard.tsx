@@ -239,7 +239,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={onDelete}
+                  onClick={() => { if (confirm('Delete this task?')) onDelete(); }}
                   className="text-red-600 hover:text-red-700"
                 >
                   Delete Task

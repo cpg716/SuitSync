@@ -301,11 +301,11 @@ export const ROLE_PERMISSIONS = {
     admin: { read: false, write: false, assign: false }
   },
   'admin': {
-    appointments: { read: true, write: false, assign: false },
-    sales: { read: true, write: false, assign: false },
-    parties: { read: true, write: false, assign: false },
-    customers: { read: true, write: false, assign: false },
-    alterations: { read: true, write: false, assign: false },
+    appointments: { read: true, write: true, assign: true },
+    sales: { read: true, write: true, assign: true },
+    parties: { read: true, write: true, assign: true },
+    customers: { read: true, write: true, assign: true },
+    alterations: { read: true, write: true, assign: true },
     admin: { read: true, write: true, assign: true }
   }
 };
@@ -314,6 +314,8 @@ export const ROLE_PERMISSIONS = {
  * Check if user has permission for a specific resource and action
  */
 export function hasPermission(userRole: string, resource: string, action: 'read' | 'write' | 'assign'): boolean {
+  // Superuser bypass
+  if (userRole === 'admin') return true;
   const permissions = ROLE_PERMISSIONS[userRole as keyof typeof ROLE_PERMISSIONS];
   if (!permissions) return false;
 

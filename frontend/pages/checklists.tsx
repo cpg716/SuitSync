@@ -690,31 +690,38 @@ function TaskCreateModal({ open, onClose, onCreated }: { open: boolean; onClose:
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<'LOW'|'MEDIUM'|'HIGH'|'URGENT'>('MEDIUM');
-  const [assignedToId, setAssignedToId] = useState<string>('');
+  const [assignedToIds, setAssignedToIds] = useState<string[]>([]);
   const [dueDate, setDueDate] = useState('');
   const [estimatedMinutes, setEstimatedMinutes] = useState<number>(60);
   const [users, setUsers] = useState<any[]>([]);
+  const [customerQuery, setCustomerQuery] = useState('');
   const [customers, setCustomers] = useState<any[]>([]);
   const [customerId, setCustomerId] = useState<string>('');
   const [saving, setSaving] = useState(false);
 
   React.useEffect(() => {
     if (!open) return;
-    Promise.all([
-      fetch('/api/public/users').then(r => r.json()).catch(() => []),
-      fetch('/api/customers?limit=50').then(r => r.json()).then(d => Array.isArray(d?.customers) ? d.customers : (Array.isArray(d)? d: [])).catch(() => [])
-    ]).then(([u, c]) => { setUsers(u); setCustomers(c); });
+    fetch('/api/public/users').then(r => r.json()).then(setUsers).catch(() => setUsers([]));
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const q = customerQuery.trim();
+    const url = q ? `/api/customers?search=${encodeURIComponent(q)}` : '/api/customers?limit=50';
+    fetch(url, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => setCustomers(Array.isArray(d?.customers) ? d.customers : (Array.isArray(d)? d: [])))
+      .catch(() => setCustomers([]));
+  }, [open, customerQuery]);
 
   async function handleSave() {
     setSaving(true);
     try {
-      const res = await fetch('/api/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ title, description, priority, assignedToId: Number(assignedToId), dueDate: dueDate || undefined, estimatedMinutes, customerId: customerId? Number(customerId) : undefined })
-      });
+      const payload = assignedToIds.length > 1
+        ? { title, description, priority, assignedToIds: assignedToIds.map(Number), dueDate: dueDate || undefined, estimatedMinutes, customerId: customerId? Number(customerId) : undefined }
+        : { title, description, priority, assignedToId: Number(assignedToIds[0]), dueDate: dueDate || undefined, estimatedMinutes, customerId: customerId? Number(customerId) : undefined };
+      const url = assignedToIds.length > 1 ? '/api/tasks/bulk' : '/api/tasks';
+      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(payload) });
       if (!res.ok) throw new Error('Failed to create task');
       onClose();
       onCreated();
@@ -742,21 +749,32 @@ function TaskCreateModal({ open, onClose, onCreated }: { open: boolean; onClose:
             </select>
           </div>
           <div>
-            <label className="text-sm">Assigned To</label>
-            <select className="w-full border rounded px-2 py-2" value={assignedToId} onChange={e => setAssignedToId(e.target.value)}>
-              <option value="">Select user…</option>
-              {users.map((u: any) => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
-            </select>
+            <label className="text-sm">Assigned To (one or more)</label>
+            <div className="max-h-40 overflow-auto border rounded p-2">
+              {users.map((u:any)=> (
+                <label key={u.id} className="flex items-center gap-2 py-1">
+                  <input type="checkbox" checked={assignedToIds.includes(String(u.id))} onChange={e=> setAssignedToIds(arr => e.target.checked ? [...arr, String(u.id)] : arr.filter(x=> x!== String(u.id)))} />
+                  <span>{u.name} ({u.role})</span>
+                </label>
+              ))}
+            </div>
           </div>
         </div>
         <div>
           <label className="text-sm">Related Customer (optional)</label>
-          <select className="w-full border rounded px-2 py-2" value={customerId} onChange={e => setCustomerId(e.target.value)}>
-            <option value="">None</option>
-            {customers.map((c: any) => (
-              <option key={c.id} value={c.id}>{(c.display_name || `${c.last_name || ''}${c.last_name && c.first_name ? ', ' : ''}${c.first_name || ''}`).trim() || `#${c.id}`}</option>
+          <input className="w-full border rounded px-2 py-2 mb-2" placeholder="Search name or phone…" value={customerQuery} onChange={e=> setCustomerQuery(e.target.value)} />
+          <div className="max-h-48 overflow-auto border rounded p-2">
+            <label className="flex items-center gap-2 py-1">
+              <input type="radio" name="cust" value="" checked={customerId===''} onChange={()=> setCustomerId('')} />
+              <span>None</span>
+            </label>
+            {customers.map((c:any)=> (
+              <label key={c.id} className="flex items-center gap-2 py-1">
+                <input type="radio" name="cust" value={c.id} checked={customerId===String(c.id)} onChange={e=> setCustomerId(e.target.value)} />
+                <span>{(c.display_name || `${c.last_name || ''}${c.last_name && c.first_name ? ', ' : ''}${c.first_name || ''}`).trim()} {c.phone ? `— ${c.phone}`: ''}</span>
+              </label>
             ))}
-          </select>
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -770,7 +788,7 @@ function TaskCreateModal({ open, onClose, onCreated }: { open: boolean; onClose:
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave} disabled={saving || !title.trim() || !assignedToId}>Create</Button>
+          <Button onClick={handleSave} disabled={saving || !title.trim() || assignedToIds.length===0}>Create</Button>
         </div>
       </div>
     </Modal>
