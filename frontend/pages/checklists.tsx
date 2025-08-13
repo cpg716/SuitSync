@@ -454,6 +454,7 @@ export default function ChecklistWorkspace() {
 (ChecklistWorkspace as any).getLayout = (page: React.ReactNode) => page;
 
 function TemplatesManagerModal({ open, onClose, templates, onChanged }: { open: boolean; onClose: () => void; templates: any[]; onChanged: () => void }) {
+  const toast = useToast();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [frequency, setFrequency] = useState<'DAILY'|'WEEKLY'|'MONTHLY'|'YEARLY'>('DAILY');
@@ -473,6 +474,7 @@ function TemplatesManagerModal({ open, onClose, templates, onChanged }: { open: 
       if (!res.ok) throw new Error('Failed');
       setTitle(''); setDescription(''); setItems([{ title: '' }]);
       onChanged();
+      toast.success('Template saved');
     } finally { setSaving(false); }
   }
 
@@ -527,6 +529,7 @@ function TemplatesManagerModal({ open, onClose, templates, onChanged }: { open: 
 }
 
 function AssignTemplateModal({ open, onClose, templates, users, onAssigned }:{ open:boolean; onClose:()=>void; templates:any[]; users:any[]; onAssigned:()=>void }) {
+  const toast = useToast();
   const [templateId, setTemplateId] = useState<string>('');
   const [selected, setSelected] = useState<string[]>([]);
   const [dueDate, setDueDate] = useState('');
@@ -538,6 +541,7 @@ function AssignTemplateModal({ open, onClose, templates, users, onAssigned }:{ o
       const res = await fetch('/api/checklists/templates/assign', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify({ templateId: Number(templateId), userIds: selected.map(Number), dueDate: dueDate || undefined })});
       if (!res.ok) throw new Error('Failed');
       onClose(); onAssigned();
+      toast.success('Checklist(s) assigned');
     } finally { setSaving(false); }
   }
   return (
@@ -574,6 +578,7 @@ function AssignTemplateModal({ open, onClose, templates, users, onAssigned }:{ o
   );
 }
 function ChecklistCreateModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
+  const toast = useToast();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [frequency, setFrequency] = useState<'DAILY'|'WEEKLY'|'MONTHLY'|'YEARLY'>('DAILY');
@@ -603,6 +608,7 @@ function ChecklistCreateModal({ open, onClose, onCreated }: { open: boolean; onC
       if (!res.ok) throw new Error('Failed to create checklist');
       onClose();
       onCreated();
+      toast.success('Checklist created');
     } catch (e) {
       toast.error('Could not create checklist');
     } finally {
@@ -680,6 +686,7 @@ function ChecklistCreateModal({ open, onClose, onCreated }: { open: boolean; onC
 }
 
 function TaskCreateModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
+  const toast = useToast();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<'LOW'|'MEDIUM'|'HIGH'|'URGENT'>('MEDIUM');
@@ -711,6 +718,7 @@ function TaskCreateModal({ open, onClose, onCreated }: { open: boolean; onClose:
       if (!res.ok) throw new Error('Failed to create task');
       onClose();
       onCreated();
+      toast.success('Task created');
     } catch (e) {
       toast.error('Could not create task');
     } finally {
@@ -770,6 +778,7 @@ function TaskCreateModal({ open, onClose, onCreated }: { open: boolean; onClose:
 }
 
 function ChecklistAssignModal({ checklistId, open, onClose, onAssigned }: { checklistId: number; open: boolean; onClose: () => void; onAssigned: () => void }) {
+  const toast = useToast();
   const [users, setUsers] = useState<any[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [dueDate, setDueDate] = useState('');
@@ -811,6 +820,7 @@ function ChecklistAssignModal({ checklistId, open, onClose, onAssigned }: { chec
       if (!res.ok) throw new Error('Failed to assign');
       onClose();
       onAssigned();
+      toast.success('Checklist assigned');
     } catch (e) {
       toast.error('Could not assign checklist');
     } finally {
