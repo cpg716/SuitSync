@@ -285,6 +285,7 @@ export default function ChecklistWorkspace() {
                       <ChecklistCard
                         {...cl}
                         assignments={cl.assignments}
+                        onAssign={() => setShowAssignModal({ checklistId: cl.id })}
                         onDelete={async () => {
                           if (!confirm('Delete this checklist?')) return;
                           await fetch(`/api/checklists/${cl.id}`, { method: 'DELETE', credentials: 'include' });
@@ -292,9 +293,7 @@ export default function ChecklistWorkspace() {
                         }}
                         onEdit={() => setShowAssignModal({ checklistId: cl.id })}
                       />
-                      <div className="absolute top-2 right-2 flex gap-2">
-                        <Button size="sm" variant="outline" onClick={() => setShowAssignModal({ checklistId: cl.id })}>Assign</Button>
-                      </div>
+                      
                     </div>
                   );
                 })}
@@ -313,6 +312,7 @@ export default function ChecklistWorkspace() {
                             <ChecklistCard
                               {...cl}
                               assignments={cl.assignments}
+                              onAssign={() => setShowAssignModal({ checklistId: cl.id })}
                               onDelete={async () => {
                                 if (!confirm('Delete this checklist?')) return;
                                 await fetch(`/api/checklists/${cl.id}`, { method: 'DELETE', credentials: 'include' });
@@ -320,9 +320,7 @@ export default function ChecklistWorkspace() {
                               }}
                               onEdit={() => setShowAssignModal({ checklistId: cl.id })}
                             />
-                            <div className="absolute top-2 right-2 flex gap-2">
-                              <Button size="sm" variant="outline" onClick={() => setShowAssignModal({ checklistId: cl.id })}>Assign</Button>
-                            </div>
+                            
                           </div>
                         );
                       })}

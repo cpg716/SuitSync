@@ -37,6 +37,7 @@ interface ChecklistCardProps {
   onComplete?: () => void;
   onDelete?: () => void;
   onEdit?: () => void;
+  onAssign?: () => void;
   isExecuting?: boolean;
 }
 
@@ -79,6 +80,7 @@ export const ChecklistCard: React.FC<ChecklistCardProps> = ({
   onComplete,
   onDelete,
   onEdit,
+  onAssign,
   isExecuting = false
 }) => {
   const [expandedItems, setExpandedItems] = useState(false);
@@ -129,6 +131,9 @@ export const ChecklistCard: React.FC<ChecklistCardProps> = ({
             <div className={`p-2 rounded-full ${statusConfig.bgColor}`}>
               <StatusIcon className={`h-4 w-4 ${statusConfig.color}`} />
             </div>
+            {onAssign && (
+              <Button variant="outline" size="sm" onClick={onAssign} className="order-1">Assign</Button>
+            )}
             {onEdit && (
               <Button variant="outline" size="sm" onClick={onEdit} className="order-2"><Edit className="w-3 h-3 mr-1"/>Edit</Button>
             )}
