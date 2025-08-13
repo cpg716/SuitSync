@@ -73,10 +73,10 @@ export const createTask = async (req: Request, res: Response): Promise<void> => 
         title,
         description,
         priority: priority || 'MEDIUM',
-        assignedToId,
+        assignedToId: Number(assignedToId),
         assignedById,
         dueDate: dueDate ? new Date(dueDate) : null,
-        estimatedMinutes,
+        estimatedMinutes: estimatedMinutes ?? null,
         customerId: customerId ? Number(customerId) : null
       },
       include: {

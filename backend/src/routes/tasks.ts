@@ -25,7 +25,8 @@ const createTaskSchema = z.object({
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
   assignedToId: z.number().int().positive(),
   dueDate: dateOrDateTime.optional(),
-  estimatedMinutes: z.number().int().min(1).max(480).optional()
+  estimatedMinutes: z.number().int().min(1).max(480).optional(),
+  customerId: z.number().int().positive().optional()
 });
 
 const updateTaskSchema = z.object({

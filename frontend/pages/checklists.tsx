@@ -14,6 +14,7 @@ import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { Calendar as RBC, dateFnsLocalizer, View } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { useAuth } from '../src/AuthContext';
+import { useToast } from '../components/ToastContext';
 
 /**
  * Checklist & Task Workspace Page
@@ -38,6 +39,7 @@ export default function ChecklistWorkspace() {
   const [showAssignTemplateModal, setShowAssignTemplateModal] = useState(false);
   const [filter, setFilter] = useState('all');
   const { user } = useAuth();
+  const toast = useToast();
   const [myView, setMyView] = useState(false);
   const [users, setUsers] = useState<any[]>([]);
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
@@ -602,7 +604,7 @@ function ChecklistCreateModal({ open, onClose, onCreated }: { open: boolean; onC
       onClose();
       onCreated();
     } catch (e) {
-      alert('Could not create checklist');
+      toast.error('Could not create checklist');
     } finally {
       setSaving(false);
     }
@@ -710,7 +712,7 @@ function TaskCreateModal({ open, onClose, onCreated }: { open: boolean; onClose:
       onClose();
       onCreated();
     } catch (e) {
-      alert('Could not create task');
+      toast.error('Could not create task');
     } finally {
       setSaving(false);
     }
@@ -810,7 +812,7 @@ function ChecklistAssignModal({ checklistId, open, onClose, onAssigned }: { chec
       onClose();
       onAssigned();
     } catch (e) {
-      alert('Could not assign checklist');
+      toast.error('Could not assign checklist');
     } finally {
       setSaving(false);
     }
