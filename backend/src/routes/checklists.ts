@@ -59,14 +59,25 @@ const updateItemSchema = z.object({
   notes: z.string().max(500).optional()
 });
 
-// Routes
+// Routes (place static paths before numeric id routes to avoid conflicts)
+
+// Templates
+router.get('/templates', authMiddleware, requirePermission('admin', 'read'), asyncHandler(listChecklistTemplates));
+router.post('/templates', authMiddleware, requirePermission('admin', 'write'), asyncHandler(upsertChecklistTemplate));
+router.post('/templates/assign', authMiddleware, requirePermission('admin', 'write'), asyncHandler(assignTemplate));
+
 router.get('/', 
   authMiddleware, 
   requirePermission('admin', 'read'),
   asyncHandler(getChecklists)
 );
 
-router.get('/:id', authMiddleware, requirePermission('admin','read'), asyncHandler(getChecklistById));
+router.get('/my-checklists', 
+  authMiddleware,
+  asyncHandler(getUserChecklists)
+);
+
+router.get('/:id(\\d+)', authMiddleware, requirePermission('admin','read'), asyncHandler(getChecklistById));
 
 router.post('/', 
   authMiddleware, 
@@ -75,36 +86,21 @@ router.post('/',
   asyncHandler(createChecklist)
 );
 
-router.put('/:id', authMiddleware, requirePermission('admin','write'), asyncHandler(updateChecklist));
+router.put('/:id(\\d+)', authMiddleware, requirePermission('admin','write'), asyncHandler(updateChecklist));
 
-// Update/cancel checklist
-router.put('/:id',
-  authMiddleware,
-  requirePermission('admin', 'write'),
-  validateBody(updateChecklistSchema),
-  asyncHandler(async (req, res) => {
-    const prisma = (await import('@prisma/client')).PrismaClient;
-  })
-);
-
-router.post('/:checklistId/assign', 
+router.post('/:checklistId(\\d+)/assign', 
   authMiddleware, 
   requirePermission('admin', 'write'),
   validateBody(assignChecklistSchema),
   asyncHandler(assignChecklist)
 );
 
-router.get('/my-checklists', 
-  authMiddleware,
-  asyncHandler(getUserChecklists)
-);
-
-router.post('/assignments/:assignmentId/start', 
+router.post('/assignments/:assignmentId(\\d+)/start', 
   authMiddleware,
   asyncHandler(startChecklistExecution)
 );
 
-router.put('/executions/:executionId/items/:itemId', 
+router.put('/executions/:executionId(\\d+)/items/:itemId(\\d+)', 
   authMiddleware,
   validateBody(updateItemSchema),
   asyncHandler(updateChecklistItem)
@@ -116,13 +112,8 @@ router.get('/analytics',
   asyncHandler(getChecklistAnalytics)
 );
 
-// Templates
-router.get('/templates', authMiddleware, requirePermission('admin', 'read'), asyncHandler(listChecklistTemplates));
-router.post('/templates', authMiddleware, requirePermission('admin', 'write'), asyncHandler(upsertChecklistTemplate));
-router.post('/templates/assign', authMiddleware, requirePermission('admin', 'write'), asyncHandler(assignTemplate));
-
 // Delete checklist
-router.delete('/:id', authMiddleware, requirePermission('admin', 'write'), asyncHandler(deleteChecklist));
-router.delete('/assignments/:assignmentId', authMiddleware, requirePermission('admin', 'write'), asyncHandler(deleteChecklistAssignment));
+router.delete('/:id(\\d+)', authMiddleware, requirePermission('admin', 'write'), asyncHandler(deleteChecklist));
+router.delete('/assignments/:assignmentId(\\d+)', authMiddleware, requirePermission('admin', 'write'), asyncHandler(deleteChecklistAssignment));
 
 export default router;
