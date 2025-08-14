@@ -16,6 +16,9 @@ router.get('/', requirePermission('parties', 'read'), asyncHandler(partiesContro
 router.get('/with-status', requirePermission('parties', 'read'), asyncHandler(partiesController.getPartiesWithStatus));
 router.get('/:id', requirePermission('parties', 'read'), asyncHandler(partiesController.getPartyDetail));
 router.get('/:id/status-summary', requirePermission('parties', 'read'), asyncHandler(partiesController.getPartyStatusSummary));
+// Timeline and communications endpoints
+router.get('/:id/timeline', requirePermission('parties', 'read'), asyncHandler(partiesController.getPartyTimeline));
+router.get('/:id/communications', requirePermission('parties', 'read'), asyncHandler(partiesController.getPartyCommunications));
 router.post('/', requirePermission('parties', 'write'), asyncHandler(partiesController.createParty));
 
 // Updated routes using Lightspeed Customer Groups API 2.0+
@@ -62,6 +65,11 @@ router.put('/:id/members/:memberId', asyncHandler(async (req: express.Request, r
 
 // PUT /api/parties/members/:memberId/status
 router.put('/members/:memberId/status', requirePermission('parties', 'write'), asyncHandler(partiesController.updatePartyMemberStatus));
+
+// Bulk order trigger and status advancement
+router.post('/:id/trigger-bulk-order', requirePermission('parties', 'write'), asyncHandler(partiesController.triggerBulkOrder));
+router.post('/:id/members/:memberId/advance-status', requirePermission('parties', 'write'), asyncHandler(partiesController.advanceMemberStatus));
+router.post('/:id/members/:memberId/notify-pickup', requirePermission('parties', 'write'), asyncHandler(partiesController.notifyPickup));
 
 // PUT /api/parties/:partyId/members/:memberId/measurements
 router.put('/:partyId/members/:memberId/measurements', asyncHandler(async (req: express.Request, res: express.Response) => {

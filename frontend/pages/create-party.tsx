@@ -235,7 +235,7 @@ export default function CreatePartyPage() {
     <Card>
         <CardHeader>
           <CardTitle className="text-2xl font-bold">Create Wedding Party</CardTitle>
-          <p className="text-gray-600">Set up a new wedding party with customer selection and member management. All members will be automatically created as Lightspeed customers if they don't already exist. The party will be created as a Lightspeed Customer Group named with the groom's last name and wedding date (e.g., "Smith 02/25/26").</p>
+          <p className="text-gray-600">Set up a new wedding party with customer selection and member management. All members can be selected from existing customers or entered manually to avoid duplicates. The party will be created as a Lightspeed Customer Group named with the groom's last name and wedding date (e.g., "Smith 02/25/26").</p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -392,8 +392,8 @@ export default function CreatePartyPage() {
                   <Label htmlFor="eventDate">Wedding Date *</Label>
                   <Input
                     id="eventDate"
-            type="datetime-local"
-            value={eventDate}
+                    type="date"
+                    value={eventDate}
                     onChange={(e) => setEventDate(e.target.value)}
                     required
                   />
@@ -444,7 +444,7 @@ export default function CreatePartyPage() {
             {/* Party Members */}
             <div className="space-y-4">
               <Label className="text-lg font-semibold">Party Members</Label>
-              <p className="text-sm text-gray-600">Add party members. Each member will be created as a Lightspeed customer if they don't already exist. The party will be created as a Lightspeed Customer Group named with the groom's last name and wedding date.</p>
+              <p className="text-sm text-gray-600">Add party members. Select from existing customers first to avoid duplicate customer files, or enter details manually.</p>
               
               {/* Current Members */}
               {members.length > 0 && (
@@ -484,6 +484,35 @@ export default function CreatePartyPage() {
               {/* Add New Member */}
               <div className="border rounded-lg p-4 space-y-4">
                 <Label className="font-semibold">Add Party Member</Label>
+                {/* Search existing customer to avoid duplicates */}
+                <div className="space-y-2">
+                  <Button type="button" variant="outline" onClick={() => setShowCustomerSearch(true)}>Search Existing Customer</Button>
+                  {showCustomerSearch && (
+                    <div className="border rounded-lg p-3">
+                      <CustomerSearch
+                        onCustomerSelect={(c:any) => {
+                          // Prefill new member from selection
+                          const full = `${c.first_name || ''} ${c.last_name || ''}`.trim() || c.name || '';
+                          const already = members.some(m => (m.customerId && m.customerId === c.id) || (m.fullName.toLowerCase() === full.toLowerCase()));
+                          setShowCustomerSearch(false);
+                          if (already) { return; }
+                          setNewMember(n => ({
+                            ...n,
+                            fullName: full,
+                            phone: c.phone || '',
+                            email: c.email || '',
+                            customerId: c.id,
+                          }));
+                        }}
+                        onPartyMemberSelect={() => {}}
+                        mode="individual"
+                      />
+                      <div className="mt-2">
+                        <Button type="button" variant="outline" size="sm" onClick={() => setShowCustomerSearch(false)}>Close</Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -506,7 +535,7 @@ export default function CreatePartyPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="memberEmail">Email (Optional)</Label>
                     <Input

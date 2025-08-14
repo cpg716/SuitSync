@@ -4,6 +4,7 @@ import { Card } from './Card';
 import { Input } from './Input';
 import { Modal } from './Modal';
 import { TailorSelect } from './UserSelect';
+import { CustomerSearch } from './CustomerSearchSimple';
 import { api } from '../../lib/apiClient';
 import { format } from 'date-fns';
 import type { Party, TailorsResponse } from '../../src/types/parties';
@@ -83,14 +84,12 @@ export const AlterationModal = function({ open, onClose, onSubmit, alteration, l
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [partiesRes, customersRes, tailorsRes] = await Promise.all([
+        const [partiesRes, tailorsRes] = await Promise.all([
           api.get('/api/parties'),
-          api.get('/api/customers'),
           api.get<TailorsResponse>('/api/users')
         ]);
 
         setParties(Array.isArray(partiesRes.data) ? partiesRes.data : []);
-        setCustomers(Array.isArray(customersRes.data) ? customersRes.data : []);
 
         // Handle different response formats for users/tailors
         if (tailorsRes.data && Array.isArray(tailorsRes.data.users)) {
@@ -167,40 +166,23 @@ export const AlterationModal = function({ open, onClose, onSubmit, alteration, l
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-4">
-              {/* Party Selection */}
-              <div>
-                <label className="block text-sm font-medium mb-1 dark:text-gray-300">Party</label>
-                <select
-                  value={formData.partyId}
-                  onChange={(e) => handleChange('partyId', e.target.value)}
-                  className="w-full border rounded p-2 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                >
-                  <option value="">Select Party</option>
-                  {(Array.isArray(parties) ? parties : []).map(party => (
-                    <option key={party.id} value={party.id}>
-                      {party.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Customer Selection */}
-              <div>
-                <label className="block text-sm font-medium mb-1 dark:text-gray-300">Customer</label>
-                <select
-                  value={formData.customerId}
-                  onChange={(e) => handleChange('customerId', e.target.value)}
-                  className="w-full border rounded p-2 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                  required
-                >
-                  <option value="">Select Customer</option>
-                  {(Array.isArray(customers) ? customers : []).map(customer => (
-                    <option key={customer.id} value={customer.id}>
-                      {`${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'N/A'}
-                    </option>
-                  ))}
-                </select>
+            {/* Unified Customer/Party Search */}
+            <div className="space-y-2">
+              <label className="block text-sm font-medium mb-1 dark:text-gray-300">Customer or Party</label>
+              <div className="p-3 border rounded-lg bg-gray-50 dark:bg-gray-900 dark:border-gray-700">
+                <CustomerSearch
+                  onCustomerSelect={(c: any) => {
+                    handleChange('customerId', String(c.id));
+                    handleChange('partyId', '');
+                  }}
+                  onPartyMemberSelect={(p: any) => {
+                    handleChange('partyId', String(p.id));
+                    handleChange('customerId', '');
+                  }}
+                  placeholder="Search by name or phone (any format)…"
+                  showProgressIndicators={true}
+                  mode="both"
+                />
               </div>
 
               {/* Garment Type */}

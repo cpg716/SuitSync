@@ -153,18 +153,19 @@ export const AppointmentForm: React.FC<AppointmentFormProps> = ({
   useEffect(() => {
     const loadStaffMembers = async () => {
       try {
-        // Use public staff endpoint filtered to sales; API returns associate and sales
-        const salesRes = await fetch('/api/public/staff?role=sales');
-        const sales = salesRes.ok ? await salesRes.json() : [];
-        // Also fetch managers if available
-        const mgrRes = await fetch('/api/public/staff?role=manager');
-        const managers = mgrRes.ok ? await mgrRes.json() : [];
-        const merged = [...(Array.isArray(sales) ? sales : []), ...(Array.isArray(managers) ? managers : [])];
-        // Filter to Sales and Managers only
-        const filtered = merged.filter((u: any) => ['sales', 'manager'].includes(String(u.role || '').toLowerCase()));
-        // De-duplicate by id
-        const unique = Array.from(new Map(filtered.map((u: any) => [u.id, u])).values());
-        setStaffMembers(unique);
+        // Fetch all users from public endpoint - this includes admin, manager, sales roles
+        const response = await fetch('/api/public/users');
+        if (response.ok) {
+          const users = await response.json();
+          // Filter to roles that can be assigned to appointments (admin, manager, sales)
+          const appointmentStaff = users.filter((u: any) => 
+            ['admin', 'manager', 'sales', 'associate'].includes(String(u.role || '').toLowerCase())
+          );
+          setStaffMembers(appointmentStaff);
+          console.log('Loaded staff members for appointments:', appointmentStaff);
+        } else {
+          console.error('Failed to load staff members:', response.status);
+        }
       } catch (err) {
         console.error('Failed to load staff members:', err);
       }
@@ -344,19 +345,35 @@ export const AppointmentForm: React.FC<AppointmentFormProps> = ({
         </div>
 
         {!selectedCustomer && !selectedMember ? (
-          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'individual' | 'party')} className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="individual" className="flex items-center gap-2">
-                <User className="h-4 w-4" />
-                Individual Customer
-              </TabsTrigger>
-              <TabsTrigger value="party" className="flex items-center gap-2">
-                <Users className="h-4 w-4" />
-                Wedding Party Member
-              </TabsTrigger>
-            </TabsList>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setActiveTab('individual')}
+                className={`flex items-center justify-center gap-2 p-4 rounded-lg border-2 transition-all duration-200 ${
+                  activeTab === 'individual'
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 shadow-md'
+                    : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500 hover:shadow-sm'
+                }`}
+              >
+                <User className="h-5 w-5" />
+                <span className="font-medium">Individual Customer</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('party')}
+                className={`flex items-center justify-center gap-2 p-4 rounded-lg border-2 transition-all duration-200 ${
+                  activeTab === 'party'
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 shadow-md'
+                    : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500 hover:shadow-sm'
+                }`}
+              >
+                <Users className="h-5 w-5" />
+                <span className="font-medium">Wedding Party Member</span>
+              </button>
+            </div>
             
-            <TabsContent value="individual" className="space-y-4">
+            {activeTab === 'individual' && (
               <div className="p-4 border border-gray-200 rounded-lg bg-gray-50">
                 <div className="flex items-center gap-2 mb-2">
                   <User className="h-4 w-4 text-gray-600" />
@@ -373,9 +390,9 @@ export const AppointmentForm: React.FC<AppointmentFormProps> = ({
                   showProgressIndicators={true}
                 />
               </div>
-            </TabsContent>
+            )}
             
-            <TabsContent value="party" className="space-y-4">
+            {activeTab === 'party' && (
               <div className="p-4 border border-blue-200 rounded-lg bg-blue-50">
                 <div className="flex items-center gap-2 mb-2">
                   <Users className="h-4 w-4 text-blue-600" />
@@ -392,8 +409,8 @@ export const AppointmentForm: React.FC<AppointmentFormProps> = ({
                   showProgressIndicators={true}
                 />
               </div>
-            </TabsContent>
-          </Tabs>
+            )}
+          </div>
         ) : (
           /* Selected Customer/Member Info */
           <Card>
@@ -454,23 +471,31 @@ export const AppointmentForm: React.FC<AppointmentFormProps> = ({
       {/* Staff Assignment (choose who the appointment is with) */}
       <div className="space-y-2">
         <Label htmlFor="assignedStaff">Assigned Staff (Sales / Manager)</Label>
-        <Select
-          value={formData.assignedStaffId || ''}
-          onValueChange={(value) => 
-            setFormData(prev => ({ ...prev, assignedStaffId: value || undefined }))
-          }
-        >
-          <SelectTrigger aria-label="Assigned Staff">
-            <SelectValue placeholder="Select staff member" />
-          </SelectTrigger>
-          <SelectContent>
-            {staffMembers.map((staff) => (
-              <SelectItem key={staff.id} value={staff.id.toString()}>
-                {staff.name} ({staff.role})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-3 max-h-56 overflow-auto bg-white dark:bg-gray-800">
+          {staffMembers.map((staff) => (
+            <label key={staff.id} className="flex items-center gap-3 py-2 px-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors">
+              <input
+                type="radio"
+                name="assignedStaffId"
+                value={staff.id}
+                checked={String(formData.assignedStaffId || '') === String(staff.id)}
+                onChange={(e)=> setFormData(prev => ({ ...prev, assignedStaffId: e.target.value }))}
+                className="text-blue-600 focus:ring-blue-500"
+              />
+              <span className="flex items-center gap-2 text-gray-900 dark:text-gray-100">
+                <img src={`/api/public/user-photo?id=${staff.id}`} alt={staff.name} className="w-6 h-6 rounded-full object-cover" onError={(e)=>{ (e.currentTarget as HTMLImageElement).style.display='none'; }} />
+                <span>{staff.name} ({staff.role})</span>
+              </span>
+            </label>
+          ))}
+          {staffMembers.length === 0 && (
+            <div className="text-center py-4 text-gray-500 dark:text-gray-400">
+              <User className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p>No staff members available</p>
+              <p className="text-sm">Please ensure Lightspeed users are synced</p>
+            </div>
+          )}
+        </div>
         {formData.assignedStaffId && (
           <div className="text-xs text-gray-500">
             Pick a date and duration next to load available time slots.
@@ -512,7 +537,7 @@ export const AppointmentForm: React.FC<AppointmentFormProps> = ({
               <div>
                 <Label className="text-xs text-gray-600">Or choose a slot</Label>
                 <select
-                  className="mt-1 w-full border rounded px-2 py-1 bg-white dark:bg-gray-800 text-black dark:text-white"
+                  className="mt-1 w-full border border-gray-200 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   value={selectedSlot || ''}
                   onChange={(e) => { const iso = e.target.value; setSelectedSlot(iso || null); if (iso) setFormData(prev => ({ ...prev, dateTime: iso.slice(0, 16) })); }}
                 >

@@ -301,6 +301,7 @@ export default function PartyDetail() {
           <Tabs value={tab} onValueChange={setTab} className="mb-4">
             <TabsList>
               <TabsTrigger value="members">Members</TabsTrigger>
+              <TabsTrigger value="orders">Orders</TabsTrigger>
               <TabsTrigger value="timeline">Timeline</TabsTrigger>
               <TabsTrigger value="communications">Communications</TabsTrigger>
             </TabsList>
@@ -504,6 +505,60 @@ export default function PartyDetail() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            </TabsContent>
+            <TabsContent value="orders">
+              <div className="bg-white dark:bg-gray-800 rounded shadow p-4 border border-blue-200">
+                <h2 className="text-xl font-bold mb-3">Orders</h2>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[700px] text-sm">
+                    <thead>
+                      <tr>
+                        <th>Member</th>
+                        <th>Role</th>
+                        <th>Status</th>
+                        <th>Suit Order ID</th>
+                        <th>Accessories Order ID</th>
+                        <th>Ordered At</th>
+                        <th>Received At</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {members.map((m:any) => (
+                        <tr key={m.id} className="border-b">
+                          <td className="py-2 px-1">{(m.notes||'').replace(/^Name:\s*/i,'').split(',')[0] || m.role}</td>
+                          <td className="py-2 px-1">{m.role}</td>
+                          <td className="py-2 px-1">{m.status}</td>
+                          <td className="py-2 px-1">
+                            <input className="border rounded p-1 text-xs w-32"
+                              defaultValue={m.suitOrderId||''}
+                              onBlur={async (e)=>{await fetch(`/api/parties/members/${m.id}/status`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({suitOrderId:e.target.value})}); fetchMembers();}}
+                              placeholder="e.g. PO123"/>
+                          </td>
+                          <td className="py-2 px-1">
+                            <input className="border rounded p-1 text-xs w-32"
+                              defaultValue={m.accessoriesOrderId||''}
+                              onBlur={async (e)=>{await fetch(`/api/parties/members/${m.id}/status`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({accessoriesOrderId:e.target.value})}); fetchMembers();}}
+                              placeholder="e.g. AO456"/>
+                          </td>
+                          <td className="py-2 px-1">{m.orderedAt? new Date(m.orderedAt).toLocaleDateString(): '—'}</td>
+                          <td className="py-2 px-1">{m.receivedAt? new Date(m.receivedAt).toLocaleDateString(): '—'}</td>
+                          <td className="py-2 px-1">
+                            <div className="flex gap-2">
+                              <Button className="text-xs px-2 py-1" onClick={async ()=>{await fetch(`/api/parties/${id}/members/${m.id}/advance-status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({newStatus:'ordered'}),credentials:'include'}); fetchMembers();}}>Mark Ordered</Button>
+                              <Button className="text-xs px-2 py-1" onClick={async ()=>{await fetch(`/api/parties/${id}/members/${m.id}/advance-status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({newStatus:'received'}),credentials:'include'}); fetchMembers();}}>Mark Received</Button>
+                              <Button className="text-xs px-2 py-1" onClick={async ()=>{await fetch(`/api/parties/${id}/members/${m.id}/advance-status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({newStatus:'being_altered'}),credentials:'include'}); fetchMembers();}}>Send to Alterations</Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mt-3">
+                  <Button className="bg-blue-600 text-white" onClick={handleTriggerBulkOrder}>Bulk Mark Ordered (Need to Order → Ordered)</Button>
                 </div>
               </div>
             </TabsContent>

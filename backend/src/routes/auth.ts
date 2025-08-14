@@ -1,7 +1,7 @@
 import express from 'express';
 import { login, logout, getSession, clearSession, getUserPhoto } from '../controllers/authController';
 import { authMiddleware } from '../middleware/auth';
-import { redirectToLightspeed, handleCallback } from '../controllers/lightspeedAuthController';
+import { redirectToLightspeed, handleCallback, testLightspeedConnection } from '../controllers/lightspeedAuthController';
 import { asyncHandler } from '../utils/asyncHandler';
 
 const router = express.Router();
@@ -49,5 +49,8 @@ router.get('/callback', asyncHandler(async (req, res, next) => {
 
 // Legacy local login endpoint (returns error directing to Lightspeed)
 router.post('/login', asyncHandler(login));
+
+// Development endpoint for testing Lightspeed API connection
+router.get('/test-lightspeed', asyncHandler(testLightspeedConnection));
 
 export default router; 

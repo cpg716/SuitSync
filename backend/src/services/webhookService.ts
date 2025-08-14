@@ -134,10 +134,12 @@ async function handleCustomerUpdate(req: any, payload: any) {
       logger.error(`Could not retrieve v2.0 details for customer ${customerDataV1.id}. Aborting update.`);
       return;
     }
-    const contact: any = customer.Contact;
-    const customerEmail = contact?.Emails?.Email?.[0]?.address;
-    const customerPhone = contact?.Phones?.Phone?.[0]?.number;
-    const name = `${customer.firstName || ''} ${customer.lastName || ''}`.trim();
+    const contact: any = customer.Contact || {};
+    const customerEmail = customer.email || contact?.Emails?.Email?.[0]?.address || null;
+    const customerPhone = customer.phone || contact?.Phones?.Phone?.[0]?.number || null;
+    const first = customer.firstName || customer.first_name || contact?.firstName || '';
+    const last = customer.lastName || customer.last_name || contact?.lastName || '';
+    const name = `${first} ${last}`.trim();
     const version = BigInt(customer.version || 0);
     await prisma.customer.upsert({
       where: { lightspeedId: customer.customerID.toString() },

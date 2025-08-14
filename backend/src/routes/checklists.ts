@@ -88,4 +88,7 @@ router.get('/analytics', authMiddleware, asyncHandler(getChecklistAnalytics));
 router.delete('/:id(\\d+)', authMiddleware, asyncHandler(deleteChecklist));
 router.delete('/assignments/:assignmentId(\\d+)', authMiddleware, asyncHandler(deleteChecklistAssignment));
 
+// Admin: view assignment + latest execution (view as user)
+router.get('/assignments/:assignmentId(\\d+)/detail', authMiddleware, asyncHandler(require('./../controllers/checklistsController').getAssignmentDetail));
+
 export default router;

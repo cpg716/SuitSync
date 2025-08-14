@@ -73,7 +73,7 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
 
   // Debounced search
   useEffect(() => {
-    if (query.length < 2) {
+    if (query.trim().length < 1) {
       setResults([]);
       setIsOpen(false);
       return;
@@ -92,7 +92,7 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
       } finally {
         setLoading(false);
       }
-    }, 300);
+    }, 200);
 
     return () => clearTimeout(timeoutId);
   }, [query, mode]);
@@ -136,6 +136,7 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
   };
 
   const performSearch = async (searchQuery: string): Promise<SearchResult[]> => {
+    const normalized = searchQuery.replace(/\D/g, '');
     const searchResults: SearchResult[] = [];
 
     // Search customers

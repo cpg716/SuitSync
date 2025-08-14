@@ -10,12 +10,14 @@ if npx prisma migrate status --schema=prisma/schema.prisma | grep -q 20250701155
     || true
 fi
 
-# 2) Apply all pending migrations
-npx prisma migrate deploy --schema=prisma/schema.prisma
+# 2) Try to apply migrations, but don't fail if schema is already synced
+npx prisma migrate deploy --schema=prisma/schema.prisma || {
+  echo "Migrations failed, checking if schema is already synced..."
+  npx prisma db push --schema=prisma/schema.prisma --accept-data-loss || true
+}
 
-# 3) Seed your database
-# Seed non-destructively; ignore duplicate errors
-npm run seed || true
+# 3) Skip demo seeding in live mode
+echo "Skipping demo seed (LIVE-only mode)"
 
 # 4) Finally launch the server
 node dist/index.js

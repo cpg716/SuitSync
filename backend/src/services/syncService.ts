@@ -236,25 +236,43 @@ const syncCustomers = async (req: any) => {
     'customers',
     '/customers',
     prisma.customer,
-    (item: any) => ({
-      lightspeedId: item.id?.toString(),
-      first_name: item.first_name || null,
-      last_name: item.last_name || null,
-      name: (() => { // Deprecated, for migration only
-        const first = item.first_name === '?' ? '' : (item.first_name || '');
-        const last = item.last_name === '?' ? '' : (item.last_name || '');
-        const full = [first, last].filter(Boolean).join(' ');
-        return full || 'N/A';
-      })(),
-      email: item.email ? item.email : 'N/A',
-      phone: item.phone ? item.phone : 'N/A',
-      address: item.address || null,
-      createdAt: item.created_at ? new Date(item.created_at) : new Date(),
-      updatedAt: item.updated_at ? new Date(item.updated_at) : new Date(),
-      lightspeedVersion: item.version ? BigInt(item.version) : null,
-      syncedAt: new Date(),
-      createdBy: null,
-    })
+    (item: any) => {
+      // Support both X-Series payload shapes:
+      // - Flat fields (first_name, last_name, email, phone)
+      // - Nested Contact structure (Contact.Emails.Email[0].address, Contact.Phones.Phone[0].number)
+      const first = item.first_name ?? item.firstName ?? item?.Contact?.firstName ?? null;
+      const last = item.last_name ?? item.lastName ?? item?.Contact?.lastName ?? null;
+      const contact = item.Contact || {};
+      const emailFromNested = contact?.Emails?.Email?.[0]?.address || null;
+      const phoneFromNested = contact?.Phones?.Phone?.[0]?.number || null;
+      const email = item.email ?? emailFromNested ?? null;
+      const phone = item.phone ?? phoneFromNested ?? null;
+      // Address can be nested; compose a single string if available
+      const addr = item.address || contact?.Addresses?.Address?.[0] || null;
+      const address = typeof addr === 'string'
+        ? addr
+        : addr
+          ? [addr?.line1, addr?.line2, addr?.city, addr?.state, addr?.postalCode]
+              .filter(Boolean)
+              .join(', ')
+          : null;
+      const lsId = item.id ?? item.customerID ?? item.customerId;
+      const version = item.version ?? item.Version ?? 0;
+      return {
+        lightspeedId: lsId ? String(lsId) : undefined,
+        first_name: first || null,
+        last_name: last || null,
+        name: [first, last].filter(Boolean).join(' ') || null,
+        email: email || null,
+        phone: phone || null,
+        address,
+        createdAt: item.created_at ? new Date(item.created_at) : new Date(),
+        updatedAt: item.updated_at ? new Date(item.updated_at) : new Date(),
+        lightspeedVersion: version ? BigInt(version) : null,
+        syncedAt: new Date(),
+        createdBy: null,
+      };
+    }
   );
   
   console.log('[SyncService] Customers sync completed');

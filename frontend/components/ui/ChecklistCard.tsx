@@ -1,234 +1,161 @@
-import React, { useState } from 'react';
-import { CheckCircle, Clock, AlertCircle, Calendar, User, Users } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from './Card';
+import React from 'react';
+import { Card } from './Card';
 import { Badge } from './Badge';
 import { Button } from './Button';
 import { UserAvatar } from './UserAvatar';
-import { Checkbox } from './checkbox';
-import { Trash2, Edit } from 'lucide-react';
-
-interface ChecklistItem {
-  id: number;
-  title: string;
-  description?: string;
-  isRequired: boolean;
-  isCompleted?: boolean;
-  completedAt?: string;
-  notes?: string;
-}
+import { Calendar, Clock, CheckCircle, XCircle, Eye, Edit, Trash2 } from 'lucide-react';
 
 interface ChecklistCardProps {
-  id: number;
-  title: string;
-  description?: string;
-  frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
-  status?: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'OVERDUE';
-  scheduledFor?: string;
-  estimatedMinutes?: number;
-  items: ChecklistItem[];
-  assignedBy?: {
-    id: number;
-    name: string;
-    photoUrl?: string;
-  };
-  assignments?: Array<{ id:number; dueDate?: string|null; assignedTo?: { id:number; name:string; photoUrl?:string } }>;
-  onStart?: () => void;
-  onUpdateItem?: (itemId: number, isCompleted: boolean, notes?: string) => void;
-  onComplete?: () => void;
-  onDelete?: () => void;
-  onEdit?: () => void;
-  onAssign?: () => void;
-  isExecuting?: boolean;
+  checklist: any;
+  onEdit?: (checklist: any) => void;
+  onDelete?: (id: number) => void;
+  onAssign?: (checklist: any) => void;
+  onViewAsUser?: (assignment: any) => void;
 }
 
-const getStatusConfig = (status: string) => {
-  switch (status) {
-    case 'COMPLETED':
-      return { icon: CheckCircle, color: 'text-green-600', bgColor: 'bg-green-100', label: 'Completed' };
-    case 'IN_PROGRESS':
-      return { icon: Clock, color: 'text-blue-600', bgColor: 'bg-blue-100', label: 'In Progress' };
-    case 'OVERDUE':
-      return { icon: AlertCircle, color: 'text-red-600', bgColor: 'bg-red-100', label: 'Overdue' };
-    default:
-      return { icon: Clock, color: 'text-gray-600', bgColor: 'bg-gray-100', label: 'Not Started' };
-  }
-};
-
-const getFrequencyColor = (frequency: string) => {
-  switch (frequency) {
-    case 'DAILY': return 'bg-blue-100 text-blue-800';
-    case 'WEEKLY': return 'bg-green-100 text-green-800';
-    case 'MONTHLY': return 'bg-purple-100 text-purple-800';
-    case 'YEARLY': return 'bg-orange-100 text-orange-800';
-    default: return 'bg-gray-100 text-gray-800';
-  }
-};
-
 export const ChecklistCard: React.FC<ChecklistCardProps> = ({
-  id,
-  title,
-  description,
-  frequency,
-  status = 'NOT_STARTED',
-  scheduledFor,
-  estimatedMinutes,
-  items,
-  assignedBy,
-  assignments,
-  onStart,
-  onUpdateItem,
-  onComplete,
-  onDelete,
+  checklist,
   onEdit,
+  onDelete,
   onAssign,
-  isExecuting = false
+  onViewAsUser
 }) => {
-  const [expandedItems, setExpandedItems] = useState(false);
-  const statusConfig = getStatusConfig(status);
-  const StatusIcon = statusConfig.icon;
+  // Add null checks to prevent undefined errors
+  const items = checklist?.items || [];
+  const completedItems = items.filter((item: any) => item.completed)?.length || 0;
+  const totalItems = items.length || 0;
+  const progress = totalItems > 0 ? (completedItems / totalItems) * 100 : 0;
 
-  const completedItems = items.filter(item => item.isCompleted).length;
-  const totalItems = items.length;
-  const progressPercentage = totalItems > 0 ? (completedItems / totalItems) * 100 : 0;
-
-  const handleItemToggle = (itemId: number, isCompleted: boolean) => {
-    if (onUpdateItem) {
-      onUpdateItem(itemId, isCompleted);
-    }
+  const getStatusColor = () => {
+    if (progress === 100) return 'bg-green-100 text-green-800';
+    if (progress > 50) return 'bg-yellow-100 text-yellow-800';
+    return 'bg-red-100 text-red-800';
   };
 
-  const canComplete = status === 'IN_PROGRESS' && 
-    items.filter(item => item.isRequired).every(item => item.isCompleted);
+  const getStatusText = () => {
+    if (progress === 100) return 'COMPLETED';
+    if (progress > 0) return 'IN PROGRESS';
+    return 'NOT STARTED';
+  };
+
+  // Early return if checklist is undefined
+  if (!checklist) {
+    return (
+      <Card className="p-4">
+        <div className="animate-pulse">
+          <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+          <div className="h-3 bg-gray-200 rounded w-1/2 mb-4"></div>
+          <div className="h-2 bg-gray-200 rounded w-full mb-1"></div>
+          <div className="h-2 bg-gray-200 rounded w-2/3"></div>
+        </div>
+      </Card>
+    );
+  }
 
   return (
-    <Card className={`transition-all duration-200 hover:shadow-md ${status === 'OVERDUE' ? 'border-red-200' : ''}`}>
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-2">
-              <CardTitle className="text-lg">{title}</CardTitle>
-              <Badge className={getFrequencyColor(frequency)}>{frequency}</Badge>
-            </div>
-            {description && (
-              <p className="text-sm text-gray-600 mb-2">{description}</p>
-            )}
-            <div className="flex items-center gap-4 text-sm text-gray-500">
-              {scheduledFor && (
-                <div className="flex items-center gap-1">
-                  <Calendar className="h-4 w-4" />
-                  {new Date(scheduledFor).toLocaleDateString()}
-                </div>
-              )}
-              {estimatedMinutes && (
-                <div className="flex items-center gap-1">
-                  <Clock className="h-4 w-4" />
-                  {estimatedMinutes} min
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap justify-end">
-            <div className={`p-2 rounded-full ${statusConfig.bgColor}`}>
-              <StatusIcon className={`h-4 w-4 ${statusConfig.color}`} />
-            </div>
-            {onAssign && (
-              <Button variant="outline" size="sm" onClick={onAssign} className="order-1">Assign</Button>
-            )}
-            {onEdit && (
-              <Button variant="outline" size="sm" onClick={onEdit} className="order-2"><Edit className="w-3 h-3 mr-1"/>Edit</Button>
-            )}
-            {onDelete && (
-              <Button variant="outline" size="sm" className="text-red-600 order-3" onClick={onDelete}><Trash2 className="w-3 h-3 mr-1"/>Delete</Button>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 pt-2 border-t flex-wrap">
-          {assignedBy && (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-500">Assigned by:</span>
-              <UserAvatar user={assignedBy} size="sm" showName />
-            </div>
+    <Card className="p-4 hover:shadow-md transition-shadow">
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex-1">
+          <h3 className="font-semibold text-lg mb-1">{checklist.title}</h3>
+          {checklist.description && (
+            <p className="text-gray-600 text-sm mb-2">{checklist.description}</p>
           )}
-          {Array.isArray(assignments) && assignments.length>0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-500">To:</span>
-              <div className="flex -space-x-2">
-                {assignments.slice(0,5).map(a => (
-                  <UserAvatar key={a.id} user={a.assignedTo || { id:'', name:'User' }} size="sm" showName={false} />
-                ))}
-              </div>
+          <div className="flex items-center gap-4 text-sm text-gray-500">
+            <div className="flex items-center gap-1">
+              <Calendar size={14} />
+              <span>{checklist.frequency}</span>
             </div>
-          )}
-        </div>
-      </CardHeader>
-
-      <CardContent className="pt-0">
-        {/* Progress Bar */}
-        <div className="mb-4">
-          <div className="flex justify-between text-sm mb-1">
-            <span>Progress</span>
-            <span>{completedItems}/{totalItems} items</span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div 
-              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${progressPercentage}%` }}
-            />
+            <div className="flex items-center gap-1">
+              <Clock size={14} />
+              <span>{checklist.items?.length || 0} items</span>
+            </div>
           </div>
         </div>
-
-        {/* Action Buttons */}
-        <div className="flex gap-2 mb-4">
-          {status === 'NOT_STARTED' && onStart && (
-            <Button onClick={onStart} size="sm" disabled={isExecuting}>
-              {isExecuting ? 'Starting...' : 'Start Checklist'}
+        <div className="flex items-center gap-2">
+          {onViewAsUser && checklist.assignments?.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onViewAsUser(checklist.assignments[0])}
+              className="flex items-center gap-1"
+            >
+              <Eye size={14} />
+              View as User
             </Button>
           )}
-          {status === 'IN_PROGRESS' && canComplete && onComplete && (
-            <Button onClick={onComplete} size="sm" variant="outline">
-              Complete Checklist
+          {onEdit && (
+            <Button size="sm" variant="outline" onClick={() => onEdit(checklist)}>
+              <Edit size={14} />
             </Button>
           )}
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => setExpandedItems(!expandedItems)}
-          >
-            {expandedItems ? 'Hide' : 'Show'} Items ({totalItems})
-          </Button>
+          {onDelete && (
+            <Button size="sm" variant="outline" onClick={() => onDelete(checklist.id)}>
+              <Trash2 size={14} />
+            </Button>
+          )}
         </div>
+      </div>
 
-        {/* Checklist Items */}
-        {expandedItems && (
-          <div className="space-y-2 border-t pt-4">
-            {items.map((item) => (
-              <div key={item.id} className="flex items-start gap-3 p-2 rounded-lg hover:bg-gray-50">
-                <Checkbox
-                  checked={item.isCompleted || false}
-                  onCheckedChange={(checked) => handleItemToggle(item.id, checked as boolean)}
-                  disabled={status === 'COMPLETED'}
-                  className="mt-0.5"
+      {/* Progress Bar */}
+      <div className="mb-3">
+        <div className="flex items-center justify-between text-sm mb-1">
+          <span>Progress</span>
+          <span>{completedItems}/{totalItems} items</span>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-2">
+          <div
+            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Status Badge */}
+      <div className="flex items-center justify-between mb-3">
+        <Badge className={getStatusColor()}>{getStatusText()}</Badge>
+        <span className="text-sm text-gray-500">{Math.round(progress)}%</span>
+      </div>
+
+      {/* Assigned Users */}
+      {checklist.assignments && checklist.assignments.length > 0 && (
+        <div className="mb-3">
+          <div className="text-sm text-gray-600 mb-2">Assigned to:</div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {checklist.assignments.map((assignment: any) => (
+              <div key={assignment.id} className="flex items-center gap-2">
+                <UserAvatar
+                  user={{
+                    id: assignment.assignedTo.id,
+                    name: assignment.assignedTo.name,
+                    photoUrl: assignment.assignedTo.photoUrl,
+                    email: assignment.assignedTo.email
+                  }}
+                  size="sm"
+                  showName={false}
                 />
-                <div className="flex-1">
-                  <div className={`font-medium ${item.isCompleted ? 'line-through text-gray-500' : ''}`}>
-                    {item.title}
-                    {item.isRequired && <span className="text-red-500 ml-1">*</span>}
-                  </div>
-                  {item.description && (
-                    <p className="text-sm text-gray-600 mt-1">{item.description}</p>
-                  )}
-                  {item.completedAt && (
-                    <p className="text-xs text-green-600 mt-1">
-                      Completed: {new Date(item.completedAt).toLocaleString()}
-                    </p>
-                  )}
-                </div>
+                <span className="text-sm">{assignment.assignedTo.name}</span>
+                {assignment.dueDate && (
+                  <span className="text-xs text-gray-500">
+                    Due: {new Date(assignment.dueDate).toLocaleDateString()}
+                  </span>
+                )}
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Action Buttons */}
+      <div className="flex items-center gap-2">
+        <Button size="sm" variant="outline" className="flex-1">
+          Show Items ({totalItems})
+        </Button>
+        {onAssign && (
+          <Button size="sm" variant="outline" onClick={() => onAssign(checklist)}>
+            Assign
+          </Button>
         )}
-      </CardContent>
+      </div>
     </Card>
   );
 };

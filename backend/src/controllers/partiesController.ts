@@ -8,6 +8,7 @@ import { processWebhook } from '../services/webhookService';
 import { sendPartyMemberInvitations } from '../services/partyNotificationService';
 import { Route, Get, Path, Tags } from 'tsoa';
 import AuditLogService from '../services/AuditLogService';
+import { lightspeedCustomFieldsService } from '../services/lightspeedCustomFieldsService';
 
 const prisma = new PrismaClient().$extends(withAccelerate());
 
@@ -213,7 +214,8 @@ export const createParty = async (req: Request, res: Response): Promise<void> =>
     // Step 2: Create the Party in the local database
     party = await prisma.party.create({
       data: {
-        eventDate: new Date(eventDate),
+        // eventDate comes as yyyy-mm-dd; store at midnight local time
+        eventDate: new Date(`${eventDate}T00:00:00`),
         notes: notes || '',
         suitStyle: suitStyle || '',
         suitColor: suitColor || '',
@@ -458,15 +460,40 @@ export const addMemberToParty = async (req: Request, res: Response): Promise<voi
 export const updatePartyMemberStatus = async (req: Request, res: Response): Promise<void> => {
   try {
     const memberId = parseInt(req.params.memberId);
-    const { status } = req.body;
-    
+    const { status, suitOrderId, accessoriesOrderId, notes } = req.body as any;
+    // Prepare timestamp fields based on status transitions
+    const timestampUpdates: any = {};
+    if (status === 'ordered') timestampUpdates.orderedAt = new Date();
+    if (status === 'received') timestampUpdates.receivedAt = new Date();
+    if (status === 'being_altered') timestampUpdates.alteredAt = new Date();
+    if (status === 'ready_for_pickup') timestampUpdates.readyForPickupAt = new Date();
+
     const member = await prisma.partyMember.update({
       where: { id: memberId },
-      data: { status },
+      data: {
+        ...(status ? { status } : {}),
+        ...(suitOrderId !== undefined ? { suitOrderId } : {}),
+        ...(accessoriesOrderId !== undefined ? { accessoriesOrderId } : {}),
+        ...(notes !== undefined ? { notes } : {}),
+        ...timestampUpdates,
+      },
       include: {
         party: true
       }
     });
+
+    // Sync to Lightspeed custom fields if possible (map lsCustomerId -> local customer)
+    try {
+      if (member.lsCustomerId) {
+        const localCustomer = await prisma.customer.findFirst({ where: { lightspeedId: String(member.lsCustomerId) } });
+        if (localCustomer) {
+          await lightspeedCustomFieldsService.syncCustomerToLightspeed(req, localCustomer.id);
+        }
+      }
+    } catch (syncErr: any) {
+      logger.warn('Failed syncing party member status to Lightspeed custom fields', { memberId, error: syncErr?.message });
+    }
+
     res.json(member);
   } catch (err: any) {
     logger.error('Error in updatePartyMemberStatus:', err);
@@ -486,3 +513,177 @@ export const removeMemberFromParty = async (req: Request, res: Response): Promis
     res.status(500).json({ error: 'Failed to remove member from party.' });
   }
 }; 
+
+/**
+ * Build a timeline view for a party: per-member row with appointments and alteration jobs
+ */
+export const getPartyTimeline = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const partyId = parseInt(req.params.id);
+    const party = await prisma.party.findUnique({
+      where: { id: partyId },
+      include: {
+        members: true,
+        appointments: true,
+        alterationJobs: true,
+      }
+    });
+    if (!party) {
+      res.status(404).json({ error: 'Party not found' });
+      return;
+    }
+    // Fetch per-member appointments and jobs
+    const memberRows = await Promise.all(
+      party.members.map(async (m) => {
+        const [appointments, alterationJobs] = await Promise.all([
+          prisma.appointment.findMany({ where: { memberId: m.id }, orderBy: { dateTime: 'asc' } }),
+          prisma.alterationJob.findMany({ where: { partyMemberId: m.id }, orderBy: { createdAt: 'asc' } }),
+        ]);
+        return {
+          memberId: m.id,
+          name: (m.notes || '').replace(/^Name:\s*/i, '').split(',')[0] || m.role,
+          role: m.role,
+          status: m.status,
+          lsCustomerId: m.lsCustomerId,
+          appointments,
+          alterationJobs,
+        };
+      })
+    );
+
+    res.json({
+      partyId: party.id,
+      eventDate: party.eventDate,
+      timeline: memberRows,
+    });
+  } catch (err: any) {
+    logger.error('Error building party timeline:', err);
+    res.status(500).json({ error: 'Failed to build party timeline.' });
+  }
+};
+
+/** Bulk set members that need_to_order -> ordered (sets orderedAt) */
+export const triggerBulkOrder = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const partyId = parseInt(req.params.id);
+    const members = await prisma.partyMember.findMany({ where: { partyId, status: 'need_to_order' as any } });
+    const results = [] as any[];
+    for (const m of members) {
+      const updated = await prisma.partyMember.update({
+        where: { id: m.id },
+        data: { status: 'ordered' as any, orderedAt: new Date() },
+      });
+      results.push(updated);
+      // Sync LS custom fields for each member's linked customer
+      try {
+        if (m.lsCustomerId) {
+          const localCustomer = await prisma.customer.findFirst({ where: { lightspeedId: String(m.lsCustomerId) } });
+          if (localCustomer) await lightspeedCustomFieldsService.syncCustomerToLightspeed(req, localCustomer.id);
+        }
+      } catch (e: any) {
+        logger.warn('Bulk order LS sync failed for member', { memberId: m.id, error: e?.message });
+      }
+    }
+    res.json({ updated: results.length });
+  } catch (err: any) {
+    logger.error('Error in triggerBulkOrder:', err);
+    res.status(500).json({ error: 'Failed to trigger bulk order.' });
+  }
+};
+
+/** Advance a specific member to a new status and set appropriate timestamps */
+export const advanceMemberStatus = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const partyId = parseInt(req.params.id);
+    const memberId = parseInt(req.params.memberId);
+    const { newStatus } = req.body as { newStatus: string };
+    if (!newStatus) {
+      res.status(400).json({ error: 'newStatus is required' });
+      return;
+    }
+    const timestampUpdates: any = {};
+    if (newStatus === 'ordered') timestampUpdates.orderedAt = new Date();
+    if (newStatus === 'received') timestampUpdates.receivedAt = new Date();
+    if (newStatus === 'being_altered') timestampUpdates.alteredAt = new Date();
+    if (newStatus === 'ready_for_pickup') timestampUpdates.readyForPickupAt = new Date();
+    const updated = await prisma.partyMember.update({
+      where: { id: memberId },
+      data: { status: newStatus as any, ...timestampUpdates },
+    });
+    // Sync LS custom fields
+    try {
+      if (updated.lsCustomerId) {
+        const localCustomer = await prisma.customer.findFirst({ where: { lightspeedId: String(updated.lsCustomerId) } });
+        if (localCustomer) await lightspeedCustomFieldsService.syncCustomerToLightspeed(req, localCustomer.id);
+      }
+    } catch (e: any) {
+      logger.warn('Advance status LS sync failed', { memberId, error: e?.message });
+    }
+    res.json(updated);
+  } catch (err: any) {
+    logger.error('Error in advanceMemberStatus:', err);
+    res.status(500).json({ error: 'Failed to advance member status.' });
+  }
+};
+
+/** Notify pickup for a member on a specific date */
+export const notifyPickup = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const partyId = parseInt(req.params.id);
+    const memberId = parseInt(req.params.memberId);
+    const { pickupDate } = req.body as { pickupDate: string };
+    const member = await prisma.partyMember.findUnique({ where: { id: memberId } });
+    if (!member) {
+      res.status(404).json({ error: 'Member not found' });
+      return;
+    }
+    await prisma.partyMember.update({
+      where: { id: memberId },
+      data: { pickupDate: pickupDate ? new Date(pickupDate) : null },
+    });
+    // Record notification history
+    await prisma.notificationHistory.create({
+      data: {
+        type: 'pickup_ready',
+        method: 'sms',
+        recipient: '',
+        message: `Your garment for party #${partyId} is ready for pickup on ${pickupDate}.`,
+        status: 'sent',
+        partyId,
+      }
+    });
+    res.json({ ok: true });
+  } catch (err: any) {
+    logger.error('Error in notifyPickup:', err);
+    res.status(500).json({ error: 'Failed to notify pickup.' });
+  }
+};
+
+/** Communications feed for a party, mapped by member lsCustomerId for UI matching */
+export const getPartyCommunications = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const partyId = parseInt(req.params.id);
+    const logs = await prisma.notificationHistory.findMany({
+      where: { partyId },
+      orderBy: { sentAt: 'desc' },
+    });
+    const customerIds = Array.from(new Set(logs.map(l => l.customerId).filter(Boolean))) as number[];
+    const customers = customerIds.length
+      ? await prisma.customer.findMany({ where: { id: { in: customerIds } }, select: { id: true, lightspeedId: true } })
+      : [];
+    const idToLsId = new Map(customers.map(c => [c.id, c.lightspeedId]));
+    const mapped = logs.map(l => ({
+      id: l.id,
+      type: l.type,
+      direction: 'outbound',
+      content: l.message,
+      sentAt: l.sentAt,
+      status: l.status,
+      customerId: l.customerId ? idToLsId.get(l.customerId) || null : null,
+    }));
+    res.json(mapped);
+  } catch (err: any) {
+    logger.error('Error getting party communications:', err);
+    res.status(500).json({ error: 'Failed to get communications.' });
+  }
+};

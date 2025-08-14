@@ -27,6 +27,10 @@ export const getUsers = async (req: Request, res: Response) => {
   try {
     logger.info('[UsersController] Starting getUsers request - hybrid system (Lightspeed + local users)');
 
+    // Get role filter from query params
+    const roleFilter = req.query.role ? String(req.query.role).toLowerCase() : null;
+    logger.info(`[UsersController] Role filter: ${roleFilter}`);
+
     try {
       const hasLsSession = !!req.session?.lightspeedUser;
       // Fetch both Lightspeed users and local users
@@ -84,9 +88,26 @@ export const getUsers = async (req: Request, res: Response) => {
         };
       });
 
-      // Format Lightspeed-only users (those without local records)
+      // Format Lightspeed-only users (those without local records) - but filter out test users
       const lightspeedOnlyUsers = (lightspeedUsers || [])
-        .filter(lsUser => !localUsers.some(localUser => localUser.lightspeedEmployeeId === lsUser.id.toString()))
+        .filter(lsUser => {
+          // Don't include if there's already a local record
+          const hasLocalRecord = localUsers.some(localUser => localUser.lightspeedEmployeeId === lsUser.id.toString());
+          if (hasLocalRecord) return false;
+          
+          // Filter out test users and demo users
+          const email = lsUser.email || '';
+          const name = lsUser.display_name || lsUser.name || '';
+          const isTestUser = email.includes('@demo.com') || 
+                           email.includes('sales1@') || 
+                           email.includes('sales2@') || 
+                           email.includes('test-') ||
+                           name.includes('Sales One') ||
+                           name.includes('Sales Two') ||
+                           name.includes('Test User');
+          
+          return !isTestUser;
+        })
         .map((user: any) => ({
           id: user.id,
           name: user.display_name || user.name || `User ${user.id}`,
@@ -101,7 +122,20 @@ export const getUsers = async (req: Request, res: Response) => {
         }));
 
       // Combine all users
-      const allUsers = [...formattedLocalUsers, ...lightspeedOnlyUsers];
+      let allUsers = [...formattedLocalUsers, ...lightspeedOnlyUsers];
+
+      // Apply role filter if specified
+      if (roleFilter) {
+        allUsers = allUsers.filter(user => {
+          const userRole = (user.role || '').toLowerCase();
+          return userRole === roleFilter || 
+                 (roleFilter === 'tailor' && userRole === 'tailor') ||
+                 (roleFilter === 'sales' && (userRole === 'sales' || userRole === 'associate')) ||
+                 (roleFilter === 'admin' && userRole === 'admin') ||
+                 (roleFilter === 'manager' && userRole === 'manager');
+        });
+        logger.info(`[UsersController] After role filter (${roleFilter}): ${allUsers.length} users`);
+      }
 
       // Return in the format expected by frontend components
       res.json({

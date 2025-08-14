@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { UserAvatar } from '../../components/ui/UserAvatar';
 import { CustomerAvatar } from '@/components/ui/CustomerAvatar';
+import CustomerProfileModal from '@/components/ui/CustomerProfileModal';
 
 interface Customer {
   id: number;
@@ -35,6 +36,9 @@ interface Customer {
   parties: any[];
   measurements: any;
   display_name?: string;
+  parties_count?: number;
+  appointments_count?: number;
+  alterations_count?: number;
 }
 
 interface PaginationData {
@@ -45,6 +49,7 @@ interface PaginationData {
 }
 
 export default function CustomersPage() {
+  const [profileCustomerId, setProfileCustomerId] = useState<number|null>(null);
   const isClient = typeof window !== 'undefined';
   const router = isClient ? useRouter() : null;
   const [search, setSearch] = useState('');
@@ -271,9 +276,7 @@ export default function CustomersPage() {
                 <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
                   <tr>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">Customer</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">Contact</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">Parties</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">Measurements</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">Activity</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-gray-100">Actions</th>
                   </tr>
                 </thead>
@@ -291,36 +294,36 @@ export default function CustomersPage() {
                             email={customer.email}
                             size="md"
                           />
-                          <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                            {customer.display_name || `${customer.last_name || ''}${customer.last_name && customer.first_name ? ', ' : ''}${customer.first_name || ''}`.trim() || 'N/A'}
+                          <div className="min-w-0">
+                            <button
+                              type="button"
+                              onClick={() => setProfileCustomerId(customer.id)}
+                              className="block text-base font-semibold text-gray-900 dark:text-gray-100 truncate hover:underline text-left"
+                            >
+                              {customer.display_name || `${customer.last_name || ''}${customer.last_name && customer.first_name ? ', ' : ''}${customer.first_name || ''}`.trim() || 'N/A'}
+                            </button>
+                            <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                              {customer.phone || '—'}
+                            </div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                              {customer.email || '—'}
+                            </div>
                           </div>
                         </div>
                       </td>
+                      
                       <td className="px-6 py-4">
-                        <div className="text-sm text-gray-900 dark:text-gray-100">{customer.email || '—'}</div>
-                        <div className="text-sm text-gray-500 dark:text-gray-400">{customer.phone || '—'}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400">
-                          {customer.parties?.length || 0} parties
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        {customer.measurements ? (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
-                            Complete
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200">
-                            Pending
-                          </span>
-                        )}
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400">{customer.parties_count ?? (customer.parties?.length || 0)} parties</span>
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400">{customer.appointments_count ?? 0} appts</span>
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/20 dark:text-indigo-400">{customer.alterations_count ?? 0} alterations</span>
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <Button 
                           size="sm" 
                           variant="ghost"
-                          onClick={() => router?.push(`/customers/${customer.id}`)}
+                          onClick={() => setProfileCustomerId(customer.id)}
                           className="text-primary dark:text-accent hover:underline"
                         >
                           View
@@ -497,6 +500,12 @@ export default function CustomersPage() {
               </div>
             )}
           </Card>
+
+          <CustomerProfileModal
+            customerId={profileCustomerId}
+            open={!!profileCustomerId}
+            onClose={() => setProfileCustomerId(null)}
+          />
 
           <Modal open={addModalOpen} onClose={() => setAddModalOpen(false)}>
             <form onSubmit={handleAddCustomer} className="space-y-4">

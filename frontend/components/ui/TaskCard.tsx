@@ -19,13 +19,15 @@ interface TaskCardProps {
   assignedTo: {
     id: number;
     name: string;
-    photoUrl?: string;
+    photoUrl?: string | null;
+    email?: string;
     role: string;
   };
   assignedBy: {
     id: number;
     name: string;
-    photoUrl?: string;
+    photoUrl?: string | null;
+    email?: string;
     role: string;
   };
   createdAt: string;
@@ -142,11 +144,11 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <span className="text-sm text-gray-500">Assigned to:</span>
-              <UserAvatar user={assignedTo} size="sm" showName />
+              <UserAvatar user={{ id: assignedTo.id, name: assignedTo.name, photoUrl: assignedTo.photoUrl, email: assignedTo.email }} size="sm" showName />
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm text-gray-500">By:</span>
-              <UserAvatar user={assignedBy} size="sm" showName />
+              <UserAvatar user={{ id: assignedBy.id, name: assignedBy.name, photoUrl: assignedBy.photoUrl, email: assignedBy.email }} size="sm" showName />
             </div>
           </div>
           <Button

@@ -6,6 +6,7 @@ import { withAccelerate } from '@prisma/extension-accelerate';
 import { createLightspeedClient } from '../lightspeedClient';
 import logger from '../utils/logger';
 import { PersistentUserSessionService } from '../services/persistentUserSessionService';
+import { UserSyncService } from '../services/userSyncService';
 
 
 
@@ -316,6 +317,15 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
         localUserId: null
       };
 
+      // Immediately sync all Lightspeed users into local DB so lists are complete
+      try {
+        logger.info('[OAuth] Triggering full user sync after login...');
+        const syncResult = await UserSyncService.syncAllUsers(req as any);
+        logger.info(`[OAuth] User sync completed: created=${syncResult.created}, updated=${syncResult.updated}, errors=${syncResult.errors}`);
+      } catch (syncErr) {
+        logger.error('[OAuth] User sync failed after login (continuing anyway):', syncErr);
+      }
+
       // Redirect to success page
       res.redirect(`${FRONTEND_URL}/dashboard?auth=success&user=${encodeURIComponent(name)}`);
 
@@ -377,5 +387,60 @@ export const refreshToken = async (req: Request, res: Response) => {
     }
     logger.error('Failed to refresh Lightspeed token', { error: errorMsg });
     res.status(500).json({ error: 'Failed to refresh token' });
+  }
+}; 
+
+// Development endpoint for testing Lightspeed API connection
+export const testLightspeedConnection = async (req: Request, res: Response): Promise<void> => {
+  try {
+    logger.info('[DEV] Testing Lightspeed API connection...');
+    
+    // Check if we have a valid session
+    const hasLsSession = !!req.session?.lightspeedUser;
+    if (!hasLsSession) {
+      res.status(401).json({ 
+        error: 'No Lightspeed session found. Please log in through the frontend first.',
+        instructions: '1. Go to /login 2. Click "Sign in with Lightspeed" 3. Complete OAuth flow 4. Then test this endpoint again'
+      });
+      return;
+    }
+
+    // Test the connection using existing session
+    const client = createLightspeedClient(req);
+    
+    // Test basic API call
+    logger.info('[DEV] Testing basic API call...');
+    const usersResponse = await client.get('/users');
+    
+    if (usersResponse && usersResponse.data) {
+      const users = usersResponse.data.data || [];
+      logger.info(`[DEV] Successfully connected to Lightspeed API. Found ${users.length} users.`);
+      
+      res.json({
+        success: true,
+        message: `Successfully connected to Lightspeed API`,
+        userCount: users.length,
+        currentUser: req.session.lightspeedUser,
+        sampleUsers: users.slice(0, 3).map((u: any) => ({
+          id: u.id,
+          name: u.display_name,
+          email: u.email,
+          role: u.account_type
+        }))
+      });
+    } else {
+      res.status(500).json({ 
+        error: 'API call succeeded but returned unexpected data format',
+        response: usersResponse?.data 
+      });
+    }
+    
+  } catch (error: any) {
+    logger.error('[DEV] Lightspeed API test failed:', error);
+    res.status(500).json({ 
+      error: 'Failed to connect to Lightspeed API',
+      details: error.message,
+      instructions: 'Check your OAuth credentials and ensure the Lightspeed app is properly configured'
+    });
   }
 }; 

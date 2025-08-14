@@ -48,8 +48,9 @@ export const listCustomers = async (req: Request, res: Response): Promise<void> 
         WHERE first_name ILIKE $1
            OR last_name ILIKE $1
            OR email ILIKE $1
-           OR REPLACE(REPLACE(REPLACE(COALESCE(phone,''), '(', ''), ')', ''), '-', '') ILIKE COALESCE($4, '_____NO_PHONE____')
-           OR phone ILIKE $1
+           OR CONCAT_WS(' ', COALESCE(first_name,''), COALESCE(last_name,'')) ILIKE $1
+           OR CONCAT_WS(' ', COALESCE(last_name,''), COALESCE(first_name,'')) ILIKE $1
+           OR REGEXP_REPLACE(COALESCE(phone,''), '\\D', '', 'g') ILIKE COALESCE($4, '_____NO_PHONE____')
         ORDER BY missing_last ASC, LOWER(last_name) NULLS LAST, LOWER(first_name) NULLS LAST
         LIMIT $2 OFFSET $3;`,
         textLike, Number(limit), Number(skip), phoneLike
@@ -59,8 +60,9 @@ export const listCustomers = async (req: Request, res: Response): Promise<void> 
          WHERE first_name ILIKE $1
             OR last_name ILIKE $1
             OR email ILIKE $1
-            OR REPLACE(REPLACE(REPLACE(COALESCE(phone,''), '(', ''), ')', ''), '-', '') ILIKE COALESCE($2, '_____NO_PHONE____')
-            OR phone ILIKE $1;`,
+            OR CONCAT_WS(' ', COALESCE(first_name,''), COALESCE(last_name,'')) ILIKE $1
+            OR CONCAT_WS(' ', COALESCE(last_name,''), COALESCE(first_name,'')) ILIKE $1
+            OR REGEXP_REPLACE(COALESCE(phone,''), '\\D', '', 'g') ILIKE COALESCE($2, '_____NO_PHONE____');`,
         textLike, phoneLike
       ) as Array<{ count: string }>;
       total = parseInt(countResult[0].count, 10);
@@ -96,21 +98,47 @@ export const listCustomers = async (req: Request, res: Response): Promise<void> 
 
 export const getCustomer = async (req: Request, res: Response): Promise<void> => {
   try {
-    const customer = await prisma.customer.findUnique({
-      where: { id: Number(req.params.id) },
-      include: {
-        measurements: true,
-        parties: true,
-        alterationJobs: true,
-      }
-    });
+    const id = Number(req.params.id);
+    const customer = await prisma.customer.findUnique({ where: { id }, include: { measurements: true } });
     if (!customer) {
       res.status(404).json({ error: 'Customer not found' });
       return;
     }
+    const lsId = customer.lightspeedId;
+    const [appointments, alterationJobs, parties] = await Promise.all([
+      prisma.appointment.findMany({
+        where: {
+          OR: [
+            { individualCustomerId: id },
+            { member: { lsCustomerId: lsId } }
+          ]
+        },
+        include: { party: true, tailor: true, member: true }
+      }),
+      prisma.alterationJob.findMany({
+        where: {
+          OR: [
+            { customerId: id },
+            { partyMember: { lsCustomerId: lsId } }
+          ]
+        },
+        include: { party: true, tailor: true, partyMember: true }
+      }),
+      prisma.party.findMany({
+        where: {
+          OR: [
+            { customerId: id },
+            { members: { some: { lsCustomerId: lsId } } }
+          ]
+        },
+        include: { members: true, appointments: true, alterationJobs: true }
+      })
+    ]);
     res.json({
       ...customer,
-      name: undefined, // Remove or set to undefined for deprecation
+      appointments,
+      alterations: alterationJobs,
+      parties,
     });
   } catch (err) {
     console.error('Error getting customer:', err);

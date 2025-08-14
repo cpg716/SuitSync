@@ -115,13 +115,8 @@ export default function AlterationsPage() {
   const summary = data?.summary;
 
   // Tailors for filtering (calendar)
-  const { data: tailorsData } = useSWR(isClient ? '/api/users?role=tailor' : null, fetcher as any);
-  const tailorsRaw = (tailorsData && (tailorsData as any).users)
-    ? (tailorsData as any).users
-    : Array.isArray(tailorsData)
-    ? (tailorsData as any)
-    : [];
-  const tailors = Array.isArray(tailorsRaw) ? tailorsRaw.filter((u: any) => (u?.role || '').toLowerCase() === 'tailor') : [];
+  const { data: tailorsData } = useSWR(isClient ? '/api/public/staff?role=tailor' : null, fetcher as any);
+  const tailors = Array.isArray(tailorsData) ? tailorsData : [];
 
   // Filter alterations based on search and status (defensive for missing fields)
   const filteredAlterations = alterations.filter(alteration => {

@@ -3,6 +3,8 @@ import { PrismaClient } from '@prisma/client';
 import { withAccelerate } from '@prisma/extension-accelerate';
 import { asyncHandler } from '../utils/asyncHandler';
 import jwt from 'jsonwebtoken';
+import { createLightspeedClient } from '../lightspeedClient';
+import logger from '../utils/logger';
 
 const router = express.Router();
 const prisma = new PrismaClient().$extends(withAccelerate());
@@ -125,15 +127,80 @@ router.get('/appointments', asyncHandler(async (req: express.Request, res: expre
   res.json(appointments);
 }));
 
-// GET /api/public/staff?role=sales
+// GET /api/public/staff?role=sales|tailor|admin|manager
 router.get('/staff', asyncHandler(async (req: express.Request, res: express.Response) => {
   const role = String(req.query.role || 'sales').toLowerCase();
-  const users = await prisma.user.findMany({
-    where: { role: { in: [role, 'associate', 'sales'] } },
-    select: { id: true, name: true, role: true, photoUrl: true },
-    orderBy: { name: 'asc' },
+  const hasLsSession = !!req.session?.lsAccessToken;
+  let localUsers: Array<{ id: number; name: string; role: string; photoUrl: string | null; email: string | null; lightspeedEmployeeId: string | null }>=[];
+  
+  async function ensureLocalForLsUser(lsUser: any) {
+    try {
+      const lsId = String(lsUser.id);
+      const email = (lsUser.email || '').toLowerCase() || null;
+      const name = lsUser.display_name || lsUser.name || `User ${lsId}`;
+      const photo = lsUser.image_source || lsUser.photo_url || lsUser.avatar || null;
+      const mappedRole = (lsUser.account_type || '').toLowerCase();
+      // Map LS roles to our roles
+      let roleMapped = 'sales';
+      if (mappedRole === 'admin') roleMapped = 'admin';
+      else if (mappedRole === 'manager') roleMapped = 'manager';
+      else if (mappedRole === 'sales') roleMapped = 'sales';
+
+      const existing = await prisma.user.findFirst({ where: { lightspeedEmployeeId: lsId } });
+      if (existing) {
+        // Keep name/photo fresh
+        const updated = await prisma.user.update({
+          where: { id: existing.id },
+          data: { name, email: email || existing.email, role: existing.role || roleMapped, photoUrl: photo || existing.photoUrl }
+        });
+        return updated;
+      }
+      const created = await prisma.user.create({
+        data: { name, email, role: roleMapped, lightspeedEmployeeId: lsId, photoUrl: photo }
+      });
+      return created;
+    } catch (err) {
+      logger.warn('Failed to ensure local user for LS employee', err);
+      return null;
+    }
+  }
+
+  if (hasLsSession) {
+    try {
+      const client = createLightspeedClient(req);
+      const all = await client.fetchAllWithPagination('/users');
+      // Ensure all LS employees have a corresponding local record
+      const ensured: any[] = [];
+      for (const u of all) {
+        const local = await ensureLocalForLsUser(u);
+        if (local) ensured.push(local);
+      }
+      localUsers = ensured;
+    } catch (e) {
+      logger.error('Failed to fetch Lightspeed users for staff endpoint, falling back to local DB', e);
+    }
+  }
+
+  if (!localUsers.length) {
+    localUsers = await prisma.user.findMany({
+      where: { email: { not: { contains: '@demo.com' } }, lightspeedEmployeeId: { not: null } },
+      select: { id: true, name: true, role: true, photoUrl: true, email: true, lightspeedEmployeeId: true },
+      orderBy: { name: 'asc' }
+    });
+  }
+
+  // Apply role filter: sales includes admin and manager
+  const filtered = localUsers.filter(u => {
+    const r = (u.role || '').toLowerCase();
+    if (role === 'sales') return ['sales','associate','manager','admin'].includes(r);
+    if (role === 'manager') return r === 'manager';
+    if (role === 'admin') return r === 'admin';
+    if (role === 'tailor') return r === 'tailor';
+    return true;
   });
-  res.json(users);
+
+  const out = filtered.map(u => ({ id: u.id, name: u.name, role: u.role, photoUrl: u.photoUrl || null, email: u.email }));
+  res.json(out);
 }));
 
 // GET /api/public/availability?userId=1&date=YYYY-MM-DD&type=fitting&duration=60
@@ -404,32 +471,88 @@ router.get('/stats', asyncHandler(async (req: express.Request, res: express.Resp
 // GET /api/public/users
 router.get('/users', asyncHandler(async (req: express.Request, res: express.Response) => {
   const { name, email } = req.query;
-  
-  let whereClause: any = {};
-  
-  if (name && typeof name === 'string') {
-    whereClause.name = { contains: name, mode: 'insensitive' };
+  const hasLsSession = !!req.session?.lsAccessToken;
+
+  async function upsertFromLightspeed(): Promise<any[]> {
+    try {
+      const client = createLightspeedClient(req);
+      const lsUsers = await client.fetchAllWithPagination('/users');
+      const locals: any[] = [];
+      for (const u of lsUsers) {
+        const lsId = String(u.id);
+        const existing = await prisma.user.findFirst({ where: { lightspeedEmployeeId: lsId } });
+        const nameMapped = u.display_name || u.name || `User ${lsId}`;
+        const photoMapped = u.image_source || u.photo_url || u.avatar || null;
+        const emailMapped = (u.email || '').toLowerCase() || null;
+        const roleMapped = (u.account_type || '').toLowerCase() === 'admin' ? 'admin' : ((u.account_type || '').toLowerCase() === 'manager' ? 'manager' : 'sales');
+        if (existing) {
+          const updated = await prisma.user.update({
+            where: { id: existing.id },
+            data: { name: nameMapped, email: emailMapped || existing.email, role: existing.role || roleMapped, photoUrl: photoMapped || existing.photoUrl }
+          });
+          locals.push(updated);
+        } else {
+          const created = await prisma.user.create({ data: { name: nameMapped, email: emailMapped, role: roleMapped, lightspeedEmployeeId: lsId, photoUrl: photoMapped } });
+          locals.push(created);
+        }
+      }
+      return locals;
+    } catch (e) {
+      logger.error('Failed to sync users from Lightspeed in public/users', e);
+      return [];
+    }
   }
-  
-  if (email && typeof email === 'string') {
-    whereClause.email = { equals: email.toLowerCase() };
+
+  if (hasLsSession) {
+    const synced = await upsertFromLightspeed();
+    if (synced.length) {
+      const list = synced
+        .filter(u => !!u.lightspeedEmployeeId)
+        .map(u => ({ id: u.id, name: u.name, email: u.email, role: u.role, photoUrl: u.photoUrl || null }));
+      // Optional name/email filtering
+      const filtered = list.filter(u => {
+        if (name && typeof name === 'string') {
+          if (!u.name?.toLowerCase().includes(name.toLowerCase())) return false;
+        }
+        if (email && typeof email === 'string') {
+          if (u.email?.toLowerCase() !== email.toLowerCase()) return false;
+        }
+        return true;
+      });
+      return res.json(filtered);
+    }
   }
-  
+
+  // Fallback to local DB but only Lightspeed-backed users
+  const whereClause: any = { email: { not: { contains: '@demo.com' } }, lightspeedEmployeeId: { not: null } };
+  if (name && typeof name === 'string') whereClause.name = { contains: name, mode: 'insensitive' };
+  if (email && typeof email === 'string') whereClause.email = { equals: String(email).toLowerCase() };
+
   const users = await prisma.user.findMany({
     where: whereClause,
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      photoUrl: true,
-      role: true
-    },
-    orderBy: {
-      name: 'asc'
-    }
+    select: { id: true, name: true, email: true, photoUrl: true, role: true },
+    orderBy: { name: 'asc' }
   });
-  
-  res.json(users);
+
+  const usersWithPhoto = users.map(u => ({ ...u, photoUrl: u.photoUrl || null }));
+  res.json(usersWithPhoto);
+}));
+
+// Proxy serving of user photos to ensure consistent access everywhere
+router.get('/user-photo', asyncHandler(async (req: express.Request, res: express.Response) => {
+  const id = parseInt(String(req.query.id || '0'));
+  if (!id) return res.status(400).send('Missing id');
+  const user = await prisma.user.findUnique({ where: { id }, select: { photoUrl: true, name: true } });
+  if (!user || !user.photoUrl) return res.status(404).send('Not found');
+  try {
+    const response = await fetch(user.photoUrl as any);
+    if (!response.ok) return res.status(404).send('Not found');
+    res.setHeader('Content-Type', response.headers.get('Content-Type') || 'image/jpeg');
+    const buffer = Buffer.from(await response.arrayBuffer());
+    res.send(buffer);
+  } catch {
+    res.status(404).send('Not found');
+  }
 }));
 
 export default router; 

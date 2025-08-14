@@ -8,13 +8,18 @@ import { Input } from '../components/ui/Input';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/Tabs';
 import { Skeleton } from '../components/ui/Skeleton';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
-import { UserAvatar } from '../components/ui/UserAvatar';
 import { Users, CheckCircle, ListChecks, ListTodo, PieChart } from 'lucide-react';
+import { CustomerSearch } from '../components/ui/CustomerSearchSimple';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { Calendar as RBC, dateFnsLocalizer, View } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { useAuth } from '../src/AuthContext';
+import { UserAvatar } from '../components/ui/UserAvatar';
 import { useToast } from '../components/ToastContext';
+import ChecklistWizardModal from '../components/ui/ChecklistWizardModal';
+import TaskWizardModal from '../components/ui/TaskWizardModal';
+import { ChecklistUserViewModal } from '../components/ui/ChecklistUserViewModal';
+
 
 /**
  * Checklist & Task Workspace Page
@@ -33,7 +38,9 @@ export default function ChecklistWorkspace() {
   const [tasks, setTasks] = useState([]);
   const [tab, setTab] = useState('checklists');
   const [showChecklistModal, setShowChecklistModal] = useState(false);
+  const [showChecklistWizard, setShowChecklistWizard] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
+  const [showTaskWizard, setShowTaskWizard] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState<{ checklistId: number }|null>(null);
   const [showTemplatesModal, setShowTemplatesModal] = useState(false);
   const [showAssignTemplateModal, setShowAssignTemplateModal] = useState(false);
@@ -48,6 +55,8 @@ export default function ChecklistWorkspace() {
   const [templates, setTemplates] = useState<any[]>([]);
   const [checklistView, setChecklistView] = useState<'list'|'board'>('list');
   const [taskView, setTaskView] = useState<'list'|'board'>('list');
+  const [showChecklistUserViewModal, setShowChecklistUserViewModal] = useState(false);
+  const [selectedChecklistAssignment, setSelectedChecklistAssignment] = useState(null);
 
   const locales = { 'en-US': undefined as any };
   const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
@@ -65,7 +74,7 @@ export default function ChecklistWorkspace() {
             fetch('/api/tasks', { credentials: 'include' }).then(r => r.json()).catch(() => []),
           ];
       const [cl, tk] = await Promise.all(endpoints);
-      setChecklists(Array.isArray(cl) ? cl : []);
+      setChecklists(Array.isArray(cl) ? cl : (Array.isArray(cl?.executions) ? cl.executions : []));
       setTasks(Array.isArray(tk) ? tk : []);
       setLoading(false);
     }
@@ -162,6 +171,10 @@ export default function ChecklistWorkspace() {
     completedTasks: tasks.filter(t => t.status === 'COMPLETED').length,
   };
 
+  const handleViewAsUser = (assignment: any) => {
+    setSelectedChecklistAssignment(assignment);
+    setShowChecklistUserViewModal(true);
+  };
 
 
   return (
@@ -247,8 +260,8 @@ export default function ChecklistWorkspace() {
             <TabsTrigger value="calendar">Calendar</TabsTrigger>
           </TabsList>
           <div className="flex gap-2 my-4 items-center flex-wrap">
-          <Button onClick={() => setShowChecklistModal(true)} variant="outline">New Checklist</Button>
-          <Button onClick={() => setShowTaskModal(true)} variant="outline">New Task</Button>
+          <Button onClick={() => setShowChecklistWizard(true)} variant="outline">New Checklist</Button>
+          <Button onClick={() => setShowTaskWizard(true)} variant="outline">New Task</Button>
           <Button onClick={() => setShowAssignTemplateModal(true)} variant="outline">Assign From Template</Button>
           <Button onClick={() => setShowTemplatesModal(true)} variant="outline">Templates</Button>
             <label className="flex items-center gap-2">
@@ -294,6 +307,7 @@ export default function ChecklistWorkspace() {
                           window.location.reload();
                         }}
                         onEdit={() => setShowAssignModal({ checklistId: cl.id })}
+                        onViewAsUser={handleViewAsUser}
                       />
                       
                     </div>
@@ -386,7 +400,7 @@ export default function ChecklistWorkspace() {
           )}
         </TabsContent>
         <TabsContent value="calendar">
-          <div className="flex items-center gap-2 mb-3">
+           <div className="flex items-center gap-2 mb-3">
             {!myView && (
               <>
                 <span className="text-sm">Filter users</span>
@@ -396,6 +410,9 @@ export default function ChecklistWorkspace() {
                 <Button size="sm" variant="outline" onClick={() => setSelectedUserIds([])}>Clear</Button>
               </>
             )}
+             {myView && (
+               <div className="text-xs text-gray-500">Viewing your assigned Tasks and Checklists</div>
+             )}
           </div>
           <div className="h-[650px]">
             <RBC
@@ -413,9 +430,9 @@ export default function ChecklistWorkspace() {
         </TabsContent>
       </Tabs>
       {/* Checklist Modal */}
-  <ChecklistCreateModal open={showChecklistModal} onClose={() => setShowChecklistModal(false)} onCreated={() => window.location.reload()} />
+      <ChecklistWizardModal open={showChecklistWizard} onClose={() => setShowChecklistWizard(false)} onCreated={() => window.location.reload()} />
       {/* Task Modal */}
-      <TaskCreateModal open={showTaskModal} onClose={() => setShowTaskModal(false)} onCreated={() => window.location.reload()} />
+      <TaskWizardModal open={showTaskWizard} onClose={() => setShowTaskWizard(false)} onCreated={() => window.location.reload()} />
       {/* Assign/Edit Checklist Modal */}
       {showAssignModal && (
         <ChecklistAssignModal
@@ -694,8 +711,6 @@ function TaskCreateModal({ open, onClose, onCreated }: { open: boolean; onClose:
   const [dueDate, setDueDate] = useState('');
   const [estimatedMinutes, setEstimatedMinutes] = useState<number>(60);
   const [users, setUsers] = useState<any[]>([]);
-  const [customerQuery, setCustomerQuery] = useState('');
-  const [customers, setCustomers] = useState<any[]>([]);
   const [customerId, setCustomerId] = useState<string>('');
   const [saving, setSaving] = useState(false);
 
@@ -704,15 +719,7 @@ function TaskCreateModal({ open, onClose, onCreated }: { open: boolean; onClose:
     fetch('/api/public/users').then(r => r.json()).then(setUsers).catch(() => setUsers([]));
   }, [open]);
 
-  useEffect(() => {
-    if (!open) return;
-    const q = customerQuery.trim();
-    const url = q ? `/api/customers?search=${encodeURIComponent(q)}` : '/api/customers?limit=50';
-    fetch(url, { credentials: 'include' })
-      .then(r => r.json())
-      .then(d => setCustomers(Array.isArray(d?.customers) ? d.customers : (Array.isArray(d)? d: [])))
-      .catch(() => setCustomers([]));
-  }, [open, customerQuery]);
+  // Unified customer selection handled via CustomerSearch component
 
   async function handleSave() {
     setSaving(true);
@@ -754,7 +761,10 @@ function TaskCreateModal({ open, onClose, onCreated }: { open: boolean; onClose:
               {users.map((u:any)=> (
                 <label key={u.id} className="flex items-center gap-2 py-1">
                   <input type="checkbox" checked={assignedToIds.includes(String(u.id))} onChange={e=> setAssignedToIds(arr => e.target.checked ? [...arr, String(u.id)] : arr.filter(x=> x!== String(u.id)))} />
-                  <span>{u.name} ({u.role})</span>
+                  <span className="flex items-center gap-2">
+                    <UserAvatar user={u} size="xs" showName={false} />
+                    {u.name} ({u.role})
+                  </span>
                 </label>
               ))}
             </div>
@@ -762,18 +772,20 @@ function TaskCreateModal({ open, onClose, onCreated }: { open: boolean; onClose:
         </div>
         <div>
           <label className="text-sm">Related Customer (optional)</label>
-          <input className="w-full border rounded px-2 py-2 mb-2" placeholder="Search name or phone…" value={customerQuery} onChange={e=> setCustomerQuery(e.target.value)} />
-          <div className="max-h-48 overflow-auto border rounded p-2">
-            <label className="flex items-center gap-2 py-1">
-              <input type="radio" name="cust" value="" checked={customerId===''} onChange={()=> setCustomerId('')} />
-              <span>None</span>
-            </label>
-            {customers.map((c:any)=> (
-              <label key={c.id} className="flex items-center gap-2 py-1">
-                <input type="radio" name="cust" value={c.id} checked={customerId===String(c.id)} onChange={e=> setCustomerId(e.target.value)} />
-                <span>{(c.display_name || `${c.last_name || ''}${c.last_name && c.first_name ? ', ' : ''}${c.first_name || ''}`).trim()} {c.phone ? `— ${c.phone}`: ''}</span>
+          <div className="border rounded p-2">
+            <CustomerSearch
+              onCustomerSelect={(c:any)=> setCustomerId(String(c.id))}
+              onPartyMemberSelect={() => { /* not used here */ }}
+              placeholder="Search by name or phone (any format)…"
+              showProgressIndicators={false}
+              mode="individual"
+            />
+            <div className="mt-2">
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={customerId===''} onChange={e=> setCustomerId('')} />
+                <span>None</span>
               </label>
-            ))}
+            </div>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3">

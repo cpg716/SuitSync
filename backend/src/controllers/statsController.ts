@@ -9,8 +9,14 @@ export const getDashboardStats = async (req: Request, res: Response): Promise<vo
     const totalParties = await prisma.party.count();
     const upcomingAppointments = await prisma.appointment.count({ where: { dateTime: { gte: new Date() } } });
     const pendingAlterations = await prisma.alterationJob.count({ where: { status: 'NOT_STARTED' } });
-    // TODO: Implement real commission logic
-    const topCommission = 500;
+    // Compute top commission from real SaleAssignment data if present
+    let topCommission = 0;
+    try {
+      const rows: any[] = await (prisma as any).saleAssignment.groupBy({ by: ['associateId'], _sum: { commissionRate: true } });
+      if (Array.isArray(rows) && rows.length) {
+        topCommission = Math.max(...rows.map((r: any) => (r?._sum?.commissionRate) || 0));
+      }
+    } catch {}
     res.json({
       totalParties,
       upcomingAppointments,

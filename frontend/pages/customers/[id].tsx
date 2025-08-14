@@ -1,6 +1,7 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/router';
 import useSWR from 'swr';
+import CustomerProfileModal from '@/components/ui/CustomerProfileModal';
 import { api, fetcher } from '@/lib/apiClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -272,6 +273,13 @@ export default function CustomerProfilePage() {
         onSubmit={handleSaveAppointment}
         appointment={apptInitial}
         loading={false}
+      />
+
+      {/* Rich modal mirror for inline route usage */}
+      <CustomerProfileModal
+        customerId={typeof id === 'string' ? Number(id) : null}
+        open={false}
+        onClose={() => {}}
       />
     </div>
   );

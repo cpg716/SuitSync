@@ -77,7 +77,7 @@ function TimeTrackingModal({ open, onClose, job, onSave }) {
 
 export default function TailorSchedulePage() {
   const { data: jobs = [], mutate } = useSWR('/api/alterations', fetcher, { refreshInterval: 60_000 });
-  const { data: tailors = [] } = useSWR('/api/users?role=tailor', fetcher);
+  const { data: tailors = [] } = useSWR('/api/public/staff?role=tailor', fetcher);
   const [selectedJob, setSelectedJob] = useState(null);
   const [showTimeModal, setShowTimeModal] = useState(false);
   const [view, setView] = useState(Views.DAY);

@@ -81,7 +81,7 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
   const searchRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (query.length < 2) {
+    if (query.trim().length < 1) {
       setCustomers([]);
       setParties([]);
       setIsOpen(false);
@@ -135,7 +135,7 @@ export const CustomerSearch: React.FC<CustomerSearchProps> = ({
       } finally {
         setLoading(false);
       }
-    }, 300);
+    }, 200);
 
     return () => clearTimeout(timeoutId);
   }, [query, mode]);

@@ -94,14 +94,7 @@ function Dashboard() {
   const [apiError, setApiError] = useState<string | null>(null);
 
   // Optimize SWR calls with better caching
-  const { data: dashboardStats } = useSWR(
-    '/api/stats/dashboard', 
-    simpleFetcher, 
-    {
-      revalidateOnFocus: false,
-      dedupingInterval: 30000, // 30 seconds
-    }
-  );
+  const { data: dashboardStats } = useSWR('/api/stats/dashboard', simpleFetcher, { revalidateOnFocus: false, dedupingInterval: 30000 });
   const { data: syncStatus, mutate: mutateSync } = useSWR(
     '/api/sync/status', 
     simpleFetcher, 
@@ -123,19 +116,19 @@ function Dashboard() {
   const fetchAllMetrics = useCallback(async () => {
     try {
       const [partiesRes, apptsRes, alterationsRes, commissionsRes] = await Promise.all([
-        fetch('http://localhost:3000/api/customers').then(r => r.json()).then(data => data.customers || []),
-        fetch('http://localhost:3000/api/customers').then(r => r.json()).then(data => data.customers || []),
-        fetch('http://localhost:3000/api/customers').then(r => r.json()).then(data => data.customers || []),
-        fetch('http://localhost:3000/api/customers').then(r => r.json()).then(data => data.customers || []),
+        fetch('/api/parties', { credentials: 'include' }).then(r => r.json()).catch(() => []),
+        fetch('/api/appointments', { credentials: 'include' }).then(r => r.json()).catch(() => []),
+        fetch('/api/alterations/jobs', { credentials: 'include' }).then(r => r.json()).catch(() => []),
+        fetch('/api/sales/commissions', { credentials: 'include' }).then(r => r.json()).catch(() => []),
       ]);
       setMetrics({
-        parties: partiesRes,
-        appts: apptsRes,
-        alterations: alterationsRes,
-        commissions: commissionsRes,
+        parties: Array.isArray(partiesRes) ? partiesRes : (partiesRes?.parties || []),
+        appts: Array.isArray(apptsRes) ? apptsRes : [],
+        alterations: Array.isArray(alterationsRes) ? alterationsRes : [],
+        commissions: Array.isArray(commissionsRes) ? commissionsRes : [],
       });
     } catch (error) {
-      console.error("Failed to load dashboard metrics", error);
+      console.error('Failed to load dashboard metrics', error);
       setApiError('Failed to load dashboard metrics. Please try again later.');
     }
   }, []);
@@ -189,7 +182,7 @@ function Dashboard() {
   const summary = {
     totalParties: partiesArr.length,
     totalAppointments: apptsArr.length,
-    pendingAlterations: alterationsArr.filter(a => a.status === 'pending').length,
+    pendingAlterations: alterationsArr.filter(a => a.status === 'NOT_STARTED' || a.status === 'pending').length,
     topCommission: Math.max(0, ...salesBar.map(c => c.sales || 0)),
   };
 
